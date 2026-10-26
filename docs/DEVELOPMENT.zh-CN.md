@@ -157,6 +157,8 @@ Cargo 输入、vendor 源码或许可材料变更时：
 
 工具版本与哈希由[脚本](../scripts/package-upx.ps1)固定；输出独立 `-upx.exe`，不修改输入。压缩可能增加启动开销或安全软件误报，兼容性问题优先普通包。压缩改变 EXE 字节，已有 Authenticode 签名失效，若签名应在最终压缩后进行并重新验收。CI 不签名。
 
+脚本使用 `--best --ultra-brute --strip-relocs=0`，不使用 `--exact`。发布前先运行 UPX 完整性检查，再解压到独立临时文件。解压后的可执行文件可能与原文件字节不同，原始发布包保持不变。
+
 两种脚本使用[共用原子发布器](../scripts/publish-file.ps1)。已有输出内容相同时保留，不同内容须明确 `-Force`。发布器在目标卷暂存，再移动或替换目标，不原地覆盖字节，因此保留输入及指向旧输出的其他硬链接。发布路径中的符号链接和 reparse point 会被拒绝。文件锁允许读取但拒绝写入，输入锁还拒绝删除。无法取得所需锁时，发布失败且不替换输出。这些检查不保证能抵御所有恶意文件系统竞态。
 
 <a id="linux"></a>
@@ -229,7 +231,7 @@ SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架�
 
 [Native no-firmware CI](../.github/workflows/ci.yml) 在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行上述两条 Python unittest 命令、[公开检查器](#public-preflight)和[版权材料检查](#license-notices)。源码作业通过后，现有 `windows-2022` 与 `ubuntu-22.04` x64 作业才各自运行。原生作业跟随工具链 pin，质量入口通过后构建无固件 Release。Windows 普通包先上传，UPX 独立处理；Linux 生成 AppImage，不新增 Flatpak CI。单文件 artifact 按 Cargo 版本命名，保留 14 天（受仓库策略限制），不上传整个 dist 或缓存。只读仓库权限，不创建 Release、不推送或要求额外 secrets。
 
-此为已配置流程，hosted runner 执行和上传尚未验证。本地构建、WSLg 渲染、原生 GUI、USB 权限和真实设备更新是不同证据；目标发行版、macOS、签名、性能及物理硬件仍须独立验收。应用自有材料的 MIT OR Apache-2.0 许可不能替代[上文](#license-notices)所述第三方材料、源码提供、固件和产物的独立审查，不由打包成功解决。
+CI 成功只证明配置的检查与产物上传已完成。本地构建、WSLg 渲染、原生 GUI、USB 权限和真实设备更新是不同证据；目标发行版、macOS、签名、性能及物理硬件仍须独立验收。应用自有材料的 MIT OR Apache-2.0 许可不能替代[上文](#license-notices)所述第三方材料、源码提供、固件和产物的独立审查，不由打包成功解决。
 
 ## 清理与排查
 

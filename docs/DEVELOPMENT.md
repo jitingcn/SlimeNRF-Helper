@@ -157,6 +157,8 @@ Create the regular package first. Then use its actual versioned filename to crea
 
 The [script](../scripts/package-upx.ps1) pins the tool version and hash. It creates a separate `-upx.exe` without changing the input. Compression can add startup overhead or antivirus false positives. Prefer the regular package for compatibility problems. Compression changes EXE bytes and invalidates any existing Authenticode signature. If you sign, sign after final compression and repeat acceptance checks. CI does not sign packages.
 
+The script uses `--best --ultra-brute --strip-relocs=0` without `--exact`. Before publication, it runs UPX's integrity check and decompresses to a separate temporary file. Decompression may produce different executable bytes. The original package remains unchanged.
+
 Both scripts use the [shared atomic publisher](../scripts/publish-file.ps1). An identical existing output is kept. Different content requires explicit `-Force`. The publisher stages on the destination volume, then moves or replaces the destination instead of overwriting its bytes. This preserves the input and other hardlinks to the old output. It refuses symlinks and reparse points in publication paths. File locks allow readers but deny writers, and input locks also deny deletion. If a required lock cannot be acquired, publication fails without replacing the output. These checks do not promise safety against every hostile filesystem race.
 
 <a id="linux"></a>
@@ -229,7 +231,7 @@ The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatp
 
 [Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. Its `ubuntu-24.04` source job runs both Python unittest commands, the [public checker](#public-preflight), and the [notice check](#license-notices) above. Only after that job passes do the existing `windows-2022` and `ubuntu-22.04` x64 jobs run independently. The native jobs follow the toolchain pin and build no-firmware Release artifacts after the quality entry points pass. Windows uploads the regular package first and handles UPX separately. Linux generates an AppImage. There is no added Flatpak CI job. Single-file artifacts use the Cargo version in their names and have a 14-day retention period, subject to repository policy. The workflow does not upload all of dist or caches. Repository permissions are read-only. It does not create Releases, push, or require extra secrets.
 
-This is the configured workflow. Hosted-runner execution and upload have not been verified. Local builds, WSLg rendering, native GUI behavior, USB permissions, and real device updates are separate evidence. Target distributions, macOS, signing, performance, and physical hardware still require independent acceptance. The application-owned MIT OR Apache-2.0 license does not replace the separate third-party, source-availability, firmware, and artifact reviews described [above](#license-notices). Successful packaging does not resolve them.
+Successful CI confirms only the configured checks and uploaded artifacts. Local builds, WSLg rendering, native GUI behavior, USB permissions, and real device updates are separate evidence. Target distributions, macOS, signing, performance, and physical hardware still require independent acceptance. The application-owned MIT OR Apache-2.0 license does not replace the separate third-party, source-availability, firmware, and artifact reviews described [above](#license-notices). Successful packaging does not resolve them.
 
 ## Clean and troubleshoot
 

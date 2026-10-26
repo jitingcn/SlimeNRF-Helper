@@ -59,17 +59,7 @@ try {
     }
     # Highest documented search settings. Retain relocations for ASLR; never force unsafe PE changes.
     $compression = @('--best', '--ultra-brute', '--strip-relocs=0', '--no-progress')
-    $exact = $true
-    $result = Invoke-PinnedUpx -Arguments ($compression + @('--exact', '-o', $packed, $snapshot))
-    if ($result.ExitCode -ne 0 -and
-        $result.Text -match "CantPackException: option '--exact' does not work with this file") {
-        # UPX 5.2.1 does not implement exact restoration for every format (including win64/pe).
-        # This is only an exact-restoration capability fallback, not a compression/security fallback.
-        $exact = $false
-        Write-Host 'UPX does not support --exact for this executable; retaining maximum compression and testing decompression.'
-        if (Test-Path -LiteralPath $packed) { Remove-Item -LiteralPath $packed -Force }
-        $result = Invoke-PinnedUpx -Arguments ($compression + @('-o', $packed, $snapshot))
-    }
+    $result = Invoke-PinnedUpx -Arguments ($compression + @('-o', $packed, $snapshot))
     if ($result.ExitCode -ne 0) { throw "UPX maximum compression failed (exit $($result.ExitCode)); no package was published." }
     $result = Invoke-PinnedUpx -Arguments @('--test', $packed)
     if ($result.ExitCode -ne 0) { throw "UPX integrity test failed (exit $($result.ExitCode)); no package was published." }
@@ -78,10 +68,8 @@ try {
     $restoredHash = (Get-FileHash -LiteralPath $restored -Algorithm SHA256).Hash
     if ($restoredHash -eq $inputHash) {
         Write-Host "Decompression restored byte-identical input (SHA256 $inputHash)."
-    } elseif ($exact) {
-        throw 'UPX accepted --exact but decompression did not restore the input SHA256; no package was published.'
     } else {
-        Write-Host "UPX --exact is unsupported: decompression passed but is not byte-identical (restored SHA256 $restoredHash)."
+        Write-Host "Decompression passed; the restored executable is not byte-identical (SHA256 $restoredHash)."
     }
 
     $publication = [SlimeNRF.FilePublisher]::Publish($packed, $destination, $Force.IsPresent)
