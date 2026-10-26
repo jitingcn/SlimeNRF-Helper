@@ -1,0 +1,52 @@
+# Build outputs and downloaded/local firmware are not source inputs.
+/target/
+/build/
+/dist/
+/firmwares/
+
+# Private captures, exports, scratch/configuration and local-only history/acceptance.
+/.local/
+/captures/
+/recordings/
+/slimenrf-helper.local.yaml
+/PLAN.md
+/PLAN.zh-CN.md
+*.hidlog
+*.slimecap
+*.log
+# Public protocol examples without device identifiers.
+!/src/rssi_scan/fixtures/*.log
+*.tmp
+*.temp
+
+# Credentials and signing material; only sanitized environment examples belong here.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Python packaging helpers and local tooling.
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.claude/
+.codex/
+.omp/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Share only the app's portable editor defaults, not personal VS Code state.
+!/.vscode/
+/.vscode/*
+!/.vscode/settings.json
+!/.vscode/extensions.json

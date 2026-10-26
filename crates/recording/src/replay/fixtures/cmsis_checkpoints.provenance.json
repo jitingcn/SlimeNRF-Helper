@@ -1,0 +1,128 @@
+{
+  "scope": "controlled scalar CMSIS actual firmware wrapper + actual engine + actual MLS fallback; no replay bridge",
+  "compiler_invocation": {
+    "format_version": 1,
+    "representation": "Logical-root argument template, not the verbatim executed command; no machine root locations are recorded",
+    "logical_roots": {
+      "${COMPILER}": "Host GCC C compiler executable; machine location omitted",
+      "${FIRMWARE}": "--firmware source root; machine location omitted",
+      "${BUILD}": "Temporary oracle source/shared-library directory; machine location omitted",
+      "${CMSIS_DSP}": "--cmsis-dsp source root; machine location omitted"
+    },
+    "arguments": [
+      "${COMPILER}",
+      "-D__GNUC_PYTHON__",
+      "-DDISABLEFLOAT16",
+      "-DCONFIG_CMSIS_DSP=1",
+      "-I",
+      "${CMSIS_DSP}/Include",
+      "${CMSIS_DSP}/Source/ControllerFunctions/arm_sin_cos_f32.c",
+      "${CMSIS_DSP}/Source/FastMathFunctions/arm_atan2_f32.c",
+      "${CMSIS_DSP}/Source/BasicMathFunctions/arm_dot_prod_f32.c",
+      "${CMSIS_DSP}/Source/BasicMathFunctions/arm_scale_f32.c",
+      "${CMSIS_DSP}/Source/BasicMathFunctions/arm_clip_f32.c",
+      "${CMSIS_DSP}/Source/SupportFunctions/arm_fill_f32.c",
+      "${CMSIS_DSP}/Source/CommonTables/arm_common_tables.c",
+      "-std=c17",
+      "-O2",
+      "-ffp-contract=off",
+      "-shared",
+      "-fPIC",
+      "-I",
+      "${FIRMWARE}/vqf-c/src",
+      "${BUILD}/oracle.c",
+      "${FIRMWARE}/vqf-c/src/vqf.c",
+      "-lm",
+      "-o",
+      "${BUILD}/oracle.so"
+    ]
+  },
+  "sha256": {
+    "src/sensor/fusion/vqf/vqf.c": "77c7fcb89414e6965f7106e0b7de71fddec38c8a12230bd51ed89cc89a77d98c",
+    "src/sensor/calibration/tcal_mls_lut.c": "bae2e08e22566e12ca1491819c39b87e5548121af5a73960c000fcafe0badb18",
+    "vqf-c/src/vqf.c": "9e9e8dd6e02c01abba5b4b8c280fd9c32b74d8af9f35e8c3397ae9a5d3a86164"
+  },
+  "trace_sha256": "aba7eeca7dc68e251c3c32b2929c212b167c7c66b179770601dd053eedc8cc25",
+  "cases": [
+    "near-inverted acceleration",
+    "rest/bias then motion, repeated versus absent acceleration, variable mag elapsed dt",
+    "signed negative thermal MLS/cache with sensitivity after subtraction"
+  ],
+  "qualification": "CMSIS target objects are actually compiled -Ofast whereas engine is -Os/-flto. Host scalar -O2/-ffp-contract=off is a controlled algorithm comparison, not exact ARM compiler/FPU equivalence or a worst-case error bound.",
+  "cmsis_sha256": {
+    "Source/ControllerFunctions/arm_sin_cos_f32.c": "6b918ae1096a9926f88124a7ec13cacc195b5b669d261f68aae021666a0a890a",
+    "Source/FastMathFunctions/arm_atan2_f32.c": "6657913004506a4fc49666065b1b37d5dbe5d70790b3149da9440002fd3adfe8",
+    "Source/BasicMathFunctions/arm_dot_prod_f32.c": "974d740cc01d14188eca5231930a2021f27bcd22d35eb23d960e905152c90a50",
+    "Source/BasicMathFunctions/arm_scale_f32.c": "da53c181da3ceda9ee5c83e5c9fbcf8c4868991c3792580a398e320fd8615a0c",
+    "Source/BasicMathFunctions/arm_clip_f32.c": "1d0b0813144c48f48fb348d0631b8b4f5bf66ec96d3aef9bf53a58566c4d91d5",
+    "Source/SupportFunctions/arm_fill_f32.c": "c002caba1773c24cc5706ca9f1274782b8ea0b5e0b53b1978409bfd71590b24b",
+    "Source/CommonTables/arm_common_tables.c": "cc2510812ef1d0212e1416430c4f2c30af0b7dfbe8b977b9182e6b378bc1e986"
+  },
+  "cmsis_license": "External SDK Apache-2.0 sources linked into temporary oracle independently of the native subset.",
+  "comparison": {
+    "baseline": {
+      "logical_id": "comparison-baseline",
+      "sha256": "4cb8ed5dd39bfb21042b6595c3bdf5216fbb41ffb06f9b1334785c79ec29d5f2"
+    },
+    "rows": 7200,
+    "max_abs_s0_through_s21": [
+      1.4901161193847656e-06,
+      3.8743019104003906e-07,
+      1.6391277313232422e-07,
+      1.4901161193847656e-06,
+      1.4901161193847656e-06,
+      4.023313522338867e-07,
+      1.564621925354004e-07,
+      1.4901161193847656e-06,
+      7.450580596923828e-08,
+      4.6566128730773926e-08,
+      2.35741026699543e-09,
+      5.960464477539063e-08,
+      0.0,
+      0.0,
+      2.9802322387695312e-08,
+      0.0,
+      4.470348358154297e-07,
+      2.9802322387695312e-08,
+      0.0009765625,
+      0.000244140625,
+      0.0,
+      0.0
+    ],
+    "max_pose_degrees_6d_9d": [
+      0.00022306868723829227,
+      0.00022306868723829227
+    ],
+    "rest_magdist_mismatches": [
+      0,
+      0
+    ]
+  },
+  "fixture": {
+    "source": "Actual external firmware wrapper + full external CMSIS SDK oracle output; no production replay bridge",
+    "full_trace_sha256": "aba7eeca7dc68e251c3c32b2929c212b167c7c66b179770601dd053eedc8cc25",
+    "checkpoint_sha256": "b05164dee73513e7fc2241cefa19c9313276a61fefdc1b3f9f09bfe9925fc5a8",
+    "indices_per_case": [
+      0,
+      1,
+      2,
+      24,
+      25,
+      26,
+      89,
+      90,
+      101,
+      259,
+      260,
+      899,
+      1599,
+      1600,
+      1601,
+      2399
+    ],
+    "input_events_per_case": 2400,
+    "cases": 3,
+    "test_policy": "Replay every event using original external oracle recipe. Compare checkpoint input values and 22 diagnostic channels, preserving all intervening filter state evolution. Full trace test additionally checks every generated input against the oracle CSV.",
+    "tolerances": "Absolute 2e-5 for regular channels; 0.02 for bias covariance diagonal (s18..s20), same tolerances as parent-passed full golden test."
+  }
+}

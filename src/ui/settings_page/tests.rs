@@ -1,0 +1,827 @@
+use super::{Section, Setting, SettingsChoice};
+use crate::{
+    settings::{AccentColor, Appearance, Language},
+    ui::Workbench,
+};
+use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::{
+    AnyWindowHandle, AppContext as _, Bounds, Entity, TestAppContext, WindowBounds, WindowOptions,
+    px, size, test::TestWindowExt as _,
+};
+
+struct SettingsFixture {
+    handle: AnyWindowHandle,
+    workbench: Entity<Workbench>,
+    directory: tempfile::TempDir,
+    _runtime: crate::app_runtime::AppRuntime,
+}
+
+fn fixture(cx: &mut TestAppContext, width: f32, height: f32) -> SettingsFixture {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("preferences.json");
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+
+    let (handle, workbench) = cx.update(|cx| {
+        gpui_kit::open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    Default::default(),
+                    size(px(width), px(height)),
+                ))),
+                ..Default::default()
+            },
+            cx,
+            move |window, cx| {
+                cx.new(|cx| {
+                    let mut this = crate::ui::test_support::offline_workbench(
+                        window,
+                        cx,
+                        crate::sessions::SessionManager::new(),
+                        executor,
+                    );
+                    this.preferences_io = crate::ui::preferences::PreferenceIo::for_test(path);
+                    this
+                })
+            },
+        )
+        .unwrap()
+    });
+    // TestPlatform does not activate newly opened windows automatically.
+    // Focus-in notifications require native-window activation as on the desktop.
+    cx.update_window(handle, |_, window, _| window.activate_window())
+        .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        assert!(
+            window.is_window_active(),
+            "Settings keyboard integration requires an active native window"
+        );
+        window.render_frame(cx);
+    })
+    .unwrap();
+    SettingsFixture {
+        handle,
+        workbench,
+        directory,
+        _runtime: runtime,
+    }
+}
+
+#[gpui_kit::test]
+fn search_filters_real_rows_and_clear_keeps_the_selected_section(cx: &mut TestAppContext) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 760.);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        let pane_width = fixture.workbench.read(cx).settings.layout.read(cx).sizes()[0];
+        assert_eq!(
+            window.pixel_snap(window.find("settings-search").bounds().size.width),
+            window.pixel_snap(pane_width - window.rem_size() * 1.5),
+            "search must use the standard Sidebar header width, not its intrinsic minimum",
+        );
+        window.press("tab", cx);
+        assert_eq!(window.find("settings-search").focused(), Some(true));
+        window.input("Sakura", cx);
+        assert!(window.find("settings-accent").visible());
+        assert!(window.try_find("settings-appearance").is_none());
+        assert!(window.try_find("settings-language").is_none());
+        window.click("settings-section-appearance", cx);
+        assert_eq!(
+            window.find("settings-section-appearance").checked(),
+            Some(true)
+        );
+        assert_eq!(window.find("settings-search").value(), Some("Sakura"));
+
+        window.click("settings-search", cx);
+        window.press("secondary-a", cx);
+        window.input("no-setting-can-match-this-query", cx);
+        assert!(window.find("settings-clear-search").visible());
+        assert!(window.try_find("settings-accent").is_none());
+        window.click("settings-clear-search", cx);
+        assert_eq!(window.find("settings-search").value(), Some(""));
+        assert_eq!(window.find("settings-search").focused(), Some(true));
+        assert_eq!(
+            window.find("settings-section-appearance").checked(),
+            Some(true)
+        );
+        assert!(window.find("settings-language").visible());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn category_jumps_reveal_controls_and_locale_refresh_keeps_view_state(cx: &mut TestAppContext) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 620.);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        window.press("end", cx);
+        assert!(window.find("open-notices").visible());
+        window.press("home", cx);
+        assert!(window.find("settings-language").visible());
+        window.click("settings-section-about", cx);
+        assert!(fixture.workbench.read(cx).page_focus.is_focused(window));
+        window.simulate_next_frame(cx);
+        window.render_frame(cx);
+        assert!(window.find("open-notices").visible());
+        assert_eq!(window.find("settings-section-about").checked(), Some(true));
+        window.click("settings-section-general", cx);
+        window.simulate_next_frame(cx);
+        window.render_frame(cx);
+        assert!(window.find("settings-language").visible());
+        window.click("settings-search", cx);
+        window.input("language", cx);
+        let input_id = fixture.workbench.read(cx).settings.search.entity_id();
+        fixture
+            .workbench
+            .update(cx, |this, cx| this.refresh_input_placeholders(window, cx));
+        window.render_frame(cx);
+        assert_eq!(
+            fixture.workbench.read(cx).settings.search.entity_id(),
+            input_id
+        );
+        assert_eq!(window.find("settings-search").value(), Some("language"));
+        assert_eq!(
+            window.find("settings-section-general").checked(),
+            Some(true)
+        );
+        assert_eq!(window.find("settings-search").focused(), Some(true));
+    })
+    .unwrap();
+}
+
+fn settings_key(cx: &mut TestAppContext, fixture: &SettingsFixture, key: &str) {
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.press(key, cx);
+    })
+    .unwrap();
+    settle_settings(cx, fixture);
+}
+
+fn settle_settings(cx: &mut TestAppContext, fixture: &SettingsFixture) {
+    // Drawing alone does not deliver section-jump or focus-reveal frame callbacks.
+    for _ in 0..2 {
+        cx.run_until_parked();
+        cx.update_window(fixture.handle, |_, window, cx| {
+            window.simulate_next_frame(cx);
+            window.render_frame(cx);
+        })
+        .unwrap();
+    }
+}
+
+fn tab_to_setting(
+    cx: &mut TestAppContext,
+    fixture: &SettingsFixture,
+    target: &'static str,
+    key: &str,
+) {
+    for _ in 0..32 {
+        let focused = cx
+            .update_window(fixture.handle, |_, window, _| {
+                window.find(target).focused() == Some(true)
+            })
+            .unwrap();
+        if focused {
+            break;
+        }
+        settings_key(cx, fixture, key);
+    }
+    assert_setting_focus_visible(cx, fixture, target);
+}
+
+fn assert_setting_focus_visible(
+    cx: &mut TestAppContext,
+    fixture: &SettingsFixture,
+    target: &'static str,
+) {
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let control = window.find(target);
+        let viewport = fixture.workbench.read(cx).settings.scroll.bounds();
+        assert_eq!(
+            control.focused(),
+            Some(true),
+            "{target} must own native focus"
+        );
+        assert!(
+            control.bounds().top() >= viewport.top(),
+            "{target} is clipped above its scroll viewport"
+        );
+        assert!(
+            control.bounds().bottom() <= viewport.bottom(),
+            "{target} is clipped below its scroll viewport"
+        );
+        assert!(
+            control.bounds().left() >= viewport.left(),
+            "{target} is clipped before its scroll viewport"
+        );
+        assert!(
+            control.bounds().right() <= viewport.right(),
+            "{target} is clipped after its scroll viewport"
+        );
+    })
+    .unwrap();
+}
+
+fn assert_section_jump_aligned(
+    cx: &mut TestAppContext,
+    fixture: &SettingsFixture,
+    section: Section,
+) -> gpui_kit::Pixels {
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.click(section.id(), cx);
+    })
+    .unwrap();
+    settle_settings(cx, fixture);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let group = window.find((gpui_kit::ElementId::from(section.id()), "anchor"));
+        let scroll = &fixture.workbench.read(cx).settings.scroll;
+        let offset = scroll.offset().y;
+        assert!(
+            offset < gpui_kit::Pixels::ZERO,
+            "middle section must not be clamped at the start"
+        );
+        assert!(
+            offset > -scroll.max_offset().y,
+            "middle section must not be clamped at the end"
+        );
+        assert_eq!(
+            window.pixel_snap(group.bounds().top()),
+            window.pixel_snap(scroll.bounds().top()),
+            "section heading must align with its own scroll viewport, not the window origin",
+        );
+        offset
+    })
+    .unwrap()
+}
+
+#[gpui_kit::test]
+fn middle_section_jumps_align_after_wheel_fractional_scale_and_error_header_changes(
+    cx: &mut TestAppContext,
+) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 360.);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
+    let appearance = assert_section_jump_aligned(cx, &fixture, Section::Appearance);
+    assert_section_jump_aligned(cx, &fixture, Section::Devices);
+    assert_eq!(
+        assert_section_jump_aligned(cx, &fixture, Section::Appearance),
+        appearance
+    );
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.scroll(
+            "settings-appearance",
+            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(px(0.), px(-37.))),
+            cx,
+        );
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
+    assert_section_jump_aligned(cx, &fixture, Section::Devices);
+
+    cx.simulate_window_scale_factor_change(fixture.handle, 1.25);
+    settle_settings(cx, &fixture);
+    let appearance = assert_section_jump_aligned(cx, &fixture, Section::Appearance);
+    assert_section_jump_aligned(cx, &fixture, Section::Devices);
+    assert_eq!(
+        assert_section_jump_aligned(cx, &fixture, Section::Appearance),
+        appearance
+    );
+
+    cx.update(|cx| {
+        fixture.workbench.update(cx, |this, cx| {
+            this.preferences_io.save_error = Some("Isolated save failure".into());
+            cx.notify();
+        });
+    });
+    settle_settings(cx, &fixture);
+    assert_section_jump_aligned(cx, &fixture, Section::Appearance);
+    assert_section_jump_aligned(cx, &fixture, Section::Devices);
+}
+
+#[gpui_kit::test]
+fn tab_and_reverse_tab_reveal_real_controls_after_section_and_page_jumps(cx: &mut TestAppContext) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 620.);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+    })
+    .unwrap();
+    tab_to_setting(cx, &fixture, "settings-language-english", "tab");
+    for target in [
+        "settings-language-simplified-chinese",
+        "settings-appearance-light",
+        "settings-appearance-dark",
+        "settings-accent-neutral",
+        "settings-accent-blue",
+        "settings-accent-green",
+        "settings-accent-purple",
+        "settings-accent-amber",
+        "settings-accent-sakura",
+    ] {
+        settings_key(cx, &fixture, "tab");
+        assert_setting_focus_visible(cx, &fixture, target);
+    }
+
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.click("settings-section-about", cx);
+    })
+    .unwrap();
+    settings_key(cx, &fixture, "end");
+    cx.update_window(fixture.handle, |_, window, _| {
+        assert!(!window.find("settings-language").visible());
+    })
+    .unwrap();
+    tab_to_setting(cx, &fixture, "settings-language-english", "tab");
+
+    for target in [
+        "settings-language-simplified-chinese",
+        "settings-appearance-light",
+        "settings-appearance-dark",
+        "settings-accent-neutral",
+        "settings-accent-blue",
+        "settings-accent-green",
+        "settings-accent-purple",
+        "settings-accent-amber",
+        "settings-accent-sakura",
+        "manage-devices",
+        "advanced-features",
+        "open-notices",
+    ] {
+        settings_key(cx, &fixture, "tab");
+        assert_setting_focus_visible(cx, &fixture, target);
+    }
+    settings_key(cx, &fixture, "end");
+    for target in [
+        "advanced-features",
+        "manage-devices",
+        "settings-accent-sakura",
+        "settings-accent-amber",
+        "settings-accent-purple",
+        "settings-accent-green",
+        "settings-accent-blue",
+        "settings-accent-neutral",
+        "settings-appearance-dark",
+        "settings-appearance-light",
+        "settings-language-simplified-chinese",
+        "settings-language-english",
+    ] {
+        settings_key(cx, &fixture, "shift-tab");
+        assert_setting_focus_visible(cx, &fixture, target);
+    }
+
+    settings_key(cx, &fixture, "tab");
+    assert_setting_focus_visible(cx, &fixture, "settings-language-simplified-chinese");
+
+    settings_key(cx, &fixture, "tab");
+    assert_setting_focus_visible(cx, &fixture, "settings-appearance-light");
+    settings_key(cx, &fixture, "enter");
+    cx.update_window(fixture.handle, |_, window, cx| {
+        assert!(window.try_find("popup-menu").is_none());
+        assert_eq!(
+            fixture.workbench.read(cx).preferences.appearance,
+            Appearance::Light
+        );
+        assert_eq!(
+            window.find("settings-appearance-light").checked(),
+            Some(true)
+        );
+        assert_eq!(
+            window.find("settings-appearance-dark").checked(),
+            Some(false)
+        );
+    })
+    .unwrap();
+    assert_setting_focus_visible(cx, &fixture, "settings-appearance-light");
+    settings_key(cx, &fixture, "tab");
+    assert_setting_focus_visible(cx, &fixture, "settings-appearance-dark");
+    settings_key(cx, &fixture, "space");
+    cx.update_window(fixture.handle, |_, window, cx| {
+        assert_eq!(
+            fixture.workbench.read(cx).preferences.appearance,
+            Appearance::Dark
+        );
+        assert_eq!(
+            window.find("settings-appearance-dark").checked(),
+            Some(true)
+        );
+    })
+    .unwrap();
+    for accent in AccentColor::ALL {
+        let id = SettingsChoice::Accent(accent).id();
+        settings_key(cx, &fixture, "tab");
+        assert_setting_focus_visible(cx, &fixture, id);
+        settings_key(cx, &fixture, "enter");
+        cx.update_window(fixture.handle, |_, window, cx| {
+            assert_eq!(fixture.workbench.read(cx).preferences.accent, accent);
+            assert_eq!(window.find(id).checked(), Some(true));
+            assert!(window.try_find("popup-menu").is_none());
+        })
+        .unwrap();
+        assert_setting_focus_visible(cx, &fixture, id);
+    }
+    settings_key(cx, &fixture, "space");
+    cx.update_window(fixture.handle, |_, window, cx| {
+        assert_eq!(
+            fixture.workbench.read(cx).preferences.accent,
+            AccentColor::Sakura,
+            "activating the selected choice must not clear the accent"
+        );
+        assert_eq!(window.find("settings-accent-sakura").checked(), Some(true));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn named_accent_choices_wrap_inside_the_control_area_at_minimum_width_and_zoom(
+    cx: &mut TestAppContext,
+) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 620.);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        window.click("settings-search", cx);
+        window.input("sakura", cx);
+    })
+    .unwrap();
+    cx.simulate_window_scale_factor_change(fixture.handle, 1.25);
+    for width in [1100., 760.] {
+        cx.simulate_window_resize(fixture.handle, size(px(width), px(620.)));
+        for font_size in [16., 17.5, 20.] {
+            cx.update(|cx| {
+                gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(font_size));
+            });
+            settle_settings(cx, &fixture);
+            cx.update_window(fixture.handle, |_, window, cx| {
+                window.click("settings-section-all", cx);
+                window.click("settings-search", cx);
+            })
+            .unwrap();
+            settle_settings(cx, &fixture);
+            let context = cx
+            .update_window(fixture.handle, |_, window, cx| {
+                let group = window.find("settings-accent").bounds();
+                let scroll = &fixture.workbench.read(cx).settings.scroll;
+                let viewport = scroll.bounds();
+                let offset = scroll.offset();
+                let maximum = scroll.max_offset();
+                let pixel_span = |near, far| {
+                    window.pixel_snap(window.pixel_snap(far) - window.pixel_snap(near))
+                };
+                let census = AccentColor::ALL.map(|accent| {
+                    let control = window.find(SettingsChoice::Accent(accent).id());
+                    let bounds = control.bounds();
+                    (
+                        accent,
+                        bounds,
+                        control.visible(),
+                        (
+                            pixel_span(bounds.left(), bounds.right()),
+                            pixel_span(bounds.top(), bounds.bottom()),
+                        ),
+                    )
+                });
+                let context = format!(
+                    "width {width}, font size {font_size}, rem {:?}, group {group:?}, viewport {viewport:?}, offset {offset:?}, maximum {maximum:?}, choices {census:?}",
+                    window.rem_size()
+                );
+                let before = census.map(|(_, bounds, _, _)| bounds);
+                let (_, first, _, (first_width, first_height)) = census[0];
+                assert!(
+                    before[5].top() > first.top(),
+                    "all six named choices must wrap instead of overflowing: {context}"
+                );
+                if width == 1100. {
+                    for column in 0..3 {
+                        assert_eq!(
+                            window.pixel_snap(before[column].top()),
+                            window.pixel_snap(first.top()),
+                            "normal-width choices must form three columns: {context}"
+                        );
+                        assert_eq!(
+                            window.pixel_snap(before[column + 3].top()),
+                            window.pixel_snap(before[3].top()),
+                            "normal-width choices must form two rows: {context}"
+                        );
+                        assert_eq!(
+                            window.pixel_snap(before[column].left()),
+                            window.pixel_snap(before[column + 3].left()),
+                            "accent rows must share their column spines: {context}"
+                        );
+                    }
+                }
+                for (accent, bounds, _, span) in census {
+                    assert_eq!(
+                        span.0, first_width,
+                        "{accent:?} must have the same button width: {context}"
+                    );
+                    assert_eq!(
+                        span.1, first_height,
+                        "{accent:?} must have the same button height: {context}"
+                    );
+                    for (edge, outer, lower) in [
+                        (bounds.left(), group.left(), true),
+                        (bounds.right(), group.right(), false),
+                        (bounds.top(), group.top(), true),
+                        (bounds.bottom(), group.bottom(), false),
+                    ] {
+                        let edge = window.pixel_snap(edge);
+                        let outer = window.pixel_snap(outer);
+                        assert!(
+                            if lower { edge >= outer } else { edge <= outer },
+                            "{accent:?} must fit inside its control area: {context}"
+                        );
+                    }
+                }
+                context
+            })
+            .unwrap();
+            for (ix, accent) in AccentColor::ALL.into_iter().enumerate() {
+                let id = SettingsChoice::Accent(accent).id();
+                if ix == 0 {
+                    tab_to_setting(cx, &fixture, id, "tab");
+                } else {
+                    settings_key(cx, &fixture, "tab");
+                    assert_setting_focus_visible(cx, &fixture, id);
+                }
+                let before = cx
+                    .update_window(fixture.handle, |_, window, cx| {
+                        assert!(
+                            window.find(id).visible(),
+                            "{accent:?} must be visible after keyboard reveal: {context}"
+                        );
+                        let before = AccentColor::ALL
+                            .map(|other| window.find(SettingsChoice::Accent(other).id()).bounds());
+                        window.click(id, cx);
+                        before
+                    })
+                    .unwrap();
+                settle_settings(cx, &fixture);
+                cx.update_window(fixture.handle, |_, window, cx| {
+                    assert_eq!(
+                        fixture.workbench.read(cx).preferences.accent,
+                        accent,
+                        "the revealed {accent:?} button must accept a real click: {context}"
+                    );
+                    for (other, expected) in AccentColor::ALL.into_iter().zip(before) {
+                        let control = window.find(SettingsChoice::Accent(other).id());
+                        assert_eq!(
+                            control.checked(),
+                            Some(other == accent),
+                            "selecting {accent:?} must update {other:?}: {context}"
+                        );
+                        assert_eq!(
+                            control.bounds(),
+                            expected,
+                            "selecting {accent:?} must not move or resize {other:?}: {context}"
+                        );
+                    }
+                })
+                .unwrap();
+            }
+        }
+    }
+}
+
+#[gpui_kit::test]
+fn real_preference_controls_apply_immediately_and_save_only_to_the_private_store(
+    cx: &mut TestAppContext,
+) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 760.);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        assert_eq!(
+            window.find("settings-language").bounds().right(),
+            window.find("settings-appearance").bounds().right(),
+        );
+        assert_eq!(
+            window.find("settings-appearance").bounds().right(),
+            window.find("settings-accent").bounds().right(),
+        );
+    })
+    .unwrap();
+    for language in [Language::SimplifiedChinese, Language::English] {
+        cx.update_window(fixture.handle, |_, window, cx| {
+            window.click("settings-search", cx);
+            window.input("language", cx);
+            let input_id = fixture.workbench.read(cx).settings.search.entity_id();
+            let choice = SettingsChoice::Language(language);
+            window.click(choice.id(), cx);
+            assert!(window.try_find("popup-menu").is_none());
+            assert_eq!(fixture.workbench.read(cx).preferences.language, language);
+            assert_eq!(
+                fixture.workbench.read(cx).settings.search.entity_id(),
+                input_id
+            );
+            assert_eq!(window.find("settings-search").value(), Some("language"));
+            let title = rust_i18n::t!("app.settings.language.title", locale = language.code());
+            assert_eq!(
+                window.find("settings-language").label(),
+                Some(title.as_ref())
+            );
+            let english = window.find("settings-language-english").bounds();
+            let chinese = window.find("settings-language-simplified-chinese").bounds();
+            assert_eq!(
+                window.pixel_snap(english.right()) - window.pixel_snap(english.left()),
+                window.pixel_snap(chinese.right()) - window.pixel_snap(chinese.left())
+            );
+            assert_eq!(
+                window.pixel_snap(english.bottom()) - window.pixel_snap(english.top()),
+                window.pixel_snap(chinese.bottom()) - window.pixel_snap(chinese.top())
+            );
+            for other in Language::ALL {
+                let other_choice = SettingsChoice::Language(other);
+                let control = window.find(other_choice.id());
+                assert!(control.visible());
+                assert_eq!(control.checked(), Some(other == language));
+                let label = rust_i18n::t!(other_choice.label_key(), locale = language.code());
+                assert_eq!(control.label(), Some(label.as_ref()));
+            }
+        })
+        .unwrap();
+        let choice = SettingsChoice::Language(language);
+        tab_to_setting(cx, &fixture, choice.id(), "tab");
+        settings_key(cx, &fixture, "space");
+        cx.update_window(fixture.handle, |_, window, cx| {
+            assert_eq!(fixture.workbench.read(cx).preferences.language, language);
+            assert_eq!(window.find(choice.id()).checked(), Some(true));
+            window.click("settings-search", cx);
+            window.press("secondary-a", cx);
+            window.press("backspace", cx);
+        })
+        .unwrap();
+        settle_settings(cx, &fixture);
+        let stored: crate::settings::Preferences = serde_json::from_slice(
+            &std::fs::read(fixture.directory.path().join("preferences.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(stored.language, language);
+    }
+    cx.update_window(fixture.handle, |_, window, cx| {
+        for appearance in [Appearance::Light, Appearance::Dark] {
+            window.click(SettingsChoice::Appearance(appearance).id(), cx);
+            assert_eq!(
+                fixture.workbench.read(cx).preferences.appearance,
+                appearance
+            );
+            assert_eq!(cx.theme().is_dark(), appearance == Appearance::Dark);
+            for other in Appearance::ALL {
+                let choice = SettingsChoice::Appearance(other);
+                let control = window.find(choice.id());
+                assert_eq!(
+                    control.label(),
+                    Some(crate::i18n::tr(choice.label_key()).as_str())
+                );
+                assert_eq!(control.checked(), Some(other == appearance));
+            }
+            for accent in AccentColor::ALL {
+                let primary = super::theme::accent_primary(appearance, accent);
+                window.click(SettingsChoice::Accent(accent).id(), cx);
+                assert!(window.try_find("popup-menu").is_none());
+                assert_eq!(fixture.workbench.read(cx).preferences.accent, accent);
+                assert_eq!(
+                    cx.theme().primary,
+                    primary,
+                    "swatch must preview the applied primary for {appearance:?}/{accent:?}"
+                );
+                for other in AccentColor::ALL {
+                    let choice = SettingsChoice::Accent(other);
+                    let control = window.find(choice.id());
+                    assert_eq!(
+                        control.label(),
+                        Some(crate::i18n::tr(choice.label_key()).as_str())
+                    );
+                    assert_eq!(control.checked(), Some(other == accent));
+                }
+            }
+        }
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.click("settings-search", cx);
+        window.input("advanced", cx);
+        let before = fixture.workbench.read(cx).preferences.advanced_features;
+        window.click("advanced-features", cx);
+        assert_eq!(
+            fixture.workbench.read(cx).preferences.advanced_features,
+            !before
+        );
+        assert_eq!(window.find("advanced-features").checked(), Some(!before));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let stored: crate::settings::Preferences = serde_json::from_slice(
+        &std::fs::read(fixture.directory.path().join("preferences.json")).unwrap(),
+    )
+    .unwrap();
+    cx.update(|cx| assert_eq!(fixture.workbench.read(cx).preferences, stored));
+}
+
+#[gpui_kit::test]
+fn save_failure_and_retry_remain_visible_when_search_has_no_results(cx: &mut TestAppContext) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 760.);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        fixture.workbench.update(cx, |this, _| {
+            this.preferences_io.load_error = Some("Original load failure".into());
+            this.preferences_io.save_error = Some("Previous save failure".into());
+        });
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        window.click("settings-search", cx);
+        window.input("no-settings-match", cx);
+        assert!(window.find("settings-clear-search").visible());
+        assert!(window.find("retry-save-preferences").visible());
+        window.click("retry-save-preferences", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| {
+        assert!(
+            fixture
+                .workbench
+                .read(cx)
+                .preferences_io
+                .load_error
+                .is_none()
+        );
+        assert!(
+            fixture
+                .workbench
+                .read(cx)
+                .preferences_io
+                .save_error
+                .is_none()
+        );
+    });
+    assert!(fixture.directory.path().join("preferences.json").is_file());
+}
+
+#[gpui_kit::test]
+fn registry_reentry_from_navigation_and_home_keeps_keyboard_scope_and_settings_context(
+    cx: &mut TestAppContext,
+) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 760.);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        window.click("settings-search", cx);
+        window.input("registry", cx);
+        window.click("settings-section-devices", cx);
+        window.render_frame(cx);
+        window.click("manage-devices", cx);
+        assert!(fixture.workbench.read(cx).registry_is_open());
+        window.press("tab", cx);
+        assert_eq!(window.find("registry-back").focused(), Some(true));
+
+        window.click("nav-home", cx);
+        window.click("home-settings", cx);
+        window.press("tab", cx);
+        assert_eq!(window.find("registry-back").focused(), Some(true));
+        window.click("nav-device-setup", cx);
+        window.click("nav-settings", cx);
+        window.press("tab", cx);
+        assert_eq!(window.find("registry-back").focused(), Some(true));
+
+        window.click("registry-back", cx);
+        assert!(fixture.workbench.read(cx).page_focus.is_focused(window));
+        window.press("tab", cx);
+        assert_eq!(window.find("settings-search").focused(), Some(true));
+        assert_eq!(window.find("settings-search").value(), Some("registry"));
+        assert_eq!(
+            window.find("settings-section-devices").checked(),
+            Some(true)
+        );
+        assert!(fixture.workbench.read(cx).settings.selected == Section::Devices);
+    })
+    .unwrap();
+}
+
+#[test]
+fn explicit_technical_keywords_find_the_corresponding_existing_controls() {
+    for (query, expected) in [
+        ("sakura", Setting::Accent),
+        ("sha-256", Setting::Advanced),
+        ("usb", Setting::Registry),
+    ] {
+        let found: Vec<_> = Setting::ALL
+            .into_iter()
+            .filter(|setting| setting.matches(query, false))
+            .collect();
+        assert!(found.iter().any(|setting| std::mem::discriminant(setting) == std::mem::discriminant(&expected)));
+    }
+}

@@ -1,0 +1,18 @@
+{
+  "source_root": "nRF Connect SDK v3.4-branch/modules/lib/cmsis-dsp",
+  "repository": "https://github.com/ARM-software/CMSIS-DSP",
+  "source_sha256": {
+    "ControllerFunctions/arm_sin_cos_f32.c": "6b918ae1096a9926f88124a7ec13cacc195b5b669d261f68aae021666a0a890a",
+    "FastMathFunctions/arm_atan2_f32.c": "6657913004506a4fc49666065b1b37d5dbe5d70790b3149da9440002fd3adfe8",
+    "BasicMathFunctions/arm_dot_prod_f32.c": "974d740cc01d14188eca5231930a2021f27bcd22d35eb23d960e905152c90a50",
+    "BasicMathFunctions/arm_scale_f32.c": "da53c181da3ceda9ee5c83e5c9fbcf8c4868991c3792580a398e320fd8615a0c",
+    "BasicMathFunctions/arm_clip_f32.c": "1d0b0813144c48f48fb348d0631b8b4f5bf66ec96d3aef9bf53a58566c4d91d5",
+    "SupportFunctions/arm_fill_f32.c": "c002caba1773c24cc5706ca9f1274782b8ea0b5e0b53b1978409bfd71590b24b",
+    "CommonTables/arm_common_tables.c": "cc2510812ef1d0212e1416430c4f2c30af0b7dfbe8b977b9182e6b378bc1e986"
+  },
+  "header_sha256": "4c9d51edb7a495bfdd26e824cf53e441d645a21365fe6a74864b5b1440e141d3",
+  "files": "Six complete source files unchanged. sin_table.c contains exact sinTable_f32 declaration/body only plus original notice. sqrt_f32.h contains exact inline upstream function. Other include files are declaration-only portable host subset, not algorithm replacements.",
+  "scalar_defines": "CONFIG_CMSIS_DSP=1; all NEON/MVE/HELIUM/LOOPUNROLL absent; __GNUC_PYTHON__ uses upstream host sqrtf branch.",
+  "license": "Apache-2.0 (LICENSE); source attribution ARM Limited or its affiliates retained.",
+  "numeric_scope": "Controlled host scalar implementation. Actual firmware CMSIS objects use -Ofast, engine -Os/-flto; native host uses precise arithmetic. No unmeasured bitwise ARM-target equivalence."
+}

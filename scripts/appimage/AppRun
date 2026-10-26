@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+# Resolve only the bundle, never change the caller's cwd: external catalog/firmware
+# paths must keep the same meaning as the ELF package. App config/firmware are embedded.
+APPDIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+export APPDIR
+export LD_LIBRARY_PATH="$APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export XDG_DATA_DIRS="$APPDIR/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+# Host font/XKB data, graphics drivers, desktop portals, D-Bus/BlueZ and device
+# permissions are intentionally not redirected to the bundle.
+exec "$APPDIR/usr/bin/slimenrf-helper" "$@"

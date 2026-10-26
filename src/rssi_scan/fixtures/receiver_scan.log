@@ -1,0 +1,20 @@
+[00:00:14.015,838] <inf> esb_event: Total TPS: 0
+rssi_scan
+[00:00:15.016,204] <inf> esb_event: Total TPS: 0
+RSSI scan started
+RSSI scan (ESB channels 0..88): samples/ch/sweep=50, sweeps=200 (total=10000 samples/ch)
+[00:00:16.016,510] <inf> esb_event: Total TPS: 0
+[00:00:17.016,845] <inf> esb_event: Total TPS: 0
+[00:00:18.017,181] <inf> esb_event: Total TPS: 0
+Current channel (effective): 84
+Recommended: channel 86 (-69 dBm)
+
+All channels sorted by RSSI (lower is better):
+ 86 (-69 dBm)   88 (-66 dBm)   84 (-61 dBm)   78 (-47 dBm)   36 (-43 dBm)    8 (-43 dBm)   48 (-42 dBm)    0 (-42 dBm)
+ 62 (-41 dBm)   64 (-40 dBm)   74 (-36 dBm)   72 (-36 dBm)   38 (-34 dBm)   10 (-34 dBm)   44 (-33 dBm)   40 (-32 dBm)
+ 34 (-32 dBm)   20 (-32 dBm)   14 (-32 dBm)   76 (-31 dBm)   12 (-31 dBm)   66 (-29 dBm)   18 (-29 dBm)   82 (-28 dBm)
+ 70 (-28 dBm)   68 (-28 dBm)   16 (-28 dBm)   54 (-27 dBm)   30 (-27 dBm)   28 (-27 dBm)   46 (-26 dBm)   42 (-26 dBm)
+ 60 (-25 dBm)   56 (-25 dBm)    6 (-25 dBm)   58 (-24 dBm)   24 (-24 dBm)   52 (-23 dBm)   32 (-23 dBm)   50 (-22 dBm)
+  2 (-22 dBm)
+[00:00:19.017,578] <inf> esb_event: Total TPS: 0
+[00:00:20.018,035] <inf> esb_event: Total TPS: 0

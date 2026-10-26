@@ -1,0 +1,409 @@
+"""Behavioral public-checker tests using disposable, initially uncommitted Git repos."""
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+from pathlib import Path
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+
+CHECKER = Path(__file__).with_name("check-public.py")
+DOCUMENTS = (
+    "README", "docs/USER_GUIDE", "docs/DEVELOPMENT",
+    "docs/ARCHITECTURE", "docs/PROTOCOLS",
+)
+
+
+@unittest.skipUnless(shutil.which("git"), "Git is required for isolated repository tests")
+class PublicCheckerTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve() / "application"
+        self.root.mkdir()
+        self.put("Cargo.toml", '[workspace]\nmembers = ["crates/recording"]\n\n[package]\nname = "slimenrf-helper"\n')
+        self.put("crates/recording/Cargo.toml", '[package]\nname = "slimenrf-recording"\n')
+        self.put("src/main.rs", "fn main() {}\n")
+        (self.root / "scripts").mkdir()
+        shutil.copyfile(CHECKER, self.root / "scripts/check-public.py")
+        for base in DOCUMENTS:
+            name = base.rsplit("/", 1)[-1]
+            self.put(base + ".md", f"# Review fixture\n\n[中文]({name}.zh-CN.md)\n")
+            self.put(base + ".zh-CN.md", f"# 审查样例\n\n[English]({name}.md)\n")
+        self.git("-c", "init.templateDir=", "init", "--quiet")
+        name = "public_checker_fixture_" + str(id(self))
+        spec = importlib.util.spec_from_file_location(name, self.root / "scripts/check-public.py")
+        self.checker = importlib.util.module_from_spec(spec)
+        sys.modules[name] = self.checker
+        self.addCleanup(sys.modules.pop, name, None)
+        previous_bytecode = sys.dont_write_bytecode
+        try:
+            sys.dont_write_bytecode = True
+            spec.loader.exec_module(self.checker)
+        finally:
+            sys.dont_write_bytecode = previous_bytecode
+
+    def put(self, relative, content):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+        else:
+            path.write_text(content, encoding="utf-8")
+        return path
+
+    def git(self, *arguments, root=None):
+        environment = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        environment.update({"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
+                            "GIT_TERMINAL_PROMPT": "0"})
+        result = subprocess.run(["git", "-C", str(root or self.root), *arguments],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
+        if result.returncode:
+            self.fail("Isolated Git fixture command failed")
+        return result.stdout
+
+    def run_checker(self, *arguments):
+        result = subprocess.run([sys.executable, "-B", str(self.root / "scripts/check-public.py"), *arguments],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+        self.assertEqual(result.stderr, "")
+        return result.returncode, [json.loads(line) for line in result.stdout.splitlines()]
+
+    def findings(self, report):
+        return {(item.path, item.line, item.category) for item in report.findings}
+
+    def test_initial_repository_scans_nonignored_candidates_before_first_commit(self):
+        status, output = self.run_checker("--root", str(self.root))
+        self.assertEqual(status, 0)
+        self.assertEqual(output, [{"inventory": {
+            "tracked": 0, "nonignored_untracked": 14, "ignored_tracked": 0,
+            "candidates": 14, "scanned_text": 14, "findings": 0,
+        }}])
+
+    def test_inventory_keeps_tracked_untracked_and_ignored_tracked_separate(self):
+        self.put("tracked.txt", "public\n")
+        self.put("now-ignored.txt", "still reviewed\n")
+        self.git("add", "tracked.txt", "now-ignored.txt")
+        self.put("untracked.txt", "public\n")
+        self.put(".gitignore", "now-ignored.txt\nignored-only.txt\n")
+        self.put("ignored-only.txt", "not a publication candidate\n")
+        report = self.checker.audit()
+        self.assertEqual(report.inventory.tracked, ("now-ignored.txt", "tracked.txt"))
+        self.assertEqual(report.inventory.ignored_tracked, ("now-ignored.txt",))
+        self.assertIn("untracked.txt", report.inventory.untracked)
+        self.assertNotIn("ignored-only.txt", report.inventory.candidates)
+        self.assertEqual(self.findings(report), set())
+        self.assertEqual(report.counts["scanned_text"], 18)
+
+    def test_forbidden_tracked_paths_are_flagged_without_content_reads(self):
+        paths = (".local/private.txt", "dist/export.txt", "captures/session.csv",
+                 "recordings/session.csv", "firmwares/image.hex", ".env", "signing.pem",
+                 "preferences.json", "device-registry.json", "custom-shortcuts.json",
+                 ".cargo/credentials.toml", ".git-credentials", ".vscode/state.json")
+        for path in paths:
+            self.put(path, "unopened private fixture\n")
+        self.git("add", "--force", "--", *paths)
+        original = self.checker.os.open
+
+        def guarded_open(path, *arguments, **keywords):
+            relative = Path(path).relative_to(self.root).as_posix()
+            if relative in paths:
+                raise AssertionError("Forbidden content was opened")
+            return original(path, *arguments, **keywords)
+
+        with mock.patch.object(self.checker.os, "open", side_effect=guarded_open):
+            report = self.checker.audit()
+        self.assertEqual(self.findings(report), {
+            (path, 0, "forbidden-publication-path") for path in paths
+        })
+
+    def test_secret_forms_and_private_roots_report_only_locations(self):
+        lines = [
+            "C:" + r"\Users\sample-person\work\project",
+            "/home/" + "sample-person/project",
+            "/Users/" + "sample-person/project",
+            "/mnt/" + "c/workstation/project",
+            "\\\\" + r"private-host\share\project",
+            "token" + ' = "sample-assignment-value"',
+            "Bearer " + "sample-authorization-value",
+            "https://" + "reader:sample-password@example.invalid/a",
+            "https://example.invalid/a?sig" + "=sample-signature",
+            "ghp_" + "a" * 24,
+            "-----BEGIN " + "OPENSSH PRIVATE KEY-----",
+            "Authorization: " + "Basic c2FtcGxlOnNhbXBsZQ==",
+            "GH_TOKEN" + "=sample-environment-value",
+        ]
+        self.put("public.txt", "\n".join(lines) + "\n")
+        status, output = self.run_checker()
+        self.assertEqual(status, 1)
+        self.assertEqual(output[:-1], [
+            {"path": "public.txt", "line": index, "category": category}
+            for index, category in enumerate([
+                *(["private-absolute-path"] * 5), "credential-assignment", "authorization-value",
+                "authenticated-url", "signed-credential", "credential-token", "private-key",
+                "authorization-value", "credential-assignment",
+            ], 1)
+        ])
+        rendered = json.dumps(output)
+        for value in ("sample-person", "sample-password", "sample-signature", "private-host"):
+            self.assertNotIn(value, rendered)
+
+    def test_reviewed_synthetic_credentials_do_not_exempt_new_values_or_files(self):
+        fixture = "https://" + "user:password@api.github.com/credentials"
+        bearer = "bearer " + "fixture-secret"
+        path = "src/firmware_source/http_tests.rs"
+        self.assertEqual(self.checker.scan_text(path, fixture + "\n" + bearer), set())
+        changed = fixture.replace("password", "different-password")
+        self.assertEqual(self.findings_from_text(path, changed), {(path, 1, "authenticated-url")})
+        self.assertEqual(self.findings_from_text("other.rs", bearer), {("other.rs", 1, "authorization-value")})
+        public = "https://github.com/upstream/repository\n" + "a" * 64 + "\nconst USB_VENDOR: u16 = 0x1209;\n"
+        self.assertEqual(self.checker.scan_text("public.rs", public), set())
+
+    def test_reviewed_public_tool_path_requires_the_exact_complete_line(self):
+        tool = "C:" + chr(92) + chr(92).join(("Program Files", "LLVM", "bin", "libclang.dll"))
+        line = "if (-not (Test-Path -LiteralPath '" + tool + "' -PathType Leaf)) {"
+        path = ".github/workflows/ci.yml"
+        self.assertEqual(self.checker.scan_text(path, line), set())
+        changed = line.replace("libclang.dll", "private-signing.key")
+        self.assertEqual(self.findings_from_text(path, changed), {(path, 1, "private-absolute-path")})
+
+    def test_reviewed_private_path_does_not_exempt_a_whitespace_suffix(self):
+        path = "src/bundled_resources/tests.rs"
+        self.put(path, '        "C:' + '/firmwares/a.bin",\n')
+        status, output = self.run_checker()
+        self.assertEqual(status, 0)
+        self.assertEqual(output[:-1], [])
+        self.put(path, '        "C:' + '/firmwares/a.bin private/customer/file",\n')
+        status, output = self.run_checker()
+        self.assertEqual(status, 1)
+        self.assertEqual(output[:-1], [
+            {"path": path, "line": 1, "category": "private-absolute-path"},
+        ])
+        self.assertNotIn("firmwares/a.bin", json.dumps(output))
+        self.assertNotIn("private/customer/file", json.dumps(output))
+
+    def test_reviewed_translation_labels_do_not_exempt_credentials(self):
+        prefix = "token" + ": "
+        for path, label in (("locales/en.yml", "Token"), ("locales/zh-CN.yml", "令牌")):
+            approved = prefix + json.dumps(label, ensure_ascii=False)
+            self.assertEqual(self.findings_from_text(path, approved), set())
+            changed = prefix + json.dumps("unreviewed-private-value")
+            self.assertEqual(self.findings_from_text(path, changed), {
+                (path, 1, "credential-assignment"),
+            })
+            self.assertEqual(self.findings_from_text("notes.yml", approved), {
+                ("notes.yml", 1, "credential-assignment"),
+            })
+
+    def findings_from_text(self, path, text):
+        return {(item.path, item.line, item.category) for item in self.checker.scan_text(path, text)}
+
+    def test_binary_undecodable_and_missing_candidates_fail(self):
+        self.put("image.png", b"\x89PNG\x00fixture")
+        self.put("printable.png", b"printable bytes do not clear a binary asset")
+        self.put("unknown.txt", b"\xfffixture")
+        missing = self.put("missing.txt", "previously indexed\n")
+        self.git("add", "missing.txt")
+        missing.unlink()
+        status, output = self.run_checker()
+        self.assertEqual(status, 1)
+        self.assertEqual(output[:-1], [
+            {"path": "image.png", "line": 0, "category": "unreviewed-binary"},
+            {"path": "missing.txt", "line": 0, "category": "missing-path"},
+            {"path": "printable.png", "line": 0, "category": "unreviewed-binary"},
+            {"path": "unknown.txt", "line": 0, "category": "unreviewed-undecodable"},
+        ])
+
+    def test_markdown_heading_explicit_reference_and_encoded_targets(self):
+        self.put("notes.md", '# Notes\n\n[space](docs/space%20name.md#keep-this)\n'
+                 '[heading](#use-tool)\n[repeat](#use-tool-1)\n[ref][target]\n'
+                 '[target]: docs/space%20name.md#keep-this\n\n'
+                 '## Use `tool`\n## Use `tool`\n'
+                 '`[not a link](missing.md)`\n```md\n[not a link](missing.md)\n```\n')
+        self.put("docs/space name.md", '# Target\n<a id="keep-this"></a>\n')
+        self.assertEqual(self.findings(self.checker.audit()), set())
+        self.put("notes.md", '[missing](docs/space%20name.md#absent)\n[broken](missing.md)\n')
+        self.assertEqual(self.findings(self.checker.audit()), {
+            ("notes.md", 1, "markdown-missing-anchor"), ("notes.md", 2, "missing-path"),
+        })
+
+    def test_markdown_forbidden_and_escaping_targets_never_open_contents(self):
+        self.put(".gitignore", ".local/\nhidden.md\n")
+        self.put(".local/private.md", "must not be opened\n")
+        self.put("hidden.md", "not a publication input\n")
+        self.put("notes.md", '[forbidden](.local/private.md#secret)\n'
+                 '[escape](%2e%2e/private.md)\n[file](file:///private/file.md)\n'
+                 '[reference][missing]\n[ignored](hidden.md#private)\n')
+        original = self.checker.os.open
+
+        def guarded_open(path, *arguments, **keywords):
+            if ".local" in Path(path).parts or Path(path).name == "hidden.md":
+                raise AssertionError("Forbidden Markdown target was opened")
+            return original(path, *arguments, **keywords)
+
+        with mock.patch.object(self.checker.os, "open", side_effect=guarded_open):
+            report = self.checker.audit()
+        self.assertEqual(self.findings(report), {
+            ("notes.md", 1, "forbidden-publication-path"),
+            ("notes.md", 2, "markdown-target-outside-root"),
+            ("notes.md", 3, "markdown-unsafe-target"),
+            ("notes.md", 4, "markdown-unsafe-target"),
+            ("notes.md", 5, "markdown-target-not-reviewed-text"),
+        })
+
+    def test_markdown_directories_require_publication_candidates_without_ignored_reads(self):
+        self.put(".gitignore", "hidden-docs/\npublic-docs/ignored/\n")
+        self.put("hidden-docs/README.md", "ignored directory content must not be opened\n")
+        self.put("public-docs/ignored/README.md", "ignored nested content must not be opened\n")
+        self.put("public-docs/guide.md", "# Public guide\n")
+        self.put("notes.md", "[ignored](hidden-docs/)\n[public](public-docs/)\n[root](.)\n")
+        original = self.checker.os.open
+
+        def guarded_open(path, *arguments, **keywords):
+            relative = Path(path).relative_to(self.root).as_posix()
+            if relative.startswith(("hidden-docs/", "public-docs/ignored/")):
+                raise AssertionError("Ignored directory content was opened")
+            return original(path, *arguments, **keywords)
+
+        with mock.patch.object(self.checker.os, "open", side_effect=guarded_open):
+            report = self.checker.audit()
+        self.assertEqual(self.findings(report), {
+            ("notes.md", 1, "markdown-target-not-published"),
+        })
+        self.assertIn("public-docs/guide.md", report.inventory.candidates)
+        self.assertNotIn("hidden-docs/README.md", report.inventory.candidates)
+        self.assertNotIn("public-docs/ignored/README.md", report.inventory.candidates)
+
+    def test_language_pairing_navigation_and_explicit_anchor_parity(self):
+        self.put("docs/USER_GUIDE.zh-CN.md", '# 指南\n\n[English](USER_GUIDE.md)\n'
+                 '[wrong](../README.md)\n<a id="only-chinese"></a>\n')
+        (self.root / "README.zh-CN.md").unlink()
+        findings = self.findings(self.checker.audit())
+        self.assertEqual(findings, {
+            ("README.md", 1, "missing-reciprocal-language-link"),
+            ("README.md", 3, "missing-path"),
+            ("README.zh-CN.md", 0, "missing-language-document"),
+            ("docs/USER_GUIDE.zh-CN.md", 4, "markdown-language-navigation"),
+            ("docs/USER_GUIDE.md", 0, "language-explicit-anchor-mismatch"),
+            ("docs/USER_GUIDE.zh-CN.md", 0, "language-explicit-anchor-mismatch"),
+        })
+
+    def test_root_override_cannot_select_parent_or_another_repository(self):
+        status, output = self.run_checker("--root", str(self.root.parent))
+        self.assertEqual((status, output), (2, [{
+            "path": ".", "line": 0, "category": "root-does-not-match-application",
+        }]))
+        self.put("Cargo.toml", '[package]\nname = "different-application"\n')
+        status, output = self.run_checker()
+        self.assertEqual((status, output), (2, [{
+            "path": ".", "line": 0, "category": "invalid-application-sentinel",
+        }]))
+
+    def test_enclosing_parent_repository_is_not_an_application_repository(self):
+        shutil.rmtree(self.root / ".git")
+        self.git("-c", "init.templateDir=", "init", "--quiet", root=self.root.parent)
+        status, output = self.run_checker()
+        self.assertEqual((status, output), (2, [{"path": ".", "line": 0, "category": "missing-path"}]))
+
+    def make_symlink(self, target, link, directory=False):
+        try:
+            os.symlink(target, link, target_is_directory=directory)
+        except (OSError, NotImplementedError):
+            self.skipTest("Creating symlinks is not permitted on this host")
+
+    def test_candidate_and_markdown_symlinks_are_never_followed(self):
+        outside = self.root.parent / "private"
+        outside.mkdir()
+        (outside / "private.md").write_text("not a publication input\n", encoding="utf-8")
+        self.make_symlink(outside, self.root / "linked", directory=True)
+        self.make_symlink(outside / "private.md", self.root / "linked.md")
+        self.put("notes.md", '[direct](linked.md#private)\n[ancestor](linked/private.md)\n'
+                 '[cancelled](linked/../README.md)\n')
+        report = self.checker.audit()
+        self.assertEqual(self.findings(report), {
+            ("linked", 0, "symlink-or-reparse-point"),
+            ("linked.md", 0, "symlink-or-reparse-point"),
+            ("notes.md", 1, "symlink-or-reparse-point"),
+            ("notes.md", 2, "symlink-or-reparse-point"),
+            ("notes.md", 3, "symlink-or-reparse-point"),
+        })
+
+    def test_root_symlink_or_reparse_attribute_is_rejected(self):
+        original = self.checker.Path.lstat
+        root = self.root
+
+        def reparse_lstat(path, *arguments, **keywords):
+            info = original(path, *arguments, **keywords)
+            if path == root:
+                class ReparseInfo:
+                    st_mode = stat.S_IFDIR | 0o755
+                    st_file_attributes = 0x400
+                return ReparseInfo()
+            return info
+
+        with mock.patch.object(self.checker.Path, "lstat", reparse_lstat):
+            with self.assertRaises(self.checker.BoundaryError) as raised:
+                self.checker.audit()
+        self.assertEqual(raised.exception.category, "symlink-or-reparse-point")
+
+    def test_linked_worktree_indirection_uses_the_same_application_root_guard(self):
+        self.git("add", "--all")
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                 "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "Fixture")
+        linked = self.root.parent / "linked-worktree"
+        self.git("worktree", "add", "--quiet", "--detach", str(linked))
+        result = subprocess.run([sys.executable, "-B", str(linked / "scripts/check-public.py"),
+                                 "--root", str(linked)], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, encoding="utf-8")
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual([json.loads(line) for line in result.stdout.splitlines()], [{"inventory": {
+            "tracked": 14, "nonignored_untracked": 0, "ignored_tracked": 0,
+            "candidates": 14, "scanned_text": 14, "findings": 0,
+        }}])
+
+    def test_symlinked_application_ancestor_is_rejected(self):
+        alias = self.root.parent / "application-alias"
+        self.make_symlink(self.root, alias, directory=True)
+        result = subprocess.run([sys.executable, "-B", str(alias / "scripts/check-public.py")],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+        self.assertEqual(result.stderr, "")
+        self.assertEqual((result.returncode, json.loads(result.stdout)), (2, {
+            "path": ".", "line": 0, "category": "symlink-or-reparse-point",
+        }))
+
+    def test_candidate_windows_reparse_attribute_prevents_content_reads(self):
+        target = self.put("public.txt", "must not be opened\n")
+        original_lstat = self.checker.Path.lstat
+        original_open = self.checker.os.open
+
+        def reparse_lstat(path, *arguments, **keywords):
+            info = original_lstat(path, *arguments, **keywords)
+            if path == target:
+                class ReparseInfo:
+                    st_mode = stat.S_IFREG | 0o644
+                    st_file_attributes = 0x400
+                return ReparseInfo()
+            return info
+
+        def guarded_open(path, *arguments, **keywords):
+            if Path(path) == target:
+                raise AssertionError("Reparse-point content was opened")
+            return original_open(path, *arguments, **keywords)
+
+        with mock.patch.object(self.checker.Path, "lstat", reparse_lstat):
+            with mock.patch.object(self.checker.os, "open", side_effect=guarded_open):
+                report = self.checker.audit()
+        self.assertEqual(self.findings(report), {("public.txt", 0, "symlink-or-reparse-point")})
+
+
+
+
+if __name__ == "__main__":
+    unittest.main()

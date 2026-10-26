@@ -1,0 +1,188 @@
+name: Native no-firmware CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  source:
+    name: Source hygiene and license notices
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out standalone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check publication boundaries and frozen notices
+        run: |
+          python3 -B -m unittest discover -s scripts -p 'test_check_public.py'
+          python3 -B -m unittest discover -s scripts -p 'test_generate_notices.py'
+          python3 -B scripts/check-public.py
+          python3 -B scripts/generate_notices.py --check
+
+  windows:
+    name: Windows x64 / no firmware
+    needs: source
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out standalone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install repository-pinned Rust toolchain
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          # Rustup reads rust-toolchain.toml and installs its profile/components.
+          rustc --version --verbose
+          cargo --version
+          rustup target add x86_64-pc-windows-msvc
+          # windows-2022 supplies VS 2022 C++, Windows SDK, CMake and LLVM.
+          # Existing entrypoints initialize VS, CMake and static CRT settings.
+          if (-not (Test-Path -LiteralPath 'C:\Program Files\LLVM\bin\libclang.dll' -PathType Leaf)) {
+            throw 'The Windows runner must provide LLVM/libclang.'
+          }
+
+      - name: Cache native Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: '. -> target'
+          key: windows-2022-x64-no-firmware
+          cache-bin: false
+
+      - name: Check formatting, strict workspace Clippy and all-target tests
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File ./quality.ps1 -NoFirmware
+
+      - name: Package normal Release executable
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File ./package.ps1 -NoFirmware
+
+      - name: Select sole normal no-firmware executable
+        id: normal
+        run: |
+          $packages = @(Get-ChildItem -Path './dist/slimenrf-helper-*-windows-x64-no-firmware.exe' -File)
+          if ($packages.Count -ne 1) { throw "Expected one normal no-firmware EXE, found $($packages.Count)." }
+          "path=$($packages[0].FullName)" >> $env:GITHUB_OUTPUT
+
+      # Upload first: a later compression failure must not discard a valid normal EXE.
+      - name: Upload normal Windows executable only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ steps.normal.outputs.path }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Produce separate maximum-compression UPX executable
+        env:
+          NORMAL_EXE: ${{ steps.normal.outputs.path }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/package-upx.ps1 -InputPath $env:NORMAL_EXE
+
+      - name: Select sole UPX no-firmware executable
+        id: upx
+        env:
+          NORMAL_EXE: ${{ steps.normal.outputs.path }}
+        run: |
+          $packages = @(Get-ChildItem -Path './dist/slimenrf-helper-*-windows-x64-no-firmware-upx.exe' -File)
+          if ($packages.Count -ne 1) { throw "Expected one UPX no-firmware EXE, found $($packages.Count)." }
+          $expected = Join-Path (Split-Path $env:NORMAL_EXE -Parent) (([IO.Path]::GetFileNameWithoutExtension($env:NORMAL_EXE)) + '-upx.exe')
+          if ($packages[0].FullName -ne $expected) { throw 'UPX output does not match the selected normal executable.' }
+          "path=$($packages[0].FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload UPX Windows executable only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ steps.upx.outputs.path }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+  linux:
+    name: Linux x64 / no firmware
+    needs: source
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out standalone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install native build and AppImage dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang libclang-dev cmake pkg-config \
+            libudev-dev libdbus-1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libx11-dev libx11-xcb-dev libxcb1-dev \
+            libfontconfig1-dev libfreetype6-dev libvulkan1 python3 \
+            curl desktop-file-utils file
+
+      - name: Install repository-pinned Rust toolchain
+        run: |
+          # Rustup reads rust-toolchain.toml and installs its profile/components.
+          rustc --version --verbose
+          cargo --version
+
+      - name: Cache native Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: '. -> target'
+          key: ubuntu-22.04-x64-no-firmware
+          cache-bin: false
+
+      - name: Check formatting, strict workspace Clippy and all-target tests
+        run: bash ./quality.sh --no-firmware
+
+      - name: Download checksum-pinned AppImage tools
+        run: |
+          # Exact releases and cache layout from scripts/package_appimage.py.
+          # The packager verifies SHA-256 before executing either tool and uses
+          # appimagetool's embedded runtime, not a mutable runtime download.
+          tools="${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/appimage-tools"
+          mkdir -p "$tools/1-alpha-20251107-1" "$tools/1.9.1"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage \
+            --output "$tools/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage \
+            --output "$tools/1.9.1/appimagetool-x86_64.AppImage"
+
+      - name: Package Release AppImage
+        run: bash ./package.sh --format appimage --no-firmware
+
+      - name: Select sole executable no-firmware AppImage
+        id: linux_package
+        run: |
+          shopt -s nullglob
+          packages=(dist/slimenrf-helper-*-linux-x64-no-firmware.AppImage)
+          if (( ${#packages[@]} != 1 )); then
+            printf 'Expected one no-firmware AppImage, found %s.\n' "${#packages[@]}" >&2
+            exit 1
+          fi
+          executable="${packages[0]}"
+          [[ -f "$executable" && ! -L "$executable" && -x "$executable" ]]
+          printf 'path=%s\n' "$executable" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Linux AppImage only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ steps.linux_package.outputs.path }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14

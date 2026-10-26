@@ -1,0 +1,43 @@
+{
+  "engine": {
+    "repository": "https://github.com/jitingcn/vqf-c",
+    "source_head": "3c1a6ae6e931c98b652723372e52d9ed4b7819e2",
+    "branch": "cmsis-dsp-optimization",
+    "files": {
+      "src/vqf.c": "9e9e8dd6e02c01abba5b4b8c280fd9c32b74d8af9f35e8c3397ae9a5d3a86164",
+      "src/vqf.h": "f6710f75d8f0940315b1e7010771f43cdf1c199eabe92256f767011f66b7ac6c",
+      "LICENSE": "6e788c6124feff345567327a0ef937c0165d80f79af6470cb16ae2a0c7e8d716"
+    },
+    "modifications": "None: copied source bytes. Mixed float state / double biquad coefficients and histories selected by upstream header; conventional covariance update."
+  },
+  "firmware": {
+    "repository": "https://github.com/jitingcn/SlimeVR-Tracker-nRF",
+    "source_head": "8aa61a6ce0a9e3bc6f45564656f808827da5de01",
+    "profile_source_sha256": "77c7fcb89414e6965f7106e0b7de71fddec38c8a12230bd51ed89cc89a77d98c",
+    "thermal_source_sha256": "bae2e08e22566e12ca1491819c39b87e5548121af5a73960c000fcafe0badb18",
+    "profile_source": "src/sensor/fusion/vqf/vqf.c:set_params, vqf_update_gyro, vqf_update_accel, vqf_update_mag",
+    "thermal_source": "src/sensor/calibration/tcal_mls_lut.c:MLS top10, double linear fit, five-slot local-slope cache, 0.5C LUT; calibration.c:259-340 subtract curve/static offset, optional explicit legacy offset, then sensitivity",
+    "license": "LICENSE-SlimeVR",
+    "revision_note": "HEAD identifiers are provenance only. Working-tree equality to commits is not asserted; hashes identify actual source bytes."
+  },
+  "native_build": {
+    "compiler": "cc build dependency, platform C compiler",
+    "requested_flags": ["-std=c17", "/std:c17", "-ffp-contract=off", "/fp:precise"],
+    "fast_math": false,
+    "CMSIS_DSP": "Exact scalar subset and sine table, see cmsis/provenance.json and Apache-2.0 cmsis/LICENSE. Host precise arithmetic, not target-specific -Ofast/ARM instruction equivalence.",
+    "adaptive_tau": false,
+    "initialization": "Cold start independently per unknown-duration segment; retained live state unavailable.",
+    "parameter_bridge": "All 25 VQF parameters are explicitly passed from validated ReplayParams to the unchanged kernel. Native defaults retain the original 8aa61a6 firmware profile; imported/preset/custom parameters do not redefine that baseline."
+  },
+  "reconstruction": {
+    "clock": "Nominal raw TX interval plus sequence span, not receiver arrival time or chip ODR",
+    "gyro_default": "One fixed-period gyro update per reconstructed raw interval. First/segment-start cumulative quaternion has no known gyro interval and bypasses compensation/integration. Firmware profile at effective recorded rate, not full-rate live reproduction.",
+    "gyro_override": "Explicit constant-rate subevent approximation; bounded at 256x raw TX rate",
+    "accel": "Only received nonzero fresh observations; fixed actual metadata/overridden accelerometer period",
+    "mag": "Only received nonzero new-mag observations; inferred elapsed raw-clock interval, integer microsecond wrapper path; fixed precomputed filter gains",
+    "thermal": "Current flags+mode, complete >=4 points, signed temperature. Completed LUT assumed if current range known, otherwise actual MLS/cache algorithm. A legacy CSV-supplied complete gyro_tcal curve has explicit separate provenance and uses the same signed firmware MLS; no live mode/flags, LUT range, or offset are inferred. Modern disabled/incomplete/indexed metadata is never reclassified as a legacy curve. No inferred runtime offset or generation rebases. Independent None/Bias/Thermal selection; unavailable thermal curve or recording temperature falls back to static bias/sensitivity. Published thermal diagnostics are actual sensitivity-adjusted curve/explicit-legacy subtraction only, never static fallback or unknown gyro.",
+    "limits": "No retained filter state, individual chip history, hidden producer loss, actual mag timestamps, runtime D_offset, adaptive/INT_merge history. CMSIS target numerical parity not asserted.",
+    "numerical_domain": "Sensor and calibrated vectors are bounded before CMSIS float-to-index arithmetic, parameters have supported finite ranges, and nonfinite filter diagnostics fail processing rather than publish a poisoned trajectory."
+  },
+  "oracle": "crates/recording/src/replay/reference_oracle.py extracts actual reference wrapper and thermal MLS functions and links actual reference engine. With --cmsis-dsp it uses full external SDK headers/sources independently of the vendored header subset. It never links replay_bridge.c. Default frozen_external_firmware_checkpoints replays all 7200 input events and compares 48 frozen external states in crates/recording/src/replay/fixtures/cmsis_checkpoints.csv (source/trace/fixture hashes in adjacent provenance). Manual firmware_reference_trace compares every state against a regenerated full CSV and reports maximum channel/pose errors. --compare portable.csv quantifies scoped CMSIS differences, not a universal numerical bound."
+}

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SlimeNRF Helper
+Comment=Manage SlimeNRF trackers, firmware and motion recordings
+Exec=slimenrf-helper
+Icon=slimenrf-helper
+Terminal=false
+Categories=Utility;Electronics;
+Keywords=SlimeVR;SlimeNRF;tracker;firmware;

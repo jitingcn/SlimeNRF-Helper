@@ -1,0 +1,43 @@
+#!/bin/sh
+# Opt-in, read-only formatting gate. Install with scripts/install-hooks.ps1,
+# or copy this file into the effective hooks directory without replacing a hook.
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+if [ ! -f "$root/quality.ps1" ] || [ ! -f "$root/quality.sh" ] ||
+    [ ! -f "$root/Cargo.toml" ] ||
+    ! grep -Eq '^[[:space:]]*name[[:space:]]*=[[:space:]]*"slimenrf-helper"[[:space:]]*(#.*)?$' "$root/Cargo.toml"; then
+    echo 'Refusing to run: the Git working tree root is not the standalone SlimeNRF Helper application.' >&2
+    exit 1
+fi
+
+# Keep unrelated projects, docs, assets, and firmware-only commits cheap.
+# Explicit glob pathspecs include nested workspace crates and source files.
+status=0
+git -C "$root" diff --cached --quiet --diff-filter=ACMRD -- \
+    ":(glob)**/*.rs" \
+    ":(glob)**/Cargo.toml" \
+    ":(literal)Cargo.lock" \
+    ":(glob)**/rustfmt.toml" \
+    ":(glob)**/.rustfmt.toml" \
+    ":(glob)**/rust-toolchain*" \
+    ":(glob)**/.cargo/*.toml" \
+    ":(literal)build.ps1" \
+    ":(literal)quality.ps1" \
+    ":(glob)scripts/*.ps1" \
+    ":(literal)build.sh" \
+    ":(literal)quality.sh" \
+    ":(literal)package.sh" \
+    ":(glob)scripts/*.sh" \
+    ":(glob)scripts/package*.py" \
+    ":(glob).githooks/*" \
+    ":(glob).vscode/*.json" || status=$?
+case "$status" in
+    0) exit 0 ;;
+    1) ;;
+    *) exit "$status" ;;
+esac
+
+cd "$root"
+# Cargo/rustfmt only: no PowerShell, Visual Studio, builds, or index mutation.
+exec cargo fmt --all -- --check

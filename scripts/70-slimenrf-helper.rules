@@ -1,0 +1,4 @@
+# Optional: grant the active local desktop user access to SlimeNRF receivers.
+# USB interface selection is still validated by the application.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="7690", TAG+="uaccess"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="7690", TAG+="uaccess"

@@ -1,0 +1,103 @@
+[workspace]
+members = ["crates/recording"]
+default-members = ["."]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+serde_yaml = { package = "serde_yaml_ng", version = "0.10" }
+zip = { version = "9.1", default-features = false, features = ["deflate"] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+
+[package]
+name = "slimenrf-helper"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Receiver-oriented SlimeNRF desktop workbench"
+
+[lints]
+workspace = true
+
+[features]
+default = ["embed-firmware"]
+embed-firmware = []
+
+[dependencies]
+slimenrf-recording = { path = "crates/recording" }
+gpui-kit = { version = "=0.8.1", features = ["gpui-fast"] }
+serialport = { version = "4.8", features = ["usbportinfo-interface"] }
+hidapi = { version = "2.6", default-features = false, features = ["windows-native", "linux-native"] }
+parking_lot = "0.12"
+directories = "6"
+rust-i18n = "4.2"
+sys-locale = "0.3"
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+crc32fast = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+sha2 = "0.11"
+serde_yaml.workspace = true
+zip.workspace = true
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+webpki-root-certs = "1"
+btleplug = "=0.13.5"
+tokio = { version = "1", features = ["rt", "time", "sync", "net"] }
+futures-util = "0.3"
+uuid = "1"
+glam = "0.34"
+unicode-width = { version = "=0.2.2", default-features = false }
+
+[dev-dependencies]
+gpui-kit = { version = "=0.8.1", features = ["gpui-fast", "test-support"] }
+
+[build-dependencies]
+sha2 = "0.11"
+serde_yaml.workspace = true
+zip.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Devices_Communication", "Win32_Devices_DeviceAndDriverInstallation", "Win32_Devices_Properties", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Ioctl", "Win32_System_Registry"] }
+
+[profile.dev]
+# Keep edit/run builds incremental; reserve whole-program optimization for release.
+opt-level = 1
+debug = 0
+incremental = true
+codegen-units = 256
+lto = "off"
+
+# These dependencies rarely change, but dominate native layout, text and painting.
+[profile.dev.package]
+gpui-fast = { opt-level = 3 }
+gpui-fast-windows = { opt-level = 3 }
+gpui-fast-platform = { opt-level = 3 }
+gpui-base = { opt-level = 3 }
+gpui-component = { opt-level = 3 }
+resvg = { opt-level = 3 }
+rustybuzz = { opt-level = 3 }
+ttf-parser = { opt-level = 3 }
+taffy = { opt-level = 3 }
+smol = { opt-level = 3 }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

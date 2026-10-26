@@ -1,0 +1,73 @@
+# SlimeNRF Helper: engineering boundaries
+
+Scope: this standalone repository's Rust application and internal workspace members. No parent Python repository or configuration is required. The application originated as a Python rewrite; that migration history does not authorize changes to external applications, firmware payloads or user state. [README.md](README.md) is the public overview; [docs/USER_GUIDE.md](docs/USER_GUIDE.md) owns current procedures, [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) owns engineering commands, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) owns the module map. Planning documents and historical change/acceptance records are local-only maintenance material, not required checkout inputs.
+
+## Architecture
+
+- One product and one desktop executable. The workspace contains the root application and `crates/recording` (`slimenrf-recording`); use internal modules by default. Add another package only for a demonstrated dependency boundary or independent consumer, not a file-length target. No dynamic DLL plugin system, service locator, generic transport framework or legacy-path re-export layer.
+- Dependency direction: GPUI presentation -> application orchestration -> device/protocol services and recording core. Lower layers must not import `ui`, GPUI entities, dialogs or widget types. Keep the root as the composition point; do not move hardware code into the recording library to reduce desktop file size.
+- `ui` owns forms, selection, confirmation, localization, rendering and scheduling. Use `gpui_kit` exports consistently. Never introduce a second GPUI type universe. Blocking I/O, native computation and device handles must stay off the UI thread.
+- `capture_session` owns capture admission, frozen identities, leases and worker lifetime; `capture_device` owns collection I/O. `firmware_update` executes admitted immutable requests and returns structured outcomes; UI owns firmware choice, confirmation and result presentation. Do not make the executor depend on picker/catalog payloads or localized labels.
+- `sessions` owns serial handles and queued writes; `discovery` owns passive receiver HID access. Reuse their reservation APIs. `update::Job` owns background cancellation/progress/join. Keep cross-feature admission explicit; do not replace subtly different capture/update handoffs with a generic broker.
+- `app_runtime` owns one continuously driven Tokio I/O runtime outside the GPUI event loop. Inject its concrete executor, pooled HTTP client and lazy shared BLE backend; no per-operation runtimes or global runtime lookup. GPUI keeps its executor; native serial/HID/capture loops and replay computation keep their dedicated blocking workers. The recording library remains runtime-agnostic.
+- HTTP/BLE jobs use `update::Job` async ownership; other device jobs retain its blocking-thread path. Await bounded CPU/file work through retained blocking joins, not on the Tokio driver. Cancellation must not abort/detach BLE cleanup or release a device lease while a nested worker still runs. Shutdown joins the independent cleanup thread before stopping Tokio; never `block_on` cleanup in the UI loop.
+- `settings` owns persistence and preference data; `ui/theme` applies them. `board_catalog`, `remote_config`, `bundled_resources` and `firmware_source` own their respective configuration/resource concerns. Do not infer board compatibility from a filename.
+- Keep visibility as narrow as practical (`pub(super)` / `pub(crate)`). Prefer small concrete types and functions over utility classes or blanket traits. Share components only where semantics match; do not merge different identity or authorization policies because the UI looks similar.
+
+## Device and lifecycle invariants
+
+- A receiver/port has one active owner. Freeze positive device identity before reservation clears passive discovery state. Drain accepted writes before transferring a serial handle. Revalidate identity before executing a destructive operation.
+- Cancellation is a request, not proof that the worker has stopped. Retain identity pins and leases until the worker joins. Application shutdown cancels and joins retained work; changing tabs must not terminate or duplicate work.
+- Tracker slot IDs are receiver-local, not globally unique. Preserve receiver identity, port-generation and reservation-token checks. Failed enumeration must not authorize reconnect using stale inventory.
+- Linux UF2 discovery must use actual writable FAT block-device mounts and a UF2 marker, not arbitrary marker directories, network mounts or guessed mount-path labels. Freeze and revalidate mount incarnation/device identity before writing; a remount or replacement at the same path revokes authorization. Do not weaken these checks to make synthetic smoke fixtures appear as hardware.
+- Keep histories, queues, previews and file reads bounded. Use shared image/sample storage for large data; avoid copying firmware buffers, re-parsing images or scheduling unnecessary redraws in hot paths.
+- Never send commands, initiate OTA/calibration, flash hardware or alter user settings merely to smoke-test a refactor. Use deterministic transport tests and non-destructive native UI paths; record when hardware verification was not performed.
+
+## Formatting, diagnostics and tests
+
+Use the stable compiler pinned by `rust-toolchain.toml` for native development and verification; the manifest's MSRV is a separate compatibility declaration. Do not silently change that pin or the user's global default, or require nightly formatting. The project toolchain includes `rustfmt`, `clippy`, `rust-analyzer` and `rust-src`. Flatpak stages the same pinned official compiler as a build-only SDK module; it must not silently fall back to an older SDK Rust extension.
+
+From this directory on Windows:
+
+```powershell
+./quality.ps1                 # fmt check, strict workspace Clippy, workspace tests
+./quality.ps1 -NoFirmware     # same gates without embedded firmware
+./quality.ps1 -FormatOnly     # format check only; no Visual Studio setup
+./build.ps1 -Action fmt       # explicitly apply stable formatting
+./build.ps1 -Debug            # native executable for smoke verification
+./build.ps1 -Action run       # development build and launch
+```
+
+From this directory on Linux, after installing the native dependencies in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#linux):
+
+```bash
+bash quality.sh               # fmt check, strict workspace Clippy, workspace tests
+bash quality.sh --no-firmware # same gates without embedded firmware
+bash quality.sh --format-only
+bash build.sh fmt            # explicitly apply stable formatting
+bash build.sh --debug        # native executable for smoke verification
+bash build.sh run            # development build and launch
+bash package.sh --no-firmware # Release ELF; requires Python 3
+bash package.sh --format appimage
+bash package.sh --format flatpak --no-firmware # source-built SDK bundle; prerequisites in docs/DEVELOPMENT.md
+```
+
+- `quality.ps1` (Windows) and `quality.sh` (Linux) are the platform quality entry points. They reuse native build setup, the existing target directory and locked dependencies. Stop on errors; do not substitute an easier package selection and claim workspace coverage. Linux uses its native toolchain, not the Windows MSVC target/static-CRT environment.
+- Portable Cargo equivalents: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --all-targets --locked`. Add `--no-default-features` to Clippy/tests for the no-firmware variant. Configure the platform's native dependencies first; Windows also needs the explicit MSVC target/static-CRT environment described in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#windows).
+- Do not use `--all-features` to test `-NoFirmware`: it would re-enable `embed-firmware`. Run both variants for feature, configuration/resource, workspace, build-script or shared application-boundary changes. Core-only work can be checked with `-p slimenrf-recording`; it still needs a C compiler, but not GPUI or firmware payloads.
+- New build/lint warnings are defects. Fix their cause; no crate-wide allowances, disabled checks or weakened assertions to make a gate green. Any necessary exception must be narrowly scoped and explained. Shared manifest lints forbid `dbg!` and implicit unsafe operations inside unsafe functions.
+- Follow rustfmt, not manual alignment. Do not mix broad cosmetic rewrites into behavioral fixes. A deliberate formatting-baseline change is separate from behavior and must be called out.
+- Keep tests with the behavior's owner. Prefer state transitions, identity boundaries, cancellation, partial failure and file/protocol compatibility. Test-only helpers must not expose production internals. Do not add source-text/wiring assertions or mock-echo tests.
+- For significant changes, also run the affected application path. GUI claims need actual native observation, not just compilation. On Windows, use Windows.Graphics.Capture with the application's own HWND when available; on Linux, observe the real X11/Wayland desktop and renderer. Never terminate unrelated instances. Report tests, native smoke, WSL/WSLg smoke and unverified platforms/hardware separately: WSL builds or GUI rendering do not prove USB forwarding, HID/serial permissions, UF2 mounts, BLE or physical flashing. macOS requires separate validation.
+
+## Tooling and maintenance
+
+- Use rust-analyzer references before changing public interfaces, and semantic rename/code actions where applicable. If unavailable, state the limitation and inspect every consumer; compilation is not a substitute for understanding ownership.
+- Editor settings are project-scoped. Keep rust-analyzer on normal `check`; strict Clippy belongs in the explicit quality gate. Reuse the normal target cache rather than creating a second multi-GB LSP cache. Do not overwrite global editor settings or another tool's Git hooks.
+- The optional pre-commit hook is a non-mutating formatting check, not a substitute for the quality gate or native smoke. Installation is opt-in and requires the Git repository root to be this application root; reject a parent repository rather than modifying its hooks. Never auto-stage, auto-commit, auto-push or auto-publish.
+- Preserve full and no-firmware packaging, resource identity and relative-path semantics. Linux ELF/AppImage are not universal static bundles: retain libc, GPU/desktop/device-service compatibility boundaries. AppImage tools must be version/checksum pinned; never execute mutable downloads. Flatpak must compile vendored locked source offline inside its declared SDK, not wrap a host ELF; document its broad hardware/filesystem grants and separately installed runtime. Do not bypass UF2 identity checks for a sandbox.
+- Relative `CARGO_TARGET_DIR` is resolved from the application directory; share the normal native cache with the editor, but never share Windows/Linux/Flatpak-SDK compiled artifacts. Flatpak's separate ABI cache is intentional, not an LSP cache. Do not edit generated `target/`, `dist/`, firmware payloads, vendor numerical sources or runtime recordings as incidental cleanup. Do not run `clean` as routine verification.
+- Dependency additions must justify runtime value, compile cost, platform support and license impact. Do not change profiles, lockfile versions or algorithm parameters as incidental refactoring.
+- Update the relevant existing documentation when changing commands or ownership. Link to authoritative configuration instead of duplicating its values. Never report a partial smoke run as physical-device or cross-platform validation.
+- Keep local logs, recordings, credentials and machine-specific configuration in ignored `.local/` storage; never commit real USB serials/RF addresses, tokens or private keys. Share semantic device labels or synthetic fixtures instead. `.local/` and `slimenrf-helper.local.yaml` are not automatically loaded: explicitly select a local YAML with `SLIMENRF_CONFIG_PATH`. Keep distributable YAML paths relative; pass private absolute firmware inputs with `SLIMENRF_FIRMWARE_ROOT` rather than writing them into embedded configuration. Preserve platform user preferences; do not relocate or overwrite them for publication cleanup.
+- Default builds retain `embed-firmware` and the local development convention `firmware_root: ../firmwares`. A standalone checkout without payloads must explicitly use `-NoFirmware` / `--no-firmware` (or Cargo `--no-default-features`); full builds require the intended firmware inputs and separate license review.

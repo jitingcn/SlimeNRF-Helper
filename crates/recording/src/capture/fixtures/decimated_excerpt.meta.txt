@@ -1,0 +1,25 @@
+# Synthetic four-sample gyro/accelerometer fixture.
+# Hand-authored values exercise missing temperature and held acceleration.
+data_mode=raw
+gyro_odr_hz=204.8
+accel_odr_hz=102.4
+mag_odr_hz=0
+imu_id=9
+imu_identity_source=synthetic_fixture
+imu_name=Synthetic IMU
+mag_id=255
+gyro_bias=0,0,0
+acc_cal_bias=0,0,0
+acc_cal_matrix=1,0,0,0,1,0,0,0,1
+calibration_status=unmeasured_identity_no_external_correction
+single_zro_status=identical_to_none_not_measured_calibration
+temperature_available=false
+magnetometer_available=false
+time_source=reconstructed_gyro_index
+accel_alignment=preceding_gyro_event_then_hold
+physical_heading_references=unavailable
+source_kind=synthetic
+source_purpose=missing_temperature_and_held_acceleration
+duration_s=0.01953125
+gyro_sample_count=4
+accel_sample_count=2

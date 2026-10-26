@@ -1,0 +1,17 @@
+/.githooks/pre-commit text eol=lf
+*.rs text eol=lf
+*.sh text eol=lf
+*.rules text eol=lf
+/Cargo.toml text eol=lf
+/Cargo.lock text eol=lf
+/crates/recording/Cargo.toml text eol=lf
+/LICENSE-MIT text eol=lf
+/LICENSE-APACHE text eol=lf
+/scripts/notices-inputs.json text eol=lf
+/THIRD_PARTY_NOTICES.txt -text
+/crates/recording/vendor/vqf/LICENSE -text
+/crates/recording/vendor/vqf/LICENSE-SlimeVR -text
+/crates/recording/vendor/vqf/cmsis/LICENSE -text
+/crates/recording/vendor/vqf/cmsis/src/*.c -text
+/crates/recording/vendor/vqf/cmsis/include/sqrt_f32.h -text
+/crates/recording/vendor/vqf/cmsis/include/arm_math.h -text

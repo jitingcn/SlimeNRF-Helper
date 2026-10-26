@@ -1,0 +1,356 @@
+schema_version: 1
+firmware_root: ../firmwares
+remote_firmware:
+  application:
+    releases: {owner: jitingcn, name: SlimeVR-Tracker-nRF}
+    tracker_ci: {owner: jitingcn, name: SlimeVR-Tracker-nRF}
+    receiver_ci: {owner: jitingcn, name: SlimeVR-Tracker-nRF-Receiver}
+  bootloader:
+    releases: {owner: jitingcn, name: Adafruit_nRF52_Bootloader}
+    ci: {owner: jitingcn, name: Adafruit_nRF52_Bootloader}
+
+poll_interval_seconds: 3
+info_filename: INFO_UF2.TXT
+board_volume_labels:
+  # Shared volume labels never substitute for a known exact Board-ID.
+  - SLIMENRFTRK
+  - NICENANO
+  - MOCHIGOME
+  - SLIMENRFRCV
+  - AERO-Lite
+  - CHEESEP00BT
+  - MIROBOOT
+  - Nekumori
+  - SLIMENRF
+  - "FOX-BOOT"
+  - "AERO-BOOT"
+  - "AERO-Pro"
+  - "XIAO-BOOT"
+  - "XIAO-SENSE"
+  - "CHEESER33"
+  - "CHEESEP10BT"
+
+legacy_targets:
+  NICENANO: &nicenano_conversion
+    name: Convert nice!nano to SlimeNRF ProMicro
+    bootloader_board: slimenrf_promicro
+    bootloader_mcu: nrf52840
+    success: PROMICRO BOOTLOADER SUCCESS
+  MOCHI: &mochi_preset
+    name: mochi_uf2/nrf52833
+    esb_ota_kind: tracker
+    bootloader_board: mochaelec_mochi
+    bootloader_mcu: nrf52833
+    firmware: Mochi_Tracker.uf2
+    firmware_aliases: [Mochi_Tracker.uf2]
+    success: MOCHI SUCCESS
+
+opendfu_targets:
+  - name: holyiot-21017
+    firmware: SlimeNRF_Holyiot_Dongle_Receiver.hex
+    hw_version: 52
+    app_version: 1
+    sd_req: "0x00"
+    success: HOLYIOT RECEIVER SUCCESS
+
+board_targets:
+  # Existing historical selectors retained without expanding updater compatibility.
+  etee-dongle-receiver:
+    name: etee_dongle_uf2/nrf52840
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_etee_Receiver.uf2
+    firmware_aliases: [SlimeNRF_etee_Receiver.uf2, SlimeNRF_etee_Receiver_DataCollect_CDC.uf2]
+    success: ETEE RECEIVER SUCCESS
+  kawazu-tracker:
+    name: kawazu_uf2/nrf52833
+    esb_ota_kind: tracker
+    firmware: kawazu_tracker.uf2
+    firmware_aliases: [Kawazu_Tracker.uf2]
+    success: KAWAZU TRACKER SUCCESS
+  # Exact identities: Bootloader master 7f0654b898e92dd13f89c4fef108559a3d1c4b0e
+  # src/boards/<bootloader_board>/board.h; released baseline remains b43e929b / 0.11.1-slimenrf.
+  # Product sources: Tracker 69190cb3 / Receiver 674f50d2 (docs/PROTOCOLS.md#board-product-sources).
+  nRF52840-nicenano: *nicenano_conversion
+  mochi: *mochi_preset
+  nRF52840-SlimeNRFReceiver-eteeDongle:
+    name: etee_dongle_uf2/nrf52840
+    esb_ota_kind: receiver
+    bootloader_board: slimenrf_receiver_eteedongle
+    bootloader_mcu: nrf52840
+    success: ETEE RECEIVER SUCCESS
+    firmware: SlimeNRF_etee_Receiver.uf2
+    firmware_aliases: [SlimeNRF_etee_Receiver.uf2, SlimeNRF_etee_Receiver_DataCollect_CDC.uf2]
+  nRF52833-spiro-miro:
+    name: miro_uf2/nrf52833
+    esb_ota_kind: tracker
+    bootloader_board: spiro_miro
+    bootloader_mcu: nrf52833
+    firmware: Miro_Tracker.uf2
+    firmware_aliases: [Miro_Tracker.uf2]
+  nRF52840-SK-Cheesecake-P00:
+    name: sk_cheesecake_nrf_p00/nrf52840/uf2
+    esb_ota_kind: tracker
+    bootloader_board: sk_cheesecake_nrf_p00
+    bootloader_mcu: nrf52840
+    firmware: SlimeNRF_SK_Cheesecake_P00_Tracker.uf2
+    firmware_aliases: [SlimeNRF_SK_Cheesecake_P00_Tracker.uf2]
+  # Kawazu identity is master d1afd3e4 only; 0.11.1 Release has no updater.
+  Kawazu:
+    name: kawazu_uf2/nrf52833
+    esb_ota_kind: tracker
+    bootloader_board: kawazu
+    bootloader_mcu: nrf52833
+    success: KAWAZU TRACKER SUCCESS
+    firmware: kawazu_tracker.uf2
+    firmware_aliases: [Kawazu_Tracker.uf2]
+  # Released bootloader identities without a proven current application product.
+  nRF52840-SlimeNRFTracker-R3:
+    name: SlimeNRF R3 bootloader
+    bootloader_board: slimenrf_tracker_r3
+    bootloader_mcu: nrf52840
+  slimevr-mini-p1:
+    name: SlimeVR Mini P1 bootloader
+    bootloader_board: slimevr_mini_p1
+    bootloader_mcu: nrf52833
+  slimevr-mini-p2:
+    name: SlimeVR Mini P2 bootloader
+    bootloader_board: slimevr_mini_p2
+    bootloader_mcu: nrf52833
+  slimevr-smol-p3r6:
+    name: SlimeVR Smol P3R6 bootloader
+    bootloader_board: slimevr_mini_p3r6
+    bootloader_mcu: nrf52833
+  slimevr-smol-p3r7:
+    name: SlimeVR Smol P3R7 bootloader
+    bootloader_board: slimevr_mini_p3r7
+    bootloader_mcu: nrf52833
+  slimevr-receiver-p1:
+    name: SlimeVR Butterfly P1 bootloader
+    bootloader_board: slimenrf_receiver_butterfly_proto1
+    bootloader_mcu: nrf52833
+  slimevr-tracker-aerotracker-lite:
+    name: AeroTracker Lite bootloader
+    bootloader_board: slimenrf_tracker_aerotracker_lite
+    bootloader_mcu: nrf52840
+  nRF52840-SlimeNRFTracker-ProMicro:
+    bootloader_board: slimenrf_promicro
+    bootloader_mcu: nrf52840
+    success: PROMICRO SUCCESS
+    targets:
+      - name: promicro_uf2/nrf52840/spi
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_ProMicro_StackedSmol_Tracker_SPI.uf2
+        firmware_aliases: [SlimeNRF_ProMicro_StackedSmol_Tracker_SPI.uf2]
+      - name: promicro_uf2/nrf52840/i2c
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_ProMicro_StackedSmol_Tracker_I2C.uf2
+        firmware_aliases: [SlimeNRF_ProMicro_StackedSmol_Tracker_I2C.uf2]
+      - name: promicro_uf2/nrf52840/default_spi
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_ProMicro_Tracker_SPI.uf2
+        firmware_aliases: [SlimeNRF_ProMicro_Tracker_SPI.uf2]
+      - name: promicro_uf2/nrf52840/default_i2c
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_ProMicro_Tracker_I2C.uf2
+        firmware_aliases: [SlimeNRF_ProMicro_Tracker_I2C.uf2]
+      - name: promicro_uf2/nrf52840/chrysalis
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_ProMicro_Chrysalis_Tracker.uf2
+        firmware_aliases: [SlimeNRF_ProMicro_Chrysalis_Tracker.uf2]
+      - name: promicro_uf2/nrf52840/lwkj_icm45v1
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_ProMicro_StackedSmol_Tracker_LWKJ_ICM45V1.uf2
+        firmware_aliases: [SlimeNRF_ProMicro_StackedSmol_Tracker_LWKJ_ICM45V1.uf2]
+      - name: promicro_uf2/nrf52840/smspi
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_ProMicro_StackedSmol_Tracker_SMSPI.uf2
+        firmware_aliases: [SlimeNRF_ProMicro_StackedSmol_Tracker_SMSPI.uf2]
+      - name: promicro_uf2/nrf52840/601n1
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_ProMicro_StackedSmol_Tracker_601N1.uf2
+        firmware_aliases: [SlimeNRF_ProMicro_StackedSmol_Tracker_601N1.uf2]
+      - name: promicro_uf2/nrf52840
+        esb_ota_kind: receiver
+        firmware: SlimeNRF_ProMicro_Receiver.uf2
+        firmware_aliases: [SlimeNRF_ProMicro_Receiver.uf2, SlimeNRF_ProMicro_Receiver_DataCollect_CDC.uf2]
+        friendly_name: Promicro Receiver
+  nRF52840-SeeedXiao-v1:
+    name: Seeed XIAO nRF52840
+    success: XIAO NRF52840 SUCCESS
+    bootloader_board: xiao_nrf52840_ble
+    bootloader_mcu: nrf52840
+    targets:
+      - name: xiao_ble/nrf52840
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_XIAO_Tracker.uf2
+        firmware_aliases: [SlimeNRF_XIAO_Tracker.uf2]
+      - name: xiao_ble/nrf52840-receiver
+        esb_ota_kind: receiver
+        firmware: SlimeNRF_XIAO_Receiver.uf2
+        firmware_aliases: [SlimeNRF_XIAO_Receiver.uf2, SlimeNRF_XIAO_Receiver_DataCollect_CDC.uf2]
+  nRF52840-SeeedXiaoSense-v1:
+    name: xiao_ble/nrf52840/sense
+    esb_ota_kind: tracker
+    firmware: SlimeNRF_XIAO_Sense_Tracker.uf2
+    firmware_aliases: [SlimeNRF_XIAO_Sense_Tracker.uf2]
+    bootloader_board: xiao_nrf52840_ble_sense
+    bootloader_mcu: nrf52840
+    success: XIAO NRF52840 SENSE TRACKER SUCCESS
+  nordic-dongle-receiver:
+    name: nrf52840dongle/nrf52840
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_Nordic_eByte_Dongle_Receiver.hex
+    firmware_aliases: [SlimeNRF_Nordic_eByte_Dongle_Receiver.hex, SlimeNRF_Nordic_eByte_Dongle_Receiver_DataCollect_CDC.hex]
+    success: NRF52840 DONGLE RECEIVER SUCCESS
+  nekonya-receiver:
+    name: nekonya_uf2/nrf52833
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_NekoNya_Receiver.uf2
+    firmware_aliases: [SlimeNRF_NekoNya_Receiver.uf2]
+    success: NEKONYA RECEIVER SUCCESS
+  nekonya-tracker:
+    name: nekonya_tracker_uf2/nrf52833
+    esb_ota_kind: tracker
+    firmware: nekonya_tracker_uf2.uf2
+    firmware_aliases: [nekonya_tracker_uf2.uf2]
+    success: NEKONYA TRACKER SUCCESS
+  dawn-tracker-mini:
+    name: dawn_tracker_mini_uf2/nrf52833
+    esb_ota_kind: tracker
+    firmware: dawn_tracker_mini.uf2
+    firmware_aliases: [Dawn_Tracker_Mini.uf2]
+    success: DAWN TRACKER MINI SUCCESS
+  nini-mag-tracker:
+    name: nini_slimevr_mag_uf2/nrf52833
+    esb_ota_kind: tracker
+    firmware: NiNi_SlimeVR_MAG_Tracker.uf2
+    firmware_aliases: [NiNi_SlimeVR_MAG_Tracker.uf2]
+    success: NINI MAG TRACKER SUCCESS
+  slimevr-styria-mini:
+    name: styria_mini_uf2/nrf52840/spi
+    esb_ota_kind: tracker
+    bootloader_board: slimenrf_tracker_styria_mini
+    bootloader_mcu: nrf52840
+    firmware: Styria_Mini_Tracker.uf2
+    firmware_aliases: [Styria_Mini_Tracker.uf2]
+    success: STYRIA MINI SUCCESS
+  slimevr-styria-receiver-r1:
+    name: styria_r1_uf2/nrf52840
+    esb_ota_kind: receiver
+    bootloader_board: slimenrf_receiver_styria_r1
+    bootloader_mcu: nrf52840
+    firmware: SlimeNRF_Styria_R1_Receiver.uf2
+    firmware_aliases: [SlimeNRF_Styria_R1_Receiver.uf2, SlimeNRF_Styria_R1_Receiver_DataCollect_CDC.uf2]
+    success: STYRIA RECEIVER R1 SUCCESS
+  slimevr-aerorx-receiver-r1:
+    name: aerorx_r1_uf2/nrf52840
+    esb_ota_kind: receiver
+    bootloader_board: slimenrf_receiver_aerorx_r1
+    bootloader_mcu: nrf52840
+    firmware: SlimeNRF_AeroRX_R1_Receiver.uf2
+    firmware_aliases: [SlimeNRF_AeroRX_R1_Receiver.uf2, SlimeNRF_AeroRX_R1_Receiver_DataCollect_CDC.uf2]
+    success: AERORX R1 SUCCESS
+  FoxSnackLite-v2:
+    name: foxsnacklite_uf2/nrf52840
+    esb_ota_kind: tracker
+    bootloader_board: foxsnacklitev2_nrf52840
+    bootloader_mcu: nrf52840
+    firmware: FoxApplication_FoxSnackLite_Tracker.uf2
+    firmware_aliases: [FoxApplication_FoxSnackLite_Tracker.uf2]
+    success: FOXSNACK LITE V2 SUCCESS
+  # FoxSnackLiteV3 firmware / FoxSnack V3 bootloader: hardware-source-correlated,
+  # not filename-derived. Exact Board-ID comes from board.h; no released updater yet.
+  FoxSnack-v3:
+    name: foxsnacklitev3_uf2/nrf52840
+    esb_ota_kind: tracker
+    bootloader_board: foxsnackv3_nrf52840
+    bootloader_mcu: nrf52840
+    firmware: FoxApplication_FoxSnackLiteV3_Tracker.uf2
+    firmware_aliases: [FoxApplication_FoxSnackLiteV3_Tracker.uf2]
+    success: FOXSNACK V3 SUCCESS
+  FoxDobgle33-v1:
+    name: foxdongle33_uf2/nrf52833
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_FoxDongle33_Receiver.uf2
+    firmware_aliases: [SlimeNRF_FoxDongle33_Receiver.uf2, SlimeNRF_FoxDongle33_Receiver_DataCollect_CDC.uf2]
+    success: FOXDOBGLE33 V1 SUCCESS
+  # Source identity only; 0.11.1-slimenrf has no FoxDongleNEO updater.
+  FoxDongleNEO-v1:
+    name: foxdongleneo_uf2/nrf52840
+    esb_ota_kind: receiver
+    bootloader_board: foxdongleneo_nrf52840
+    bootloader_mcu: nrf52840
+    firmware: SlimeNRF_FoxDongleNEO_Receiver.uf2
+    firmware_aliases: [SlimeNRF_FoxDongleNEO_Receiver.uf2, SlimeNRF_FoxDongleNEO_Receiver_DataCollect_CDC.uf2]
+    success: FOXDONGLENEO V1 SUCCESS
+  slimevr-tracker-aerotracker:
+    name: aero_tracker_uf2/nrf52840
+    esb_ota_kind: tracker
+    bootloader_board: slimenrf_tracker_aerotracker
+    bootloader_mcu: nrf52840
+    firmware: Aero_Tracker.uf2
+    firmware_aliases: [Aero_Tracker.uf2]
+    success: AEROTRACKER SUCCESS
+  slimevr-tracker-aerotracker-pro:
+    name: aero_pro_uf2/nrf52840
+    esb_ota_kind: tracker
+    firmware: Aero_Tracker_Pro.uf2
+    firmware_aliases: [Aero_Tracker_Pro.uf2]
+    success: AERO PRO TRACKER SUCCESS
+  nRF52833-sorakage-Cheesecake-R33:
+    name: sk_cheesecake_recv33/nrf52833/uf2
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_SK_Cheesecake_RECV33_Receiver.uf2
+    firmware_aliases: [SlimeNRF_SK_Cheesecake_RECV33_Receiver.uf2, SlimeNRF_SK_Cheesecake_RECV33_Receiver_DataCollect_CDC.uf2]
+    bootloader_board: slimenrf_receiver_cheesecake_r33
+    bootloader_mcu: nrf52833
+    success: SlimeNRF SK Cheesecake Receiver R33 SUCCESS
+  nRF52840-SK-Cheesecake-P10:
+    name: sk_cheesecake_nrf_p10/nrf52840/uf2
+    esb_ota_kind: tracker
+    firmware: SlimeNRF_SK_Cheesecake_P10_Tracker.uf2
+    firmware_aliases: [SlimeNRF_SK_Cheesecake_P10_Tracker.uf2]
+    bootloader_board: sk_cheesecake_nrf_p10
+    bootloader_mcu: nrf52840
+    success: SlimeNRF SK Cheesecake P10 SUCCESS
+
+
+# Product/role inventory only: no proven UF2 Board-ID or volume-label mapping.
+# These entries do not authorize a transport; runtime OTA identity/bootloader/base
+# checks still apply. Sources: Tracker 69190cb3 / Receiver 674f50d2 (docs/PROTOCOLS.md#board-product-sources).
+application_targets:
+  estmini_uf2/nrf52840:
+    name: estmini_uf2/nrf52840
+    esb_ota_kind: tracker
+    firmware: Estmini_Tracker.uf2
+    firmware_aliases: [Estmini_Tracker.uf2]
+  paper_smol_v1_uf2/nrf52833:
+    name: paper_smol_v1_uf2/nrf52833
+    esb_ota_kind: tracker
+    firmware: paper_smol_v1_uf2.uf2
+    firmware_aliases: [paper_smol_v1_uf2.uf2]
+  nrf52840dk/nrf52840:
+    name: nrf52840dk/nrf52840
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_nRF52840dk_Receiver.hex
+    firmware_aliases: [SlimeNRF_nRF52840dk_Receiver.hex, SlimeNRF_nRF52840dk_Receiver_DataCollect_CDC.hex]
+  dawnrx_2_uf2/nrf52833:
+    name: dawnrx_2_uf2/nrf52833
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_Dawn_Tracker_Receiver_2.uf2
+    firmware_aliases: [SlimeNRF_Dawn_Tracker_Receiver_2.uf2, SlimeNRF_Dawn_Tracker_Receiver_2_DataCollect_CDC.uf2]
+  foxdongle_uf2/nrf52840:
+    name: foxdongle_uf2/nrf52840
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_FoxDongle_Receiver.uf2
+    firmware_aliases: [SlimeNRF_FoxDongle_Receiver.uf2, SlimeNRF_FoxDongle_Receiver_DataCollect_CDC.uf2]
+  foxpromicro_rfek_uf2/nrf52840:
+    name: foxpromicro_rfek_uf2/nrf52840
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_FoxProMicro_RFEK_Receiver.uf2
+    firmware_aliases: [SlimeNRF_FoxProMicro_RFEK_Receiver.uf2, SlimeNRF_FoxProMicro_RFEK_Receiver_DataCollect_CDC.uf2]
+  estenova_r1_uf2/nrf52840:
+    name: estenova_r1_uf2/nrf52840
+    esb_ota_kind: receiver
+    firmware: SlimeNRF_Estenova_Receiver.uf2
+    firmware_aliases: [SlimeNRF_Estenova_Receiver.uf2, SlimeNRF_Estenova_Receiver_DataCollect_CDC.uf2]
