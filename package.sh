@@ -22,9 +22,10 @@
                 printf '%s\n' \
                     'Usage: bash package.sh [--format elf|appimage|flatpak] [--no-firmware] [--force]' \
                     'Packages a Release Linux ELF (default), AppImage, or source-built Flatpak bundle.' \
-                    'Requires Cargo and Python 3. Native ELF/AppImage respect Cargo target/cache configuration.' \
+                    'Requires Cargo and Python 3.11+. Native ELF/AppImage respect Cargo target/cache configuration.' \
+                    'SLIMENRF_PYTHON selects one interpreter executable/path; otherwise python3 is used.' \
                     'AppImage also requires pinned linuxdeploy/appimagetool; setup diagnostics precede Cargo.' \
-                    'Flatpak needs Python 3.11+, flatpak-builder and Freedesktop 26.08 runtime/SDK.' \
+                    'Flatpak needs flatpak-builder and Freedesktop 26.08 runtime/SDK with Python 3.11+.' \
                     'Flatpak fetches the pinned official Rust toolchain and vendors locked sources, then builds offline.' \
                     'ELF uses host libraries. AppImage excludes libc/GPU drivers/services. Flatpak excludes runtimes.'
                 exit 0
@@ -41,17 +42,20 @@
         printf '%s\n' 'package.sh packages native Linux executables; use package.ps1 on Windows.' >&2
         exit 1
     fi
-    if ! command -v python3 >/dev/null 2>&1; then
-        printf '%s\n' 'Python 3 is required to select the Cargo JSON executable safely.' >&2
+    python=${SLIMENRF_PYTHON-python3}
+    if ! selected_python=$("$python" -c \
+        'import sys; sys.version_info >= (3, 11) or sys.exit("Python 3.11+ is required."); import tomllib; print(sys.executable)'); then
+        printf 'A working Python 3.11+ interpreter is required: %s\n' "$python" >&2
         exit 1
     fi
+    export SLIMENRF_PYTHON=$selected_python
     slimenrf_initialize_cargo
     if [[ $format == appimage ]]; then
-        python3 "$SLIMENRF_PROJECT_ROOT/scripts/package_appimage.py" --check-tools
+        "$SLIMENRF_PYTHON" "$SLIMENRF_PROJECT_ROOT/scripts/package_appimage.py" --check-tools
     elif [[ $format == flatpak ]]; then
         flatpak_options=(--check-tools)
         (( ! no_firmware )) || flatpak_options+=(--no-firmware)
-        python3 "$SLIMENRF_PROJECT_ROOT/scripts/package_flatpak.py" "${flatpak_options[@]}"
+        "$SLIMENRF_PYTHON" "$SLIMENRF_PROJECT_ROOT/scripts/package_flatpak.py" "${flatpak_options[@]}"
     fi
     temporary=$(mktemp -d "${TMPDIR:-/tmp}/slimenrf-package.XXXXXXXX")
     trap 'rm -rf -- "$temporary"' EXIT
@@ -61,7 +65,7 @@
         slimenrf_cargo build release "$no_firmware" --message-format=json-render-diagnostics \
             > "$temporary/artifacts.jsonl"
     fi
-    python3 "$SLIMENRF_PROJECT_ROOT/scripts/package-artifact.py" \
+    "$SLIMENRF_PYTHON" "$SLIMENRF_PROJECT_ROOT/scripts/package-artifact.py" \
         "$SLIMENRF_PROJECT_ROOT" "$temporary/metadata.json" "$temporary/artifacts.jsonl" \
         "$no_firmware" "$force" "$format"
 )

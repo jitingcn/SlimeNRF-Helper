@@ -20,7 +20,7 @@ Start on **Home** and choose **Connect your devices** to check your receiver and
 
 ## Downloads and platform limits
 
-The [Native no-firmware CI workflow](.github/workflows/ci.yml) is configured to publish Windows x64 EXE and Linux x64 AppImage packages. Its download location is **Actions → Native no-firmware CI → successful run → Artifacts**.
+Download the Windows x64 EXE or Linux x64 AppImage from [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Prereleases are marked for testing. Development builds are available under **Actions**, in the **Artifacts** section of a successful **Native no-firmware CI** run.
 
 - Normal Windows EXE filenames end in `windows-x64-no-firmware.exe`. Separate optional UPX-compressed filenames end in `windows-x64-no-firmware-upx.exe`. The normal EXE is the fallback for UPX-related security software or compatibility problems.
 - The Linux AppImage uses an Ubuntu 22.04 build baseline with glibc 2.35. It is not fully static and requires a compatible host graphics stack, fonts, desktop and device services, and USB, HID, and serial permissions.
@@ -38,10 +38,11 @@ The [user guide](docs/USER_GUIDE.md#firmware-updates) describes each update meth
 
 ## License
 
-Application-owned code and assets are available under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE), at your option. Dependencies, vendored code, third-party assets, and external firmware retain their own terms. See [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt) for retained notices and source-availability instructions.
+Application-owned code and assets are available under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE), at your option. Dependencies, vendored code, third-party assets, and external firmware retain their own terms. The application generates and embeds `THIRD_PARTY_NOTICES.txt` during compilation; the generated file is not tracked. Read the retained notices and source-availability instructions offline in **Settings > View licenses and notices**, or follow the [notice-maintenance procedure](docs/DEVELOPMENT.md#license-notices).
 
 ## Documentation
 
 - [First use](docs/USER_GUIDE.md#first-use) and [user guide](docs/USER_GUIDE.md): devices, terminals, updates, capture, and replay.
 - [Development and packaging](docs/DEVELOPMENT.md): dependencies, source builds, checks, configuration, and distribution.
 - [Architecture](docs/ARCHITECTURE.md) and [protocols and sources](docs/PROTOCOLS.md): module boundaries, formats, identity checks, and numerical limits.
+- [Changelog](CHANGELOG.md) lists notable changes by version.

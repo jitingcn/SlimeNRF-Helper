@@ -8,7 +8,6 @@
 /LICENSE-MIT text eol=lf
 /LICENSE-APACHE text eol=lf
 /scripts/notices-inputs.json text eol=lf
-/THIRD_PARTY_NOTICES.txt -text
 /crates/recording/vendor/vqf/LICENSE -text
 /crates/recording/vendor/vqf/LICENSE-SlimeVR -text
 /crates/recording/vendor/vqf/cmsis/LICENSE -text

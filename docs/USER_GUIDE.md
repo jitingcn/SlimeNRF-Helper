@@ -7,23 +7,25 @@
 <a id="installation"></a>
 ## Install and start the application
 
-1. On this repository's GitHub page, open **Actions → Native no-firmware CI**.
-2. Select a successful run.
-3. Under **Artifacts**, download the package for your platform.
+1. Open the project's [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) page.
+2. Select a version. Choose a **Pre-release** if you want a test version.
+3. Under **Assets**, download the package for your platform.
+
+For a development build, open **Actions**, select a successful **Native no-firmware CI** run, and download its **Artifacts**.
 
 On Windows, download the regular package whose filename ends in `windows-x64-no-firmware.exe`. Run the downloaded file directly. UPX is a separate, optional compressed version. If security software or compatibility problems affect the UPX version, use the regular EXE.
 
 On Linux, download the AppImage. Replace the example filename below with the actual filename. Run these commands in the directory that contains the file.
 
 ```bash
-chmod +x ./slimenrf-helper-0.1.0-linux-x64-no-firmware.AppImage
-./slimenrf-helper-0.1.0-linux-x64-no-firmware.AppImage
+chmod +x ./slimenrf-helper-0.1.1-linux-x64-no-firmware.AppImage
+./slimenrf-helper-0.1.1-linux-x64-no-firmware.AppImage
 ```
 
 If FUSE is unavailable, start the application with this command:
 
 ```bash
-./slimenrf-helper-0.1.0-linux-x64-no-firmware.AppImage --appimage-extract-and-run
+./slimenrf-helper-0.1.1-linux-x64-no-firmware.AppImage --appimage-extract-and-run
 ```
 
 The no-firmware package includes the default configuration but no firmware payloads. For updates, use local files, remote downloads, or an explicitly supplied external configuration. For Linux services, device permissions, and UF2 mount requirements, see [Linux device and runtime requirements](#linux-devices). For source builds, see [Development and packaging](DEVELOPMENT.md).
@@ -366,9 +368,11 @@ Language, light or dark appearance, theme color, and advanced features take effe
 
 Saving runs in the background. Normal application exit waits for the latest preference change to finish saving.
 
-In **Settings**, select **View licenses and notices** to read the bundled original document offline. **Copy all** copies the original embedded text without reformatting. The [notice inventory](../THIRD_PARTY_NOTICES.txt) and [license overview](../README.md#license) distinguish application-owned MIT OR Apache-2.0 code from separate third-party, firmware, native runtime, and toolchain terms.
+In **Settings**, select **View licenses and notices** to read the bundled original document offline. **Copy all** copies the original embedded text without reformatting. The document and [license overview](../README.md#license) distinguish application-owned MIT OR Apache-2.0 code from separate third-party, firmware, native runtime, and toolchain terms.
 
 Use the right scrollbar to move through the document. For long lines, use the bottom scrollbar. The viewer preserves the original line breaks.
+
+Compilation generates the embedded `THIRD_PARTY_NOTICES.txt`; Python is not needed to run the application. AppImage also carries this file under `usr/share/licenses/slimenrf-helper` inside its AppDir, and Flatpak installs it under `/app/share/licenses/slimenrf-helper`. To generate a separate copy from the tracked sources, see the [notice-maintenance procedure](DEVELOPMENT.md#license-notices).
 
 <a id="linux-devices"></a>
 ## Linux device and runtime requirements

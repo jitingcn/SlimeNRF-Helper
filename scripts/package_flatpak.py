@@ -22,7 +22,8 @@ RUNTIME_REPO = "https://dl.flathub.org/repo/flathub.flatpakrepo"
 ASSETS = Path(__file__).resolve().parent / "flatpak"
 # Explicit source inputs, not a workspace copy: never stage native caches or user data.
 SOURCE_FILES = ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "build.rs",
-                "LICENSE-MIT", "LICENSE-APACHE", "THIRD_PARTY_NOTICES.txt",
+                "LICENSE-MIT", "LICENSE-APACHE",
+                "scripts/generate_notices.py", "scripts/notices-inputs.json",
                 "crates/recording/Cargo.toml", "crates/recording/build.rs")
 SOURCE_TREES = ("src", "build_support", "locales", "examples",
                 "crates/recording/src", "crates/recording/vendor/vqf")

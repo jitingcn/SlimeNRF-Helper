@@ -1,6 +1,6 @@
 # SlimeNRF Helper: engineering boundaries
 
-Scope: this standalone repository's Rust application and internal workspace members. No parent Python repository or configuration is required. The application originated as a Python rewrite; that migration history does not authorize changes to external applications, firmware payloads or user state. [README.md](README.md) is the public overview; [docs/USER_GUIDE.md](docs/USER_GUIDE.md) owns current procedures, [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) owns engineering commands, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) owns the module map. Planning documents and historical change/acceptance records are local-only maintenance material, not required checkout inputs.
+Scope: this standalone repository's Rust application and internal workspace members. No parent Python repository or configuration is required. The application originated as a Python rewrite; that migration history does not authorize changes to external applications, firmware payloads or user state. [README.md](README.md) is the public overview; [docs/USER_GUIDE.md](docs/USER_GUIDE.md) owns current procedures, [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) owns engineering commands, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) owns the module map. The tracked bilingual changelogs and public release notes describe notable user-facing changes. Planning documents and historical change/acceptance records remain ignored local-only maintenance material, not required checkout inputs or substitutes for release notes.
 
 ## Architecture
 
@@ -27,6 +27,10 @@ Scope: this standalone repository's Rust application and internal workspace memb
 
 Use the stable compiler pinned by `rust-toolchain.toml` for native development and verification; the manifest's MSRV is a separate compatibility declaration. Do not silently change that pin or the user's global default, or require nightly formatting. The project toolchain includes `rustfmt`, `clippy`, `rust-analyzer` and `rust-src`. Flatpak stages the same pinned official compiler as a build-only SDK module; it must not silently fall back to an older SDK Rust extension.
 
+Application compilation, checks, tests, editor analysis, and packaging require build-only Python 3.11+ with `tomllib`, in both firmware modes. Core-only builds and application runtime do not. `SLIMENRF_PYTHON` optionally names one interpreter executable or path, never a shell command. See [notice maintenance](docs/DEVELOPMENT.md#license-notices) for discovery and packaging rules.
+
+Generate notices with the existing `scripts/generate_notices.py` from tracked `scripts/notices-inputs.json` and reviewed source materials. Do not track generated `THIRD_PARTY_NOTICES.txt`, duplicate the renderer or input inventory in Rust, or bypass frozen hashes and provenance checks. Root compilation writes to `OUT_DIR`; package staging uses the same renderer. Review input changes instead of blindly refreshing hashes.
+
 From this directory on Windows:
 
 ```powershell
@@ -47,7 +51,7 @@ bash quality.sh --format-only
 bash build.sh fmt            # explicitly apply stable formatting
 bash build.sh --debug        # native executable for smoke verification
 bash build.sh run            # development build and launch
-bash package.sh --no-firmware # Release ELF; requires Python 3
+bash package.sh --no-firmware # Release ELF; requires Python 3.11+
 bash package.sh --format appimage
 bash package.sh --format flatpak --no-firmware # source-built SDK bundle; prerequisites in docs/DEVELOPMENT.md
 ```
@@ -64,10 +68,17 @@ bash package.sh --format flatpak --no-firmware # source-built SDK bundle; prereq
 
 - Use rust-analyzer references before changing public interfaces, and semantic rename/code actions where applicable. If unavailable, state the limitation and inspect every consumer; compilation is not a substitute for understanding ownership.
 - Editor settings are project-scoped. Keep rust-analyzer on normal `check`; strict Clippy belongs in the explicit quality gate. Reuse the normal target cache rather than creating a second multi-GB LSP cache. Do not overwrite global editor settings or another tool's Git hooks.
-- The optional pre-commit hook is a non-mutating formatting check, not a substitute for the quality gate or native smoke. Installation is opt-in and requires the Git repository root to be this application root; reject a parent repository rather than modifying its hooks. Never auto-stage, auto-commit, auto-push or auto-publish.
+- The optional pre-commit hook is a non-mutating formatting check, not a substitute for the quality gate or native smoke. Installation is opt-in and requires the Git repository root to be this application root; reject a parent repository rather than modifying its hooks. Never auto-stage, auto-commit, auto-push or auto-publish without explicit user instructions authorizing those actions. A release instruction authorizes only its stated commits, pushes, tags and publication.
 - Preserve full and no-firmware packaging, resource identity and relative-path semantics. Linux ELF/AppImage are not universal static bundles: retain libc, GPU/desktop/device-service compatibility boundaries. AppImage tools must be version/checksum pinned; never execute mutable downloads. Flatpak must compile vendored locked source offline inside its declared SDK, not wrap a host ELF; document its broad hardware/filesystem grants and separately installed runtime. Do not bypass UF2 identity checks for a sandbox.
 - Relative `CARGO_TARGET_DIR` is resolved from the application directory; share the normal native cache with the editor, but never share Windows/Linux/Flatpak-SDK compiled artifacts. Flatpak's separate ABI cache is intentional, not an LSP cache. Do not edit generated `target/`, `dist/`, firmware payloads, vendor numerical sources or runtime recordings as incidental cleanup. Do not run `clean` as routine verification.
 - Dependency additions must justify runtime value, compile cost, platform support and license impact. Do not change profiles, lockfile versions or algorithm parameters as incidental refactoring.
 - Update the relevant existing documentation when changing commands or ownership. Link to authoritative configuration instead of duplicating its values. Never report a partial smoke run as physical-device or cross-platform validation.
 - Keep local logs, recordings, credentials and machine-specific configuration in ignored `.local/` storage; never commit real USB serials/RF addresses, tokens or private keys. Share semantic device labels or synthetic fixtures instead. `.local/` and `slimenrf-helper.local.yaml` are not automatically loaded: explicitly select a local YAML with `SLIMENRF_CONFIG_PATH`. Keep distributable YAML paths relative; pass private absolute firmware inputs with `SLIMENRF_FIRMWARE_ROOT` rather than writing them into embedded configuration. Preserve platform user preferences; do not relocate or overwrite them for publication cleanup.
 - Default builds retain `embed-firmware` and the local development convention `firmware_root: ../firmwares`. A standalone checkout without payloads must explicitly use `-NoFirmware` / `--no-firmware` (or Cargo `--no-default-features`); full builds require the intended firmware inputs and separate license review.
+
+## Changelogs and release notes
+
+- Update [CHANGELOG.md](CHANGELOG.md) and [CHANGELOG.zh-CN.md](CHANGELOG.zh-CN.md) in the same change for notable user-facing behavior. Keep both languages equivalent and describe the effect on users, not the conversation or commit log.
+- Follow [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) and its [Chinese guidance](https://keepachangelog.com/zh-CN/1.1.0/). Keep reciprocal language links below the title and newest versions first. Keep a linked `Unreleased` section at the top, translated as `未发布` in Chinese. Include only nonempty `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, and `Security` categories, with translated headings in Chinese.
+- Keep changes under `Unreleased` until release preparation. Then move the entries into the version section and keep the version, tag, release notes, and both changelogs consistent. Verify the UTC release date from the system clock and use `YYYY-MM-DD`. Update the date if publication crosses that date.
+- Base public release notes on the matching changelog entry. Do not invent releases, dates, validation results or unmeasured performance claims. Do not include private device data, local acceptance logs or credentials.

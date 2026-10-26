@@ -25,7 +25,7 @@ from urllib.parse import unquote, urlsplit
 
 MAX_TEXT_BYTES = 8 * 1024 * 1024
 MAINTAINED = (
-    "README.md", "docs/USER_GUIDE.md", "docs/DEVELOPMENT.md",
+    "README.md", "CHANGELOG.md", "docs/USER_GUIDE.md", "docs/DEVELOPMENT.md",
     "docs/ARCHITECTURE.md", "docs/PROTOCOLS.md",
 )
 FORBIDDEN_PARTS = frozenset({

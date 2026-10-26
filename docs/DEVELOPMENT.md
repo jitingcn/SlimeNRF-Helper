@@ -12,6 +12,10 @@ When commands, behavior, or links change, update both the default English docume
 
 For native development, use the stable Rust toolchain pinned in [rust-toolchain.toml](../rust-toolchain.toml), including rustfmt, Clippy, rust-analyzer, and rust-src. rustup selects this toolchain automatically in this directory. Do not change your global default. The manifest's MSRV declares a compatibility floor, not a verified minimum version. [Cargo.lock](../Cargo.lock) fixes dependency versions. The GUI uses the official Fast feature through exports from the same `gpui_kit` source.
 
+Application builds require Python 3.11+ with standard-library `tomllib` to generate license notices. This build-only prerequisite applies to scripts, direct Cargo, tests, checks, and editor analysis in both full and no-firmware modes. Running the packaged application and building only `slimenrf-recording` do not require Python.
+
+Optionally set `SLIMENRF_PYTHON` to one interpreter executable name or path, not a shell command with arguments. An invalid explicit selection fails without fallback. Without it, the application build probes `py -3` on Windows, then `python3` and `python`, and checks the version and `tomllib` import before use. Make the interpreter available in the editor's environment too.
+
 CLI builds keep the default `embed-firmware` feature enabled. If a standalone checkout has no firmware payloads, explicitly add `-NoFirmware` or `--no-firmware` to every CLI build, run, check, and packaging command. For direct Cargo commands, use `--no-default-features`. Full builds require the intended firmware inputs. A no-firmware package does not satisfy full-package acceptance.
 
 The scripts support build, run, test, check, clippy, fmt, and clean. Build defaults to Release. Run, test, check, and clippy default to the development profile. Explicit Debug and Release options are mutually exclusive. By default, build and run select the desktop application, test, check, and clippy cover the workspace, and fmt covers every member. Explicit Cargo package selection takes precedence. Development and release optimizations are separate. Packaging uses the actual Release artifact, never a development build.
@@ -50,7 +54,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --all-targets --locked
 ```
 
-For no-firmware mode, add `--no-default-features` to the last two commands. To check only the core, use `cargo test --locked -p slimenrf-recording`. The core still needs a C compiler, but not GPUI, hardware interfaces, application YAML, or firmware. External updater fixtures and the full firmware oracle are separate checks that require real additional inputs. Do not count ignored tests as passed.
+For no-firmware mode, add `--no-default-features` to the last two commands. To check only the core, use `cargo test --locked -p slimenrf-recording`. The core still needs a C compiler, but not Python, GPUI, hardware interfaces, application YAML, or firmware. External updater fixtures and the full firmware oracle are separate checks that require real additional inputs. Do not count ignored tests as passed.
 
 Before creating a `Workbench` GUI fixture, acquire one `ui::test_support::UiTestSession` at the outer test scope. Reuse that session for all fixtures in the same `TestAppContext`. Keep it alive through callbacks and assertions to isolate the process-wide locale.
 
@@ -116,14 +120,14 @@ Exit code `0` means no findings, `1` means findings need review, and `2` means i
 <a id="license-notices"></a>
 ## Maintain license notices
 
-Install Python 3.11+ for [generate_notices.py](../scripts/generate_notices.py), which uses standard-library `tomllib`. Check the committed document and run its tests:
+[generate_notices.py](../scripts/generate_notices.py) uses Python 3.11+ and standard-library `tomllib`. Validate the tracked inputs and rendering without reading or writing a generated document, then run its tests:
 
 ```bash
 python3 scripts/generate_notices.py --check
 python3 -B -m unittest discover -s scripts -p 'test_generate_notices.py'
 ```
 
-[scripts/notices-inputs.json](../scripts/notices-inputs.json) freezes portable, reviewed package metadata, target graphs, original notice bytes, source origins, and SHA-256 hashes. The generator checks input hashes, locked package checksums, and package coverage against those frozen graphs. It renders [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt) deterministically offline, without Cargo, a registry cache, or a network. It does not discover dependencies or collect license texts.
+[scripts/notices-inputs.json](../scripts/notices-inputs.json) freezes portable, reviewed package metadata, target graphs, original notice bytes, source origins, and SHA-256 hashes. These inputs, their provenance, and repository license sources remain tracked. The generator checks input hashes, locked package checksums, and package coverage against those frozen graphs. It renders `THIRD_PARTY_NOTICES.txt` deterministically offline, without Cargo, a registry cache, or a network. It does not discover dependencies or collect license texts.
 
 When Cargo inputs, vendored sources, or license materials change:
 
@@ -135,13 +139,16 @@ When Cargo inputs, vendored sources, or license materials change:
    ```
 
 2. Review each added or changed package and source. Update the frozen graphs, package and material entries, source-availability instructions, and input hashes as needed. Preserve existing original source bytes. Add reviewed exact license and NOTICE bytes with their origins, encoding, byte length, and hashes in the input schema. Do not fix a stale-input error by blindly replacing hashes.
-3. Render the document, review its diff, then repeat `--check` and the generator tests:
+3. Generate a local review copy outside the public source inventory. Review its changes, then repeat `--check` and the generator tests:
 
    ```bash
-   python3 scripts/generate_notices.py
+   python3 scripts/generate_notices.py --output .local/THIRD_PARTY_NOTICES.txt
+   python3 scripts/generate_notices.py --check --output .local/THIRD_PARTY_NOTICES.txt
    ```
 
-Both full and no-firmware application builds embed the same notices. AppImage installs `LICENSE-MIT`, `LICENSE-APACHE`, and `THIRD_PARTY_NOTICES.txt` under `usr/share/licenses/slimenrf-helper` inside the AppDir. Flatpak installs the same files under `/app/share/licenses/slimenrf-helper`.
+Writing requires an explicit `--output` path. `--check` alone validates inputs and rendering without an output file. With `--output`, it compares the explicit artifact byte-for-byte and never rewrites it.
+
+The root application build script invokes this same renderer for both full and no-firmware builds, writes to `OUT_DIR/THIRD_PARTY_NOTICES.txt`, and embeds those bytes. Cargo tracks the generator, frozen inputs, and repository-origin files. Generated notices are untracked; do not commit a root copy or duplicate the renderer in Rust. AppImage and Flatpak packaging use the same renderer for their installed copies. AppImage installs `LICENSE-MIT`, `LICENSE-APACHE`, and `THIRD_PARTY_NOTICES.txt` under `usr/share/licenses/slimenrf-helper` inside the AppDir. Flatpak installs the same files under `/app/share/licenses/slimenrf-helper`.
 
 Keep MPL-2.0 covered source available separately as the notice document instructs. Retain the exact checksum-verified source archives with each release or provide an equivalent stable location. If covered files change, provide the actual modified source and update the instructions. Notice generation does not clear redistribution rights for firmware or the native libraries, DLLs, runtimes, and toolchain materials in final artifacts. Review those for each release.
 
@@ -152,7 +159,7 @@ Keep MPL-2.0 covered source available separately as the notice document instruct
 Create the regular package first. Then use its actual versioned filename to create a separate compressed package:
 
 ```powershell
-./scripts/package-upx.ps1 -InputPath ./dist/slimenrf-helper-0.1.0-windows-x64-no-firmware.exe
+./scripts/package-upx.ps1 -InputPath ./dist/slimenrf-helper-0.1.1-windows-x64-no-firmware.exe
 ```
 
 The [script](../scripts/package-upx.ps1) pins the tool version and hash. It creates a separate `-upx.exe` without changing the input. Compression can add startup overhead or antivirus false positives. Prefer the regular package for compatibility problems. Compression changes EXE bytes and invalidates any existing Authenticode signature. If you sign, sign after final compression and repeat acceptance checks. CI does not sign packages.
@@ -165,6 +172,8 @@ Both scripts use the [shared atomic publisher](../scripts/publish-file.ps1). An 
 ## Linux
 
 Install C and C++, Clang and libclang, CMake, pkg-config, udev, D-Bus, xkbcommon with X11 support, Wayland, X11 and XCB, fontconfig, and FreeType. Use the local rustup toolchain. Do not inject the Windows target or CRT settings.
+
+Ensure that the selected Python is 3.11+ before building. The distribution's `python3` package alone may be older, including on Ubuntu 22.04. Install a supported interpreter separately when needed and select it with `SLIMENRF_PYTHON`.
 
 ```bash
 # Arch
@@ -187,7 +196,7 @@ bash ./package.sh --no-firmware
 
 The [workflow](../.github/workflows/ci.yml) is the authoritative full CI dependency list. See the upstream [GPUI Kit installation instructions](https://gpui-kit.com/docs/installation). Runtime needs a real X11 or Wayland session, Vulkan GPU drivers and an ICD, user D-Bus, and fonts. You can install DejaVu, Noto, and CJK fonts. File choosers need `xdg-desktop-portal` and the corresponding desktop backend. A minimal session can use the gtk backend. BLE needs BlueZ and an adapter. See the [user guide](USER_GUIDE.md#linux-devices) for device permissions, real UF2 mounts, and WSL boundaries.
 
-Pass extra Cargo arguments with `--cargo-arguments`, for example `bash ./build.sh test --cargo-arguments -p slimenrf-recording`. `package.sh` defaults to ELF. ELF and AppImage packaging need the Python 3 standard library. Packaging selects the actual Release application ELF from Cargo JSON and names it by version and ELF architecture, with a suffix for no-firmware builds. Same-name conflicts require an explicit `--force`. An ELF is not a universal static package. Build on the oldest glibc baseline you plan to support, then validate on target distributions.
+Pass extra Cargo arguments with `--cargo-arguments`, for example `bash ./build.sh test --cargo-arguments -p slimenrf-recording`. `package.sh` defaults to ELF. It selects `SLIMENRF_PYTHON` or `python3`, checks Python 3.11+ and `tomllib`, and exports the selected executable so Cargo and packaging agree. Python package helpers invoke the notice generator with `sys.executable`. Packaging selects the actual Release application ELF from Cargo JSON and names it by version and ELF architecture, with a suffix for no-firmware builds. Same-name conflicts require an explicit `--force`. An ELF is not a universal static package. Build on the oldest glibc baseline you plan to support, then validate on target distributions.
 
 The native cache defaults to target. Relative `CARGO_TARGET_DIR` paths resolve from the application root. An explicit `--target-dir` takes precedence. Do not share compiled caches between Windows, Linux, and the SDK. Under WSL, you can keep a single Linux cache at `$HOME/.cache/slimenrf-helper/target` and share it between the editor and scripts.
 
@@ -211,17 +220,19 @@ Both downloaded tools and the generated application support `--appimage-extract-
 <a id="flatpak"></a>
 ### Flatpak
 
-Flatpak is an optional local source-built package, not a wrapper around a host ELF. Install flatpak, flatpak-builder, and Python 3.11+. For full packages, resolving the firmware root from YAML needs python-yaml or python3-yaml. Explicit `SLIMENRF_FIRMWARE_ROOT` avoids this Python dependency.
+Flatpak is an optional local source-built package, not a wrapper around a host ELF. Install flatpak, flatpak-builder, and host Python 3.11+. For full packages, resolving the firmware root from YAML needs python-yaml or python3-yaml in that interpreter. Explicit `SLIMENRF_FIRMWARE_ROOT` avoids this additional Python dependency.
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08
 bash ./package.sh --format flatpak --no-firmware
-flatpak install --user ./dist/slimenrf-helper-0.1.0-linux-x86_64-no-firmware.flatpak
+flatpak install --user ./dist/slimenrf-helper-0.1.1-linux-x86_64-no-firmware.flatpak
 flatpak run io.github.jitingcn.SlimeNRFHelper
 ```
 
 The [build entry point](../scripts/package_flatpak.py) uses the same Rust pin and official release manifests to generate SHA-verified build-only rustc, cargo, and std modules. It compiles with `--offline --locked` inside the SDK without network access. A missing version or architecture fails instead of falling back to the SDK compiler. The toolchain is removed before export. Full and no-firmware packages use the same application ID, so installing one replaces the other.
+
+The SDK build uses its own `python3` with Python 3.11+ and `tomllib`, not the host's `SLIMENRF_PYTHON` path. It generates embedded and installed notices from the staged, tracked inputs without network access. Python is a build tool, not an application runtime dependency.
 
 This is a broad-permission compatibility package, not a strict sandbox. To support hidraw, tty, BLE, and arbitrary native UF2 mounts, it grants access to devices, host files, read-only udev, the specified BlueZ bus access, networking, and graphics. Host ACLs and block-device identity checks still apply. Validate special paths and hot-plug propagation on target machines. Do not weaken UF2 checks. The bundle excludes the runtime. First installation may download it, so this is not an offline single-file distribution. The project has not applied for Flathub listing. Refer to the official [permissions](https://docs.flatpak.org/en/latest/sandbox-permissions.html) and [bundle limitations](https://docs.flatpak.org/en/latest/single-file-bundles.html).
 
@@ -229,7 +240,32 @@ The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatp
 
 ## CI and release acceptance
 
-[Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. Its `ubuntu-24.04` source job runs both Python unittest commands, the [public checker](#public-preflight), and the [notice check](#license-notices) above. Only after that job passes do the existing `windows-2022` and `ubuntu-22.04` x64 jobs run independently. The native jobs follow the toolchain pin and build no-firmware Release artifacts after the quality entry points pass. Windows uploads the regular package first and handles UPX separately. Linux generates an AppImage. There is no added Flatpak CI job. Single-file artifacts use the Cargo version in their names and have a 14-day retention period, subject to repository policy. The workflow does not upload all of dist or caches. Repository permissions are read-only. It does not create Releases, push, or require extra secrets.
+[Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. The `ubuntu-24.04` source job checks publication boundaries, frozen notice inputs, and release-note preparation. It also runs their Python tests. After it passes, the `windows-2022` and `ubuntu-22.04` x64 jobs run independently. Both run the maintained quality entry points before packaging.
+
+Windows uploads separate normal and maximum-compression UPX executables. Linux uploads an AppImage. All three omit firmware, use the Cargo version in their filenames, and remain available as Actions artifacts for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets.
+
+A `v<version>` tag push also runs the prerelease job after all three prerequisite jobs succeed. The tag must match the root application's Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md). Release notes use that entry and link to the Chinese changelog at the same commit.
+
+The publisher downloads the exact artifacts from that run without rebuilding them. It checks the remote tag's commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files with overwrites disabled. The final step verifies all three uploaded names and sizes before publishing a prerelease that is not marked latest. A failed upload or verification can leave a draft. Review that draft manually before retrying. The workflow does not overwrite or delete it.
+
+Repository permissions remain read-only except for `contents: write` on the prerelease job. Publication uses the workflow token and needs no additional secret. The workflow never pushes commits or tags.
+
+### Publish a prerelease
+
+1. Update the workspace version, lockfile, frozen notice input hashes, and both changelogs. Use the UTC publication date.
+2. Run the quality and packaging checks for the release changes.
+3. Commit the release changes on `main`.
+4. Create an annotated tag that matches the Cargo version.
+5. Push `main` and the tag together.
+
+For version `0.1.1`, the final commands are:
+
+```bash
+	git tag -a v0.1.1 -m "SlimeNRF Helper 0.1.1"
+	git push --atomic origin main v0.1.1
+```
+
+Wait for the tag's workflow to finish. Check the prerelease notes and all three downloads on [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Do not move a published tag or replace its assets.
 
 Successful CI confirms only the configured checks and uploaded artifacts. Local builds, WSLg rendering, native GUI behavior, USB permissions, and real device updates are separate evidence. Target distributions, macOS, signing, performance, and physical hardware still require independent acceptance. The application-owned MIT OR Apache-2.0 license does not replace the separate third-party, source-availability, firmware, and artifact reviews described [above](#license-notices). Successful packaging does not resolve them.
 

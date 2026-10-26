@@ -12,6 +12,10 @@
 
 原生开发使用 [rust-toolchain.toml](../rust-toolchain.toml) 固定的 stable Rust（含 rustfmt、Clippy、rust-analyzer、rust-src），rustup 在本目录自动选择，不需改变全局默认。清单 MSRV 是兼容下限声明，不代表当前已验证最低版本。依赖版本以 [Cargo.lock](../Cargo.lock) 为准，GUI 通过同源 `gpui_kit` 导出使用官方 Fast feature。
 
+应用构建需要 Python 3.11+ 及标准库 `tomllib`，用于生成版权材料。这是仅构建时需要的工具，适用于完整和无固件模式下的脚本、直接 Cargo、测试、检查与编辑器分析。运行打包后的应用或只构建 `slimenrf-recording` 不需要 Python。
+
+可选的 `SLIMENRF_PYTHON` 只接受一个解释器可执行文件名或路径，不接受带参数的 shell 命令。显式选择无效时直接失败，不回退。未设置时，应用构建在 Windows 上先探测 `py -3`，再探测 `python3` 和 `python`，使用前检查版本及 `tomllib` 导入。编辑器环境也必须能使用该解释器。
+
 CLI 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷时，所有 CLI 构建、运行、检查、打包命令明确加 `-NoFirmware` 或 `--no-firmware`，直接 Cargo 用 `--no-default-features`。完整构建必须提供预期固件，不能用无固件包代替完整包验收。
 
 脚本支持 build/run/test/check/clippy/fmt/clean：build 默认 Release，run/test/check/clippy 默认开发配置；显式 Debug/Release 互斥。默认 build/run 选择桌面应用，test/check/clippy 覆盖 workspace，fmt 覆盖全部成员；显式 Cargo 包选择优先。开发与发布优化分离，package 只取实际 Release 产物，不用开发版替代。
@@ -50,7 +54,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --all-targets --locked
 ```
 
-无固件模式为后两条添加 `--no-default-features`。只查内核可用 `cargo test --locked -p slimenrf-recording`，仍需 C 编译器，但不需 GPUI、硬件接口、应用 YAML 或固件。外部 updater fixture 与完整固件 oracle 为有真实额外输入的独立检查，不把 ignored 当通过。
+无固件模式为后两条添加 `--no-default-features`。只查内核可用 `cargo test --locked -p slimenrf-recording`，仍需 C 编译器，但不需 Python、GPUI、硬件接口、应用 YAML 或固件。外部 updater fixture 与完整固件 oracle 为有真实额外输入的独立检查，不把 ignored 当通过。
 
 创建 `Workbench` GUI 测试 fixture 前，在测试函数的最外层创建一个 `ui::test_support::UiTestSession`。同一 `TestAppContext` 的所有 fixture 共用这个会话。让会话保持到回调和断言结束，以隔离进程级语言状态。
 
@@ -116,14 +120,14 @@ python3 -B -m unittest discover -s scripts -p 'test_check_public.py'
 <a id="license-notices"></a>
 ## 维护版权材料
 
-[generate_notices.py](../scripts/generate_notices.py)使用标准库 `tomllib`，需要 Python 3.11+。检查已提交文档并运行其测试：
+[generate_notices.py](../scripts/generate_notices.py)使用 Python 3.11+ 及标准库 `tomllib`。先校验已跟踪输入与文本生成，不读取或写入生成文档，再运行其测试：
 
 ```bash
 python3 scripts/generate_notices.py --check
 python3 -B -m unittest discover -s scripts -p 'test_generate_notices.py'
 ```
 
-[scripts/notices-inputs.json](../scripts/notices-inputs.json)冻结经审查的可移植包元数据、目标依赖图、原始版权文本字节、来源和 SHA-256 哈希。生成器核对输入哈希、锁定包校验和，以及包条目对冻结依赖图的覆盖情况。它离线确定性生成 [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt)，不需要 Cargo、registry 缓存或网络，也不会发现依赖或收集许可证文本。
+[scripts/notices-inputs.json](../scripts/notices-inputs.json)冻结经审查的可移植包元数据、目标依赖图、原始版权文本字节、来源和 SHA-256 哈希。这些输入、来源记录和仓库许可证源文件仍纳入版本控制。生成器核对输入哈希、锁定包校验和，以及包条目对冻结依赖图的覆盖情况。它离线确定性生成 `THIRD_PARTY_NOTICES.txt`，不需要 Cargo、registry 缓存或网络，也不会发现依赖或收集许可证文本。
 
 Cargo 输入、vendor 源码或许可材料变更时：
 
@@ -135,13 +139,16 @@ Cargo 输入、vendor 源码或许可材料变更时：
    ```
 
 2. 审查每个新增或变更的包及来源。按需更新冻结依赖图、包与其他材料条目、源码获取说明和输入哈希。保留已有原始来源字节，在输入结构中添加经审查的精确许可证与 NOTICE 字节及其来源、编码、字节长度和哈希。不要只替换哈希来消除输入过期错误。
-3. 生成文档并审查差异，再次运行 `--check` 和生成器测试：
+3. 在公开源码清单之外生成本地审查副本。审查变化后，再次运行 `--check` 和生成器测试：
 
    ```bash
-   python3 scripts/generate_notices.py
+   python3 scripts/generate_notices.py --output .local/THIRD_PARTY_NOTICES.txt
+   python3 scripts/generate_notices.py --check --output .local/THIRD_PARTY_NOTICES.txt
    ```
 
-完整和无固件应用构建嵌入同一份版权材料。AppImage 将 `LICENSE-MIT`、`LICENSE-APACHE` 和 `THIRD_PARTY_NOTICES.txt` 安装到 AppDir 内的 `usr/share/licenses/slimenrf-helper`，Flatpak 将同样文件安装到 `/app/share/licenses/slimenrf-helper`。
+写入必须显式指定 `--output` 路径。单独使用 `--check` 只校验输入与文本生成，不需要输出文件。加上 `--output` 时，它逐字节比较指定产物，绝不重写文件。
+
+根应用构建脚本在完整和无固件模式下调用同一个生成器，写入 `OUT_DIR/THIRD_PARTY_NOTICES.txt` 并嵌入这些字节。Cargo 跟踪生成器、冻结输入及仓库来源文件。生成文档不纳入版本控制，不要提交根目录副本或在 Rust 中重复实现生成器。AppImage 和 Flatpak 打包用同一个生成器产生安装副本。AppImage 将 `LICENSE-MIT`、`LICENSE-APACHE` 和 `THIRD_PARTY_NOTICES.txt` 安装到 AppDir 内的 `usr/share/licenses/slimenrf-helper`，Flatpak 将同样文件安装到 `/app/share/licenses/slimenrf-helper`。
 
 按版权文档说明，另行保证 MPL-2.0 覆盖源码可获取。每次发布保留校验和一致的精确源码归档，或提供等效的稳定位置。修改覆盖文件后，提供实际修改的源码并更新说明。生成版权文档不代表取得固件或最终产物所含原生库、DLL、运行时和工具链材料的再分发权，每次发布仍需审查。
 
@@ -152,7 +159,7 @@ Cargo 输入、vendor 源码或许可材料变更时：
 先生成普通包，再按实际版本文件名生成独立压缩包：
 
 ```powershell
-./scripts/package-upx.ps1 -InputPath ./dist/slimenrf-helper-0.1.0-windows-x64-no-firmware.exe
+./scripts/package-upx.ps1 -InputPath ./dist/slimenrf-helper-0.1.1-windows-x64-no-firmware.exe
 ```
 
 工具版本与哈希由[脚本](../scripts/package-upx.ps1)固定；输出独立 `-upx.exe`，不修改输入。压缩可能增加启动开销或安全软件误报，兼容性问题优先普通包。压缩改变 EXE 字节，已有 Authenticode 签名失效，若签名应在最终压缩后进行并重新验收。CI 不签名。
@@ -165,6 +172,8 @@ Cargo 输入、vendor 源码或许可材料变更时：
 ## Linux
 
 需要 C/C++、Clang/libclang、CMake、pkg-config、udev、D-Bus、xkbcommon/X11、Wayland、X11/XCB、fontconfig/FreeType；Rust 用本机 rustup 工具链，不注入 Windows target/CRT。
+
+构建前确保选定的 Python 为 3.11+。发行版的 `python3` 包可能更旧，例如 Ubuntu 22.04。需要时另行安装受支持的解释器，并用 `SLIMENRF_PYTHON` 选择。
 
 ```bash
 # Arch
@@ -187,7 +196,7 @@ bash ./package.sh --no-firmware
 
 完整 CI 依赖清单以 [workflow](../.github/workflows/ci.yml) 为准，上游参考见 [GPUI Kit 安装说明](https://gpui-kit.com/docs/installation)。运行需实际 X11/Wayland、Vulkan GPU 驱动/ICD、用户 D-Bus 与字体；可安装 DejaVu/Noto/CJK 字体。文件选择器需 `xdg-desktop-portal` 和对应桌面 backend（精简会话可用 gtk backend）；BLE 需 BlueZ/适配器。设备权限、真实 UF2 挂载与 WSL 边界见[用户指南](USER_GUIDE.zh-CN.md#linux-devices)。
 
-附加 Cargo 参数用 `--cargo-arguments`，例如 `bash ./build.sh test --cargo-arguments -p slimenrf-recording`。`package.sh` 默认 ELF，ELF/AppImage 需 Python 3 标准库；根据 Cargo JSON 选择实际 Release 应用 ELF，按版本/ELF 架构命名，无固件加后缀。同名冲突须明确 `--force`。ELF 并非静态通用包，应在计划支持的最旧 glibc 基线构建，再到目标发行版验收。
+附加 Cargo 参数用 `--cargo-arguments`，例如 `bash ./build.sh test --cargo-arguments -p slimenrf-recording`。`package.sh` 默认 ELF。它选择 `SLIMENRF_PYTHON` 或 `python3`，检查 Python 3.11+ 及 `tomllib`，并导出选定的可执行文件，让 Cargo 与打包使用同一解释器。Python 打包工具通过 `sys.executable` 调用版权材料生成器。打包根据 Cargo JSON 选择实际 Release 应用 ELF，按版本与 ELF 架构命名，无固件加后缀。同名冲突须明确 `--force`。ELF 并非静态通用包，应在计划支持的最旧 glibc 基线构建，再到目标发行版验收。
 
 原生缓存默认 target；`CARGO_TARGET_DIR` 相对应用根，显式 `--target-dir` 优先。不要混用 Windows/Linux/SDK 编译缓存；WSL 可将唯一 Linux 缓存放在 `$HOME/.cache/slimenrf-helper/target`，编辑器与脚本共用。
 
@@ -211,17 +220,19 @@ bash ./package.sh --format appimage --no-firmware
 <a id="flatpak"></a>
 ### Flatpak
 
-可选本地源码包，不是 host ELF 包装。需要 flatpak、flatpak-builder、Python 3.11+；完整包从 YAML 解析固件根目录需 python-yaml/python3-yaml，显式 `SLIMENRF_FIRMWARE_ROOT` 可省该 Python 依赖。
+Flatpak 是可选的本地源码包，不是 host ELF 包装。需要 flatpak、flatpak-builder 和宿主 Python 3.11+。完整包从 YAML 解析固件根目录还需在该解释器中安装 python-yaml 或 python3-yaml，显式 `SLIMENRF_FIRMWARE_ROOT` 可省去这一额外 Python 依赖。
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user flathub org.freedesktop.Platform//26.08 org.freedesktop.Sdk//26.08
 bash ./package.sh --format flatpak --no-firmware
-flatpak install --user ./dist/slimenrf-helper-0.1.0-linux-x86_64-no-firmware.flatpak
+flatpak install --user ./dist/slimenrf-helper-0.1.1-linux-x86_64-no-firmware.flatpak
 flatpak run io.github.jitingcn.SlimeNRFHelper
 ```
 
 [构建入口](../scripts/package_flatpak.py) 从同一 Rust pin 及官方发行清单产生 SHA 校验的构建专用 rustc/cargo/std 模块，在禁网 SDK 中 `--offline --locked` 编译，版本或架构缺失直接失败，不回退 SDK 编译器；导出前清理工具链。完整和无固件包使用同一应用 ID，安装相互替换。
+
+SDK 构建使用 SDK 自己的 `python3`，要求 Python 3.11+ 及 `tomllib`，不使用宿主的 `SLIMENRF_PYTHON` 路径。它从暂存的已跟踪输入离线生成内嵌及安装文档。Python 仅用于构建，不是应用运行依赖。
 
 这是宽权限兼容包，不是严格沙箱。为 hidraw/tty/BLE/任意原生 UF2 挂载授予设备、host 文件、只读 udev、BlueZ 指定总线、网络及图形权限，仍受宿主 ACL 和块设备身份检查约束。特殊路径和热插拔传播需目标机验收，不能弱化 UF2 检查。bundle 不含运行时，首次安装可能下载，不是离线单文件；当前未申请 Flathub 上架。[权限](https://docs.flatpak.org/en/latest/sandbox-permissions.html)与 [bundle 限制](https://docs.flatpak.org/en/latest/single-file-bundles.html)以官方文档为准。
 
@@ -229,7 +240,32 @@ SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架�
 
 ## CI 与发布门槛
 
-[Native no-firmware CI](../.github/workflows/ci.yml) 在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行上述两条 Python unittest 命令、[公开检查器](#public-preflight)和[版权材料检查](#license-notices)。源码作业通过后，现有 `windows-2022` 与 `ubuntu-22.04` x64 作业才各自运行。原生作业跟随工具链 pin，质量入口通过后构建无固件 Release。Windows 普通包先上传，UPX 独立处理；Linux 生成 AppImage，不新增 Flatpak CI。单文件 artifact 按 Cargo 版本命名，保留 14 天（受仓库策略限制），不上传整个 dist 或缓存。只读仓库权限，不创建 Release、不推送或要求额外 secrets。
+[Native no-firmware CI](../.github/workflows/ci.yml) 在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业检查公开边界、冻结的版权输入和发布说明生成，并运行对应的 Python 测试。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。两者都先运行维护的质量入口，再打包。
+
+Windows 分别上传普通 EXE 和最高压缩率的 UPX EXE。Linux 上传 AppImage。三个文件均不含固件，文件名包含 Cargo 版本，并作为 Actions artifact 保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。
+
+推送 `v<版本号>` 标签后，还会在三个前置作业全部成功后运行预发布作业。标签必须匹配主应用的 Cargo 版本和英文 `CHANGELOG.md` 中带日期的版本条目。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
+
+发布作业下载本次运行的准确产物，不重新编译。它检查远程标签对应的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，禁止覆盖附件。最后一步核对三个附件的名称和大小，再公开预发布版本，不将其标记为 latest。上传或验证失败可能留下草稿。重试前先人工检查该草稿。工作流不会覆盖或删除它。
+
+仓库权限保持只读，仅预发布作业拥有 `contents: write`。发布使用工作流令牌，不需要额外 secret。工作流不推送提交或标签。
+
+### 发布预发布版本
+
+1. 更新 workspace 版本、锁文件、冻结版权输入的哈希和两份更改日志。使用 UTC 发布日期。
+2. 运行本次发布变更所需的质量与打包检查。
+3. 在 `main` 提交发布变更。
+4. 创建与 Cargo 版本一致的附注标签。
+5. 一并推送 `main` 和标签。
+
+以 `0.1.1` 为例，最后执行：
+
+```bash
+	git tag -a v0.1.1 -m "SlimeNRF Helper 0.1.1"
+	git push --atomic origin main v0.1.1
+```
+
+等待标签对应的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 核对预发布说明和三个下载文件。不要移动已发布的标签或替换附件。
 
 CI 成功只证明配置的检查与产物上传已完成。本地构建、WSLg 渲染、原生 GUI、USB 权限和真实设备更新是不同证据；目标发行版、macOS、签名、性能及物理硬件仍须独立验收。应用自有材料的 MIT OR Apache-2.0 许可不能替代[上文](#license-notices)所述第三方材料、源码提供、固件和产物的独立审查，不由打包成功解决。
 

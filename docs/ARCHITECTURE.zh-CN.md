@@ -47,7 +47,7 @@ flowchart TD
 |`ui/page_scroll`|页面滚动容器、视口边缘滚动条与页面导航键，不持有表单或设备状态|
 |`crates/recording`|记录、协议、标准化、交换格式、校准与回放数学、分析、预设读写|
 
-记录内核的 `capture/{protocol,normalize,format}` 不访问设备。`replay` 拥有分段计算、安全 FFI，`analysis` 负责可用性与 A/B，`presets` 接收调用者显式存储路径。数值 C/CMSIS 源、许可及 native build 属于库的 `vendor/vqf` 和 `build.rs`。根构建脚本处理应用配置与固件资源，并跟踪翻译目录的变更。内核不依赖 GPUI、Tokio、HID/串口、桌面目录、翻译或应用配置。
+记录内核的 `capture/{protocol,normalize,format}` 不访问设备。`replay` 拥有分段计算、安全 FFI，`analysis` 负责可用性与 A/B，`presets` 接收调用者显式存储路径。数值 C/CMSIS 源、许可及 native build 属于库的 `vendor/vqf` 和 `build.rs`。根构建脚本处理应用配置与固件资源，调用现有 Python 生成器生成版权材料，并跟踪翻译目录的变更。版权材料生成仅在应用构建时需要 Python 3.11+，只构建内核或运行应用时不需要。内核不依赖 GPUI、Tokio、HID/串口、桌面目录、翻译或应用配置。
 
 `board_catalog/loading/bounded_yaml` 限制输入大小，并在类型化解析过程中共享展开文本、节点数和深度上限。别名展开、映射键和忽略字段均计入同一组限制，在 schema visitor 保留值之前检查。普通别名仍受支持，具体上限见[解析器常量](../src/board_catalog/loading/bounded_yaml.rs)。
 
@@ -59,7 +59,7 @@ flowchart TD
 
 `file_export` 将终端日志、回放参数 YAML 和温度曲线 SVG 写入目标目录中的临时文件，同步完成后才替换目标。写入、同步或替换失败均不会改变已有目标文件。
 
-`ui/notices` 仅在请求时创建声明窗口。行索引借用内嵌的静态原文，虚拟列表只渲染可见行。**全部复制**使用未修改的内嵌文本，而不是显示排版后的内容。[版权材料维护流程](DEVELOPMENT.zh-CN.md#license-notices)负责来源清单和重新生成规则。
+`ui/notices` 仅在请求时创建声明窗口。行索引借用编译时生成到 `OUT_DIR` 的静态原文，虚拟列表只渲染可见行。**全部复制**使用未修改的内嵌文本，而不是显示排版后的内容。生成文档不纳入版本控制。[版权材料维护流程](DEVELOPMENT.zh-CN.md#license-notices)负责已跟踪来源清单及编译与打包共用的生成规则。
 
 ## 身份与执行数据流
 

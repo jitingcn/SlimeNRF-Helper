@@ -7,23 +7,25 @@
 <a id="installation"></a>
 ## 安装与启动
 
-1. 在本仓库的 GitHub 页面打开 **Actions → Native no-firmware CI**。
-2. 选择成功运行。
-3. 在 **Artifacts** 下载对应平台的包。
+1. 打开项目的 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 页面。
+2. 选择版本。需要测试版时，选择标记为 **Pre-release** 的版本。
+3. 在 **Assets** 下载对应平台的包。
+
+需要开发构建时，打开 **Actions**，选择成功的 **Native no-firmware CI** 运行记录，再下载其中的 **Artifacts**。
 
 Windows 下载文件名以 `windows-x64-no-firmware.exe` 结尾的普通包。下载完成后直接运行。UPX 是可选的独立压缩版本。遇到安全软件或兼容性问题时，改用普通 EXE。
 
 Linux 下载 AppImage。将以下示例文件名替换为实际下载文件名。在文件所在目录执行以下命令。
 
 ```bash
-chmod +x ./slimenrf-helper-0.1.0-linux-x64-no-firmware.AppImage
-./slimenrf-helper-0.1.0-linux-x64-no-firmware.AppImage
+chmod +x ./slimenrf-helper-0.1.1-linux-x64-no-firmware.AppImage
+./slimenrf-helper-0.1.1-linux-x64-no-firmware.AppImage
 ```
 
 如果没有 FUSE，使用以下命令启动：
 
 ```bash
-./slimenrf-helper-0.1.0-linux-x64-no-firmware.AppImage --appimage-extract-and-run
+./slimenrf-helper-0.1.1-linux-x64-no-firmware.AppImage --appimage-extract-and-run
 ```
 
 无固件包内置默认配置，但不包含固件载荷。更新时使用本地文件、远程下载或显式外部配置。Linux 的服务、设备权限与 UF2 挂载条件见 [Linux 设备与运行条件](#linux-devices)。源码构建见[开发与打包](DEVELOPMENT.zh-CN.md)。
@@ -364,9 +366,11 @@ GitHub 令牌可选：启动前在进程环境设置 `GH_TOKEN` 或 `GITHUB_TOKE
 
 保存操作在后台进行。正常退出应用时，会等待最新的偏好修改保存结束。
 
-在**设置**中点击**查看许可证与声明**，即可离线阅读随应用附带的原始文档。**全部复制**复制内嵌原文，不重新排版。[版权材料清单](../THIRD_PARTY_NOTICES.txt)与[许可证概述](../README.zh-CN.md#许可证)区分应用自有代码的 MIT OR Apache-2.0 许可与第三方、固件、原生运行库和工具链的独立条款。
+在**设置**中点击**查看许可证与声明**，即可离线阅读随应用附带的原始文档。**全部复制**复制内嵌原文，不重新排版。该文档与[许可证概述](../README.zh-CN.md#许可证)区分应用自有代码的 MIT OR Apache-2.0 许可与第三方、固件、原生运行库和工具链的独立条款。
 
 拖动右侧滚动条浏览全文。遇到长行时，拖动底部滚动条查看右侧内容。阅读窗口保留原文换行。
+
+内嵌的 `THIRD_PARTY_NOTICES.txt` 在编译时生成，运行应用不需要 Python。AppImage 还在 AppDir 内的 `usr/share/licenses/slimenrf-helper` 携带此文件，Flatpak 将其安装到 `/app/share/licenses/slimenrf-helper`。从已跟踪来源生成独立副本的方法见[版权材料维护流程](DEVELOPMENT.zh-CN.md#license-notices)。
 
 <a id="linux-devices"></a>
 ## Linux 设备与运行条件

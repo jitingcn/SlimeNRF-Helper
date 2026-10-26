@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "input_sha256": {
-    "Cargo.lock": "921a039701a334443f13e3da4e3b7b17c4ff13a5f218faa6e21a0876fa9736b7",
-    "Cargo.toml": "c60186ff0b3b00d9e69db8d0f6d1d8dde5cbd4d0ac6f87aeb5847f8c44142f24",
+    "Cargo.lock": "79d26f8c3ad25c9e8396a748679bcc7effcefd164dc60beb36e61a2297b9a935",
+    "Cargo.toml": "4cde81a8bd20e4edbb89a534f763e3b65452488ccbab1f551d174b3e44042115",
     "crates/recording/Cargo.toml": "b97713b3affd1a84902192a86bf200055526fde9e93d848e9a7a21eef1c95b68",
     "crates/recording/vendor/vqf/cmsis/include/arm_math.h": "86b5daafdeeedecd7977f00c8001620003b46bd121d4942f04b72746d2634a97",
     "crates/recording/vendor/vqf/cmsis/include/sqrt_f32.h": "cd1cd5e3dbe322a738abd344b4de3ff872f7d4e20c21d87814720783a82be20e",
@@ -53,7 +53,7 @@
         "x86_64-unknown-linux-gnu"
       ]
     ],
-    "review_process": "Capture immutable locked target graphs, review every source and package handling entry, preserve full original bytes, then freeze input hashes. Repository frozen text uses focused Git attributes. THIRD_PARTY_NOTICES.txt and original vendor inputs use -text to preserve exact bytes across checkouts; other maintained frozen text uses eol=lf."
+    "review_process": "Capture immutable locked target graphs, review every source and package handling entry, preserve full original bytes, then freeze input hashes. Repository frozen text uses focused Git attributes. Original vendor inputs use -text to preserve exact bytes across checkouts; other maintained frozen text uses eol=lf. Generated notice artifacts preserve original source bytes without Git text conversion."
   },
   "scope": [
     "Copyright (c) 2026 SlimeNRF Helper contributors. Application-owned code and assets are available under MIT OR Apache-2.0, at your option. Vendored code, third-party assets, dependencies, and external firmware retain their own terms.",

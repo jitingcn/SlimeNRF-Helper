@@ -260,8 +260,12 @@ def build(root, source, architecture, version):
                 raise ValueError(f"linuxdeploy omitted required client library: {library}")
         licenses = appdir / "usr" / "share" / "licenses" / "slimenrf-helper"
         licenses.mkdir(parents=True, exist_ok=True)
-        for name in ("LICENSE-MIT", "LICENSE-APACHE", "THIRD_PARTY_NOTICES.txt"):
+        for name in ("LICENSE-MIT", "LICENSE-APACHE"):
             shutil.copyfile(root / name, licenses / name)
+        subprocess.run([sys.executable, str(root / "scripts" / "generate_notices.py"),
+                        "--root", str(root),
+                        "--output", str(licenses / "THIRD_PARTY_NOTICES.txt")],
+                       env=environment, check=True)
         subprocess.run(["desktop-file-validate", str(appdir / "slimenrf-helper.desktop")],
                        env=environment, check=True)
         image = stage / "application.AppImage"

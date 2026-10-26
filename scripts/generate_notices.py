@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Render reviewed, frozen notice inputs without Cargo, a registry cache, or a network.
 
-Requires Python 3.11 or newer. Run with --check before publishing. To review an
-update, capture both locked target graphs with cargo metadata --locked --offline
+Requires Python 3.11 or newer. Use --check to validate the reviewed inputs, or
+--output PATH to generate an artifact. To review an update, capture both locked
+target graphs with cargo metadata --locked --offline
 --format-version 1 --filter-platform TARGET, following normal and build edges
 from slimenrf-helper, excluding dev edges. A build or proc-macro edge marks a
 compile-tool path. Preserve the conservative union, including feature unification.
@@ -218,22 +219,42 @@ def render(root: Path, manifest: dict, sources: dict[str, bytes]) -> bytes:
     return b"".join(parts)
 
 
+def cargo_rerun_paths(root: Path, manifest: dict) -> list[Path]:
+    names = {"scripts/generate_notices.py", INPUT, *manifest["input_sha256"]}
+    names.update(origin["path"] for source in manifest["sources"].values()
+                 for origin in source["origins"] if origin.get("kind") == "repository")
+    return [relative_file(root, name) for name in sorted(names)]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--check", action="store_true", help="Fail if the committed document or any frozen input is stale")
+    parser.add_argument("--check", action="store_true",
+                        help="Validate frozen inputs and rendering; with --output, also compare artifact bytes without writing")
+    parser.add_argument("--output", type=Path, help="Explicit generated artifact destination (required unless --check)")
+    parser.add_argument("--cargo-rerun", action="store_true",
+                        help="Emit Cargo rerun-if-changed records for every reviewed repository input")
     parser.add_argument("--root", type=Path, default=ROOT, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if not args.check and args.output is None:
+        parser.error("--output is required unless --check is used")
     try:
-        manifest, sources = load_inputs(args.root)
-        expected = render(args.root, manifest, sources)
-        destination = args.root / OUTPUT
+        root = args.root.resolve()
+        manifest, sources = load_inputs(root)
+        expected = render(root, manifest, sources)
         if args.check:
-            if not destination.is_file() or destination.read_bytes() != expected:
-                raise NoticeError(f"{OUTPUT} is stale. Run python scripts/generate_notices.py after reviewing the inputs.")
-            print(f"Notices are current. {len(manifest['packages'])} locked package versions, {len(sources)} source texts.")
+            if args.output is not None and (
+                not args.output.is_file() or args.output.read_bytes() != expected
+            ):
+                raise NoticeError(
+                    f"{args.output} is missing or stale. Regenerate with --output PATH after reviewing the inputs."
+                )
+            print(f"Notices validated. {len(manifest['packages'])} locked package versions, {len(sources)} source texts.")
         else:
-            destination.write_bytes(expected)
-            print(f"Wrote {OUTPUT} ({len(expected)} bytes).")
+            args.output.write_bytes(expected)
+            print(f"Wrote {args.output} ({len(expected)} bytes).")
+        if args.cargo_rerun:
+            for path in cargo_rerun_paths(root, manifest):
+                print(f"cargo:rerun-if-changed={path}")
     except (NoticeError, KeyError, TypeError, OSError, tomllib.TOMLDecodeError) as error:
         print(f"Notice generation failed: {error}", file=sys.stderr)
         return 1

@@ -13,7 +13,7 @@ use gpui_kit::{
 };
 use unicode_width::UnicodeWidthStr;
 
-const NOTICES: &str = include_str!("../../THIRD_PARTY_NOTICES.txt");
+const NOTICES: &str = include_str!(concat!(env!("OUT_DIR"), "/THIRD_PARTY_NOTICES.txt"));
 const FONT_SIZE: f32 = 13.;
 const LINE_HEIGHT: f32 = 20.;
 const TAB_SPACES: &str = "    ";

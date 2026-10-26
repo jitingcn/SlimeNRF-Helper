@@ -3,6 +3,7 @@
 /build/
 /dist/
 /firmwares/
+/THIRD_PARTY_NOTICES.txt
 
 # Private captures, exports, scratch/configuration and local-only history/acceptance.
 /.local/

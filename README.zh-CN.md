@@ -20,7 +20,7 @@
 
 ## 下载与平台限制
 
-仓库的 [Native no-firmware CI 工作流](.github/workflows/ci.yml)配置为发布 Windows x64 EXE 和 Linux x64 AppImage。下载位置是 **Actions → Native no-firmware CI → 成功运行 → Artifacts**。
+从 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 下载 Windows x64 EXE 或 Linux x64 AppImage。预发布版本标记为 **Pre-release**，供测试使用。开发构建位于 **Actions** 中成功的 **Native no-firmware CI** 运行记录下的 **Artifacts** 区域。
 
 - Windows 普通 EXE 文件名以 `windows-x64-no-firmware.exe` 结尾。可选的独立 UPX 压缩版本文件名以 `windows-x64-no-firmware-upx.exe` 结尾。UPX 版本遇到安全软件或兼容性问题时，可改用普通 EXE。
 - Linux AppImage 以 Ubuntu 22.04 和 glibc 2.35 为构建基线，并非完全静态包。运行仍需兼容的宿主图形栈、字体、桌面与设备服务，以及 USB、HID 和串口权限。
@@ -38,10 +38,11 @@ CI 包内置默认配置，但不包含固件载荷。完整构建包含随包�
 
 ## 许可证
 
-应用自有代码与资源采用 [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)，由你选择。依赖、vendor 代码、第三方资源及外部固件保留各自条款。版权材料与源码获取说明见 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)。
+应用自有代码与资源采用 [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)，由你选择。依赖、vendor 代码、第三方资源及外部固件保留各自条款。应用在编译时生成并嵌入 `THIRD_PARTY_NOTICES.txt`，生成文件不纳入版本控制。在**设置 > 查看许可证与声明**中离线阅读版权材料与源码获取说明，或参阅[版权材料维护流程](docs/DEVELOPMENT.zh-CN.md#license-notices)。
 
 ## 文档
 
 - [首次使用](docs/USER_GUIDE.zh-CN.md#first-use)与[用户指南](docs/USER_GUIDE.zh-CN.md)：设备、终端、更新、采集与回放。
 - [开发与打包](docs/DEVELOPMENT.zh-CN.md)：依赖、源码构建、检查、配置和分发。
 - [架构](docs/ARCHITECTURE.zh-CN.md)与[协议及来源](docs/PROTOCOLS.zh-CN.md)：模块边界、格式、身份检查与数值限制。
+- [更新日志](CHANGELOG.zh-CN.md)列出各版本的显著变更。

@@ -16,7 +16,7 @@ from unittest import mock
 
 CHECKER = Path(__file__).with_name("check-public.py")
 DOCUMENTS = (
-    "README", "docs/USER_GUIDE", "docs/DEVELOPMENT",
+    "README", "CHANGELOG", "docs/USER_GUIDE", "docs/DEVELOPMENT",
     "docs/ARCHITECTURE", "docs/PROTOCOLS",
 )
 
@@ -37,6 +37,15 @@ class PublicCheckerTests(unittest.TestCase):
             name = base.rsplit("/", 1)[-1]
             self.put(base + ".md", f"# Review fixture\n\n[中文]({name}.zh-CN.md)\n")
             self.put(base + ".zh-CN.md", f"# 审查样例\n\n[English]({name}.md)\n")
+        for suffix, added in ((".md", "Added"), (".zh-CN.md", "新增")):
+            path = self.root / ("CHANGELOG" + suffix)
+            with path.open("a", encoding="utf-8") as stream:
+                stream.write(
+                    "\n## [Unreleased]\n\n## [0.1.1] - 2026-10-27\n\n"
+                    f"### {added}\n\n- Release publication fixture.\n\n"
+                    "[Unreleased]: https://github.com/example/project/compare/v0.1.1...HEAD\n"
+                    "[0.1.1]: https://github.com/example/project/releases/tag/v0.1.1\n"
+                )
         self.git("-c", "init.templateDir=", "init", "--quiet")
         name = "public_checker_fixture_" + str(id(self))
         spec = importlib.util.spec_from_file_location(name, self.root / "scripts/check-public.py")
@@ -82,8 +91,8 @@ class PublicCheckerTests(unittest.TestCase):
         status, output = self.run_checker("--root", str(self.root))
         self.assertEqual(status, 0)
         self.assertEqual(output, [{"inventory": {
-            "tracked": 0, "nonignored_untracked": 14, "ignored_tracked": 0,
-            "candidates": 14, "scanned_text": 14, "findings": 0,
+            "tracked": 0, "nonignored_untracked": 16, "ignored_tracked": 0,
+            "candidates": 16, "scanned_text": 16, "findings": 0,
         }}])
 
     def test_inventory_keeps_tracked_untracked_and_ignored_tracked_separate(self):
@@ -99,7 +108,7 @@ class PublicCheckerTests(unittest.TestCase):
         self.assertIn("untracked.txt", report.inventory.untracked)
         self.assertNotIn("ignored-only.txt", report.inventory.candidates)
         self.assertEqual(self.findings(report), set())
-        self.assertEqual(report.counts["scanned_text"], 18)
+        self.assertEqual(report.counts["scanned_text"], 20)
 
     def test_forbidden_tracked_paths_are_flagged_without_content_reads(self):
         paths = (".local/private.txt", "dist/export.txt", "captures/session.csv",
@@ -294,6 +303,55 @@ class PublicCheckerTests(unittest.TestCase):
             ("docs/USER_GUIDE.zh-CN.md", 0, "language-explicit-anchor-mismatch"),
         })
 
+    def test_changelog_requires_its_translated_document_and_reciprocal_link(self):
+        (self.root / "CHANGELOG.zh-CN.md").unlink()
+        status, output = self.run_checker()
+        self.assertEqual(status, 1)
+        self.assertEqual(output[:-1], [
+            {"path": "CHANGELOG.md", "line": 1, "category": "missing-reciprocal-language-link"},
+            {"path": "CHANGELOG.md", "line": 3, "category": "missing-path"},
+            {"path": "CHANGELOG.zh-CN.md", "line": 0, "category": "missing-language-document"},
+        ])
+
+    def test_changelog_navigation_preserves_the_selected_language(self):
+        self.put("CHANGELOG.md", "# Changelog\n\n[中文](CHANGELOG.zh-CN.md)\n"
+                 "[guide](docs/USER_GUIDE.md)\n")
+        self.put("CHANGELOG.zh-CN.md", "# 更新日志\n\n[English](CHANGELOG.md)\n"
+                 "[指南](docs/USER_GUIDE.zh-CN.md)\n")
+        self.assertEqual(self.findings(self.checker.audit()), set())
+        self.put("CHANGELOG.zh-CN.md", "# 更新日志\n\n[English](CHANGELOG.md)\n"
+                 "[wrong](docs/USER_GUIDE.md)\n")
+        self.assertEqual(self.findings(self.checker.audit()), {
+            ("CHANGELOG.zh-CN.md", 4, "markdown-language-navigation"),
+        })
+
+    def test_changelog_contents_still_reject_private_paths(self):
+        path = self.root / "CHANGELOG.md"
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write("\n- Evidence: /home/" + "sample-person/private/release.txt\n")
+        report = self.checker.audit()
+        self.assertEqual({(item.path, item.category) for item in report.findings}, {
+            ("CHANGELOG.md", "private-absolute-path"),
+        })
+
+    def test_ignored_planning_pair_is_not_required_or_opened(self):
+        self.put(".gitignore", "PLAN.md\nPLAN.zh-CN.md\n")
+        self.assertEqual(self.findings(self.checker.audit()), set())
+        for path in ("PLAN.md", "PLAN.zh-CN.md"):
+            self.put(path, "ignored local planning material\n")
+        original = self.checker.os.open
+
+        def guarded_open(path, *arguments, **keywords):
+            if Path(path).name in {"PLAN.md", "PLAN.zh-CN.md"}:
+                raise AssertionError("Ignored planning content was opened")
+            return original(path, *arguments, **keywords)
+
+        with mock.patch.object(self.checker.os, "open", side_effect=guarded_open):
+            report = self.checker.audit()
+        self.assertEqual(self.findings(report), set())
+        self.assertNotIn("PLAN.md", report.inventory.candidates)
+        self.assertNotIn("PLAN.zh-CN.md", report.inventory.candidates)
+
     def test_root_override_cannot_select_parent_or_another_repository(self):
         status, output = self.run_checker("--root", str(self.root.parent))
         self.assertEqual((status, output), (2, [{
@@ -364,8 +422,8 @@ class PublicCheckerTests(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.returncode, 0)
         self.assertEqual([json.loads(line) for line in result.stdout.splitlines()], [{"inventory": {
-            "tracked": 14, "nonignored_untracked": 0, "ignored_tracked": 0,
-            "candidates": 14, "scanned_text": 14, "findings": 0,
+            "tracked": 16, "nonignored_untracked": 0, "ignored_tracked": 0,
+            "candidates": 16, "scanned_text": 16, "findings": 0,
         }}])
 
     def test_symlinked_application_ancestor_is_rejected(self):

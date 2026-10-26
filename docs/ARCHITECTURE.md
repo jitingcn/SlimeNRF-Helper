@@ -47,7 +47,7 @@ flowchart TD
 | `ui/page_scroll` | Page scroll containers, viewport-edge scrollbars, and page-navigation keys. Does not own forms or device state. |
 | `crates/recording` | Recording, protocols, normalization, interchange formats, calibration and replay math, analysis, and preset I/O. |
 
-The recording core's `capture/{protocol,normalize,format}` modules do not access devices. `replay` owns segmented computation and safe FFI. `analysis` owns availability and A/B analysis. `presets` takes an explicit storage path from its caller. Numerical C and CMSIS sources, licenses, and the native build belong to the library's `vendor/vqf` and `build.rs`. The root build script handles application configuration and firmware resources, and tracks changes to the translation directory. The core does not depend on GPUI, Tokio, HID or serial access, desktop directories, translations, or application configuration.
+The recording core's `capture/{protocol,normalize,format}` modules do not access devices. `replay` owns segmented computation and safe FFI. `analysis` owns availability and A/B analysis. `presets` takes an explicit storage path from its caller. Numerical C and CMSIS sources, licenses, and the native build belong to the library's `vendor/vqf` and `build.rs`. The root build script handles application configuration and firmware resources, generates license notices with the existing Python renderer, and tracks changes to the translation directory. Notice generation requires Python 3.11+ only for application builds, not core-only builds or application runtime. The core does not depend on GPUI, Tokio, HID or serial access, desktop directories, translations, or application configuration.
 
 `board_catalog/loading/bounded_yaml` bounds input size and shares expanded text, node, and depth limits across the typed parse. Alias expansion, mapping keys, and ignored fields consume the same limits before schema visitors retain values. Ordinary aliases remain supported. The [parser constants](../src/board_catalog/loading/bounded_yaml.rs) define the limits.
 
@@ -59,7 +59,7 @@ The recording core's `replay::presets` reads a flat map of known parameter names
 
 `file_export` writes terminal logs, replay parameter YAML, and temperature chart SVG through a synced temporary file in the destination directory. It replaces the destination only after writing succeeds. Write, sync, and replacement failures leave an existing destination unchanged.
 
-`ui/notices` creates the notices window only when requested. Its line index borrows the embedded static original, and a virtualized list renders visible rows. **Copy all** uses the unchanged embedded text, not the display formatting. The [notice-maintenance procedure](DEVELOPMENT.md#license-notices) owns the source inventory and regeneration rules.
+`ui/notices` creates the notices window only when requested. Its line index borrows the static original generated into `OUT_DIR` during compilation, and a virtualized list renders visible rows. **Copy all** uses the unchanged embedded text, not the display formatting. The generated document is untracked. The [notice-maintenance procedure](DEVELOPMENT.md#license-notices) owns the tracked source inventory and generation rules shared by compilation and packaging.
 
 ## Identity and execution data flow
 

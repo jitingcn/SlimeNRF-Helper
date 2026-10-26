@@ -21,8 +21,9 @@ class NoticeGeneratorTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        self.root = Path(temporary.name).resolve()
         self.root.joinpath("scripts").mkdir()
+        self.put("scripts/generate_notices.py", SCRIPT.read_bytes())
         self.inputs = {}
         for name, content in {
             "Cargo.toml": b'[workspace.package]\nlicense = "MIT OR Apache-2.0"\n',
@@ -80,24 +81,107 @@ class NoticeGeneratorTests(unittest.TestCase):
         return notices.load_inputs(self.root)
 
     def invoke(self, *arguments):
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            return notices.main(["--root", str(self.root), *arguments])
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            result = notices.main(["--root", str(self.root), *arguments])
+        self.stdout, self.stderr = stdout.getvalue(), stderr.getvalue()
+        return result
 
-    def test_regeneration_and_check_are_deterministic(self):
-        self.assertEqual(self.invoke(), 0)
-        before = (self.root / notices.OUTPUT).read_bytes()
-        self.assertEqual(self.invoke(), 0)
-        self.assertEqual((self.root / notices.OUTPUT).read_bytes(), before)
+    def test_source_only_check_writes_nothing_without_a_root_artifact(self):
+        before = {path.relative_to(self.root) for path in self.root.rglob("*") if path.is_file()}
         self.assertEqual(self.invoke("--check"), 0)
+        self.assertFalse((self.root / notices.OUTPUT).exists())
+        self.assertEqual(
+            {path.relative_to(self.root) for path in self.root.rglob("*") if path.is_file()},
+            before,
+        )
+
+    def test_source_only_check_does_not_consult_or_replace_a_root_artifact(self):
+        self.put(notices.OUTPUT, b"unrelated old artifact\n")
+        self.assertEqual(self.invoke("--check"), 0)
+        self.assertEqual((self.root / notices.OUTPUT).read_bytes(), b"unrelated old artifact\n")
+
+    def test_write_requires_an_explicit_destination(self):
+        with self.assertRaises(SystemExit) as error:
+            self.invoke()
+        self.assertEqual(error.exception.code, 2)
+        self.assertFalse((self.root / notices.OUTPUT).exists())
+
+    def test_external_output_with_spaces_is_deterministic_and_byte_preserving(self):
+        with tempfile.TemporaryDirectory(prefix="notices output ") as directory:
+            output = Path(directory) / "generated notices.txt"
+            self.assertEqual(self.invoke("--output", str(output)), 0)
+            before = output.read_bytes()
+            self.assertEqual(self.invoke("--output", str(output)), 0)
+            self.assertEqual(output.read_bytes(), before)
+            self.assertEqual(self.invoke("--check", "--output", str(output)), 0)
+        self.assertFalse((self.root / notices.OUTPUT).exists())
         self.assertIn(self.upstream, before)
         self.assertEqual(before.count(self.upstream), 1)
         self.assertIn(b"Application MIT terms\n", before)
         self.assertIn(b"Application Apache terms\n", before)
 
-    def test_check_rejects_stale_output_without_rewriting_it(self):
-        self.put(notices.OUTPUT, b"old document\n")
-        self.assertEqual(self.invoke("--check"), 1)
-        self.assertEqual((self.root / notices.OUTPUT).read_bytes(), b"old document\n")
+    def test_explicit_check_rejects_missing_output_without_creating_it(self):
+        with tempfile.TemporaryDirectory(prefix="notices output ") as directory:
+            output = Path(directory) / "missing notices.txt"
+            self.assertEqual(self.invoke("--check", "--output", str(output)), 1)
+            self.assertFalse(output.exists())
+
+    def test_explicit_check_rejects_stale_output_without_rewriting_it(self):
+        with tempfile.TemporaryDirectory(prefix="notices output ") as directory:
+            output = Path(directory) / "stale notices.txt"
+            output.write_bytes(b"old document\n")
+            self.assertEqual(self.invoke("--check", "--output", str(output)), 1)
+            self.assertEqual(output.read_bytes(), b"old document\n")
+
+    def test_stale_input_refuses_generation_and_both_check_modes_without_mutation(self):
+        output = self.root / "explicit notices.txt"
+        self.assertEqual(self.invoke("--output", str(output)), 0)
+        before = output.read_bytes()
+        self.put("Cargo.toml", b"changed dependency\n")
+        for arguments in (
+            ("--output", str(output)),
+            ("--check",),
+            ("--check", "--output", str(output)),
+        ):
+            with self.subTest(arguments=arguments):
+                self.assertEqual(self.invoke(*arguments), 1)
+                self.assertIn("Stale input hash: Cargo.toml", self.stderr)
+                self.assertEqual(output.read_bytes(), before)
+        self.assertFalse((self.root / notices.OUTPUT).exists())
+
+    def test_cargo_records_cover_hashed_and_repository_origin_input_changes(self):
+        hashed_name = "reviewed inputs/additional input.txt"
+        hashed_bytes = b"Additional reviewed input\n"
+        self.put(hashed_name, hashed_bytes)
+        self.document["input_sha256"][hashed_name] = notices.digest(hashed_bytes)
+        origin_name = "native kernels/source with spaces.c"
+        origin_bytes = b"Copyright Example\nPermission granted\nimplementation body\n"
+        self.put(origin_name, origin_bytes)
+        key = self.source(b"Copyright Example\nPermission granted\n", {
+            "kind": "repository", "path": origin_name,
+            "file_sha256": notices.digest(origin_bytes), "lines": [1, 2],
+        })
+        self.document["materials"][0]["notices"].append(key)
+        self.save()
+        output = self.root / "explicit notices.txt"
+        self.assertEqual(self.invoke("--output", str(output), "--cargo-rerun"), 0)
+        prefix = "cargo:rerun-if-changed="
+        records = [Path(line.removeprefix(prefix)) for line in self.stdout.splitlines()
+                   if line.startswith(prefix)]
+        expected = {self.root / "scripts/generate_notices.py", self.root / notices.INPUT,
+                    *(self.root / name for name in self.document["input_sha256"]), self.root / origin_name}
+        self.assertEqual(set(records), expected)
+        self.assertEqual(len(records), len(expected))
+        before = output.read_bytes()
+        for name, original in ((hashed_name, hashed_bytes), (origin_name, origin_bytes)):
+            with self.subTest(input=name):
+                self.assertIn(self.root / name, records)
+                self.put(name, original + b"unreviewed change\n")
+                self.assertEqual(self.invoke("--output", str(output), "--cargo-rerun"), 1)
+                self.assertIn(f"Stale input hash: {name}", self.stderr)
+                self.assertEqual(output.read_bytes(), before)
+                self.put(name, original)
 
     def test_changed_manifest_requires_review(self):
         self.put("Cargo.toml", b"changed dependency\n")
