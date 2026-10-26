@@ -374,6 +374,9 @@ impl TranscriptState {
         if self.style.as_ref() != Some(&style) {
             for line in &mut self.lines {
                 line.width = None;
+                // StyledText keeps measured decorations even when new runs have
+                // the same constraints; rebuild it from semantic styles lazily.
+                line.styled.borrow_mut().styled = None;
             }
             self.extent_dirty = true;
             self.layout_key.style_generation = self.layout_key.style_generation.wrapping_add(1);

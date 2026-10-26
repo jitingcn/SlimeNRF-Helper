@@ -7,12 +7,12 @@ use gpui_kit::{
     ScrollDelta, ScrollEvent, ScrollHandle, Size, TestAppContext, TouchPhase, Window, WindowHandle,
     canvas,
     component::{
-        ActiveTheme,
+        ActiveTheme, Theme, ThemeMode,
         input::{Input, InputState},
     },
     div, point,
     prelude::*,
-    px, rems, size,
+    px, rems, rgb, size,
 };
 
 use super::{TerminalTranscript, TranscriptState, TranscriptViewport, geometry::ViewportAnchor};
@@ -98,6 +98,7 @@ impl Render for TranscriptHarness {
             div()
                 .size_full()
                 .bg(cx.theme().background)
+                .text_color(cx.theme().foreground)
                 .flex()
                 .flex_col()
                 .child(transcript.flex_1().min_h_0())
@@ -107,6 +108,7 @@ impl Render for TranscriptHarness {
             div()
                 .size_full()
                 .bg(cx.theme().background)
+                .text_color(cx.theme().foreground)
                 .child(transcript)
                 .into_any_element()
         }
@@ -294,6 +296,202 @@ fn short_lines(count: usize) -> String {
     std::iter::repeat_n("abcdefghijklmnopqrstuvwx", count)
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[gpui_kit::test]
+fn native_theme_switch_repaints_retained_decorations_without_moving_history(
+    cx: &mut TestAppContext,
+) {
+    cx.update(gpui_kit::init);
+    cx.update(|cx| Theme::change(ThemeMode::Dark, None, cx));
+    let row = format!(
+        "{}{}",
+        concat!(
+            "plain \x1b[7mdefault\x1b[0m reset ",
+            "\x1b[31;7mbasic\x1b[0m ",
+            "\x1b[38;5;196;7mextended\x1b[0m ",
+            "\x1b[38;2;17;128;249;7mrgb\x1b[0m ",
+            "\x1b[2;7mdim\x1b[0m ",
+            "\x1b[48;2;9;27;81mbackground\x1b[0m",
+        ),
+        " tail".repeat(24),
+    );
+    let text = std::iter::repeat_n(row.as_str(), 30)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let fixture = Fixture::new(cx, &text, true, false, 1.25, size(px(512.), px(200.)));
+    fixture.settle(cx);
+    fixture.focus(cx);
+    fixture.press(cx, "secondary-home");
+    for _ in 0..5 {
+        fixture.press(cx, "shift-right");
+    }
+    fixture.settle(cx);
+    fixture.wheel(cx, -60.25);
+    fixture.settle(cx);
+    let (revision, epoch, endpoints, anchor, offset, wrap_width, height) =
+        fixture.inspect(cx, |view| {
+            let state = view.state.borrow();
+            assert_eq!(state.selected_text().as_deref(), Some("plain"));
+            assert!(!view.follow);
+            (
+                view.buffer.revision(),
+                view.buffer.selection_epoch(),
+                state.endpoints,
+                anchor_key(state.anchor.unwrap()),
+                view.scroll.offset(),
+                state.layout_key.wrap_width,
+                state.height(),
+            )
+        });
+    for mode in [ThemeMode::Light, ThemeMode::Dark] {
+        cx.update(|cx| Theme::change(mode, None, cx));
+        fixture.settle(cx);
+        fixture.inspect(cx, |view| {
+            let state = view.state.borrow();
+            assert_eq!(view.buffer.revision(), revision);
+            assert_eq!(view.buffer.selection_epoch(), epoch);
+            assert_eq!(state.selected_text().as_deref(), Some("plain"));
+            assert_eq!(state.endpoints, endpoints);
+            assert_eq!(anchor_key(state.anchor.unwrap()), anchor);
+            assert_eq!(view.scroll.offset(), offset);
+            assert_eq!(state.layout_key.wrap_width, wrap_width);
+            assert_eq!(state.height(), height);
+            assert!(!view.follow);
+            assert!(view.soft_wrap);
+        });
+        cx.update_window(fixture.window.into(), |_, window, cx| {
+            // Inverse spans expose resolved foregrounds as real scene background
+            // decorations. Glyph foregrounds still require native capture.
+            let colors = window
+                .painted_quads()
+                .iter()
+                .filter_map(|quad| quad.background.as_solid())
+                .collect::<Vec<_>>();
+            let basic = if mode == ThemeMode::Light {
+                0xb42332
+            } else {
+                0xe06c75
+            };
+            for expected in [
+                cx.theme().foreground,
+                rgb(basic).into(),
+                rgb(0xff0000).into(),
+                rgb(0x1180f9).into(),
+                rgb(0x091b51).into(),
+            ] {
+                assert!(
+                    colors.contains(&expected),
+                    "retained terminal decoration did not repaint in {mode:?}: {expected:?}",
+                );
+            }
+        })
+        .unwrap();
+        let callbacks = fixture.inspect(cx, |view| view.callbacks);
+        for _ in 0..3 {
+            fixture.draw(cx);
+            assert_eq!(fixture.deliver(cx), 0, "stable theme queued an idle frame");
+            fixture.inspect(cx, |view| {
+                assert_eq!(view.callbacks, callbacks);
+                assert_eq!(view.scroll.offset(), offset);
+                assert_eq!(
+                    view.state.borrow().selected_text().as_deref(),
+                    Some("plain")
+                );
+            });
+        }
+    }
+    fixture
+        .window
+        .update(cx, |view, _, cx| {
+            view.follow = true;
+            cx.notify();
+        })
+        .unwrap();
+    fixture.settle(cx);
+    cx.update(|cx| Theme::change(ThemeMode::Light, None, cx));
+    fixture.settle(cx);
+    fixture.inspect(cx, |view| {
+        let state = view.state.borrow();
+        assert!(view.follow);
+        assert_eq!(
+            view.scroll.offset().y,
+            -(state.height() - view.scroll.bounds().size.height),
+        );
+        assert_eq!(state.selected_text().as_deref(), Some("plain"));
+        assert_eq!(state.endpoints, endpoints);
+    });
+}
+
+#[gpui_kit::test]
+fn native_font_changes_reshape_retained_lines_at_the_same_constraints(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let fixture = Fixture::new(
+        cx,
+        "plain text\n\x1b[31mstyled\x1b[0m reset",
+        false,
+        false,
+        1.,
+        size(px(640.), px(200.)),
+    );
+    fixture
+        .window
+        .update(cx, |_, window, _| window.set_rem_size(px(16.)))
+        .unwrap();
+    fixture.settle(cx);
+    let (viewport, original) = fixture.inspect(cx, |view| {
+        let state = view.state.borrow();
+        assert_eq!(state.layout_key.wrap_width, None);
+        (
+            view.scroll.bounds().size,
+            state
+                .lines
+                .iter()
+                .map(|line| {
+                    let layout = &line
+                        .geometry
+                        .as_ref()
+                        .unwrap()
+                        .content_layout
+                        .unwrapped_layout;
+                    (layout.font_size, layout.width)
+                })
+                .collect::<Vec<_>>(),
+        )
+    });
+    for rem_size in [20., 16.] {
+        fixture
+            .window
+            .update(cx, |_, window, _| {
+                window.set_rem_size(px(rem_size));
+                window.refresh();
+            })
+            .unwrap();
+        fixture.settle(cx);
+        fixture.inspect(cx, |view| {
+            let state = view.state.borrow();
+            assert_eq!(view.scroll.bounds().size, viewport);
+            assert_eq!(state.layout_key.wrap_width, None);
+            for (line, &(font_size, width)) in state.lines.iter().zip(&original) {
+                let layout = &line
+                    .geometry
+                    .as_ref()
+                    .unwrap()
+                    .content_layout
+                    .unwrapped_layout;
+                assert_eq!(layout.font_size, font_size * (rem_size / 16.));
+                if rem_size > 16. {
+                    assert!(
+                        layout.width > width,
+                        "existing line did not reshape after zoom"
+                    );
+                } else {
+                    assert_eq!(layout.width, width);
+                }
+                assert_eq!(line.row_count, 1);
+            }
+        });
+    }
 }
 
 #[gpui_kit::test]
