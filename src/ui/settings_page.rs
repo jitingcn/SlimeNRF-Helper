@@ -8,7 +8,7 @@ use crate::{
     i18n::tr,
     settings::{AccentColor, Appearance, Language, Preferences},
 };
-use gpui_kit::base::{ElementExt as _, TestSupportExt as _};
+use gpui_kit::base::{ElementExt as _, Link, TestSupportExt as _};
 use gpui_kit::component::{
     ActiveTheme, Disableable, Icon, IconName, ResizableState, Selectable, Sizable, Size,
     button::{Button, ButtonVariants},
@@ -68,7 +68,8 @@ pub(super) struct SettingsUiState {
     scroll: ScrollHandle,
     anchors: [ScrollAnchor; 4],
     layout: Entity<ResizableState>,
-    control_focus: [Option<ControlFocus>; 7],
+    control_focus: [Option<ControlFocus>; 8],
+    repository_focus: [ControlFocus; 4],
     _search_subscription: Subscription,
 }
 
@@ -91,10 +92,15 @@ impl SettingsUiState {
             control_focus: std::array::from_fn(|ix| {
                 (!matches!(
                     Setting::ALL[ix],
-                    Setting::Language | Setting::Appearance | Setting::Accent | Setting::Version
+                    Setting::Language
+                        | Setting::Appearance
+                        | Setting::Accent
+                        | Setting::Version
+                        | Setting::Repositories
                 ))
                 .then(|| ControlFocus::new(window, cx))
             }),
+            repository_focus: std::array::from_fn(|_| ControlFocus::new(window, cx)),
             scroll,
             layout: cx.new(|_| ResizableState::default()),
             _search_subscription: subscription,
@@ -110,17 +116,19 @@ enum Setting {
     Registry,
     Advanced,
     Version,
+    Repositories,
     Notices,
 }
 
 impl Setting {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 8] = [
         Self::Language,
         Self::Appearance,
         Self::Accent,
         Self::Registry,
         Self::Advanced,
         Self::Version,
+        Self::Repositories,
         Self::Notices,
     ];
 
@@ -129,7 +137,7 @@ impl Setting {
             Self::Language => Section::General,
             Self::Appearance | Self::Accent => Section::Appearance,
             Self::Registry | Self::Advanced => Section::Devices,
-            Self::Version | Self::Notices => Section::About,
+            Self::Version | Self::Repositories | Self::Notices => Section::About,
         }
     }
 
@@ -141,6 +149,7 @@ impl Setting {
             Self::Registry => "devices.registry.title",
             Self::Advanced => "app.settings.advanced.title",
             Self::Version => "app.settings.version.title",
+            Self::Repositories => "app.settings.repositories.title",
             Self::Notices => "app.settings.notices.title",
         }
     }
@@ -154,6 +163,7 @@ impl Setting {
             Self::Advanced if locked => "app.settings.advanced.locked_hint",
             Self::Advanced => "app.settings.advanced.hint",
             Self::Version => "app.settings.version.hint",
+            Self::Repositories => "app.settings.repositories.hint",
             Self::Notices => "app.settings.notices.hint",
         }
     }
@@ -176,6 +186,23 @@ impl Setting {
                 "蓝牙",
             ],
             Self::Version => &["version", "build", "slimenrf", "版本"],
+            Self::Repositories => &[
+                "github",
+                "repository",
+                "source",
+                "application",
+                "receiver",
+                "tracker",
+                "firmware",
+                "bootloader",
+                "仓库",
+                "源码",
+                "应用",
+                "接收器",
+                "追踪器",
+                "固件",
+                "引导程序",
+            ],
             Self::Notices => &[
                 "license",
                 "licence",
@@ -292,14 +319,20 @@ fn setting_row(
                 .when(
                     matches!(
                         setting,
-                        Setting::Language | Setting::Appearance | Setting::Accent
+                        Setting::Language
+                            | Setting::Appearance
+                            | Setting::Accent
+                            | Setting::Repositories
                     ),
                     |control| control.w(rems(24.)),
                 )
                 .when(
                     !matches!(
                         setting,
-                        Setting::Language | Setting::Appearance | Setting::Accent
+                        Setting::Language
+                            | Setting::Appearance
+                            | Setting::Accent
+                            | Setting::Repositories
                     ),
                     |control| control.w_48(),
                 )
@@ -732,6 +765,85 @@ impl Workbench {
             Setting::Version => div()
                 .text_sm()
                 .child(env!("CARGO_PKG_VERSION"))
+                .into_any_element(),
+            Setting::Repositories => div()
+                .id("settings-repositories")
+                .role(gpui_kit::Role::Group)
+                .aria_label(tr(setting.title_key()))
+                .test_support()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_wrap()
+                .justify_end()
+                .gap_2()
+                .children(
+                    [
+                        (
+                            "settings-repository-application",
+                            "app.settings.repositories.application",
+                            "https://github.com/jitingcn/SlimeNRF-Helper",
+                        ),
+                        (
+                            "settings-repository-receiver",
+                            "app.settings.repositories.receiver",
+                            "https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver",
+                        ),
+                        (
+                            "settings-repository-tracker",
+                            "app.settings.repositories.tracker",
+                            "https://github.com/jitingcn/SlimeVR-Tracker-nRF",
+                        ),
+                        (
+                            "settings-repository-bootloader",
+                            "app.settings.repositories.bootloader",
+                            "https://github.com/jitingcn/Adafruit_nRF52_Bootloader",
+                        ),
+                    ]
+                    .into_iter()
+                    .zip(&self.settings.repository_focus)
+                    .map(|((id, label_key, url), focus)| {
+                        let focus = focus.reveal();
+                        let scroll = self.settings.scroll.clone();
+                        let label = tr(label_key);
+                        div()
+                            .id(id)
+                            .test_support()
+                            .min_w_0()
+                            .max_w_full()
+                            .track_focus(focus.scope())
+                            .on_prepaint(move |bounds, window, cx| {
+                                focus.reveal(bounds, &scroll, window, cx)
+                            })
+                            .child(
+                                Link::new("repository-link")
+                                    .href(url)
+                                    .accessibility_label(label.clone())
+                                    .open_with(|url, _, _, cx| cx.open_url(url))
+                                    .min_w_0()
+                                    .max_w_full()
+                                    .px_1()
+                                    .py_1()
+                                    .text_sm()
+                                    .whitespace_normal()
+                                    .text_color(cx.theme().link)
+                                    .text_decoration_1()
+                                    .text_decoration_color(cx.theme().link.opacity(0.5))
+                                    .border_1()
+                                    .border_color(cx.theme().border.opacity(0.))
+                                    .rounded_sm()
+                                    .cursor_pointer()
+                                    .hover(|style| {
+                                        style
+                                            .text_color(cx.theme().link.opacity(0.8))
+                                            .text_decoration_color(cx.theme().link)
+                                    })
+                                    .active(|style| style.text_color(cx.theme().link.opacity(0.6)))
+                                    .focus_visible(|style| style.border_color(cx.theme().ring))
+                                    .child(label),
+                            )
+                    }),
+                )
                 .into_any_element(),
             Setting::Notices => Button::new("open-notices")
                 .label(tr("app.settings.notices.open"))

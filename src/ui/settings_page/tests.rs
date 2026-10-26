@@ -308,6 +308,168 @@ fn middle_section_jumps_align_after_wheel_fractional_scale_and_error_header_chan
 }
 
 #[gpui_kit::test]
+fn repository_links_open_exact_urls_without_leaving_the_searched_about_section(
+    cx: &mut TestAppContext,
+) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 760.);
+    let (search_id, preferences) = cx
+        .update_window(fixture.handle, |_, window, cx| {
+            window.render_frame(cx);
+            window.click("nav-settings", cx);
+            window.click("settings-search", cx);
+            window.input("github", cx);
+            assert!(window.find("settings-repositories").visible());
+            assert!(window.try_find("settings-language").is_none());
+            window.click("settings-section-about", cx);
+            let workbench = fixture.workbench.read(cx);
+            (
+                workbench.settings.search.entity_id(),
+                workbench.preferences.clone(),
+            )
+        })
+        .unwrap();
+    settle_settings(cx, &fixture);
+    assert_eq!(cx.opened_url(), None);
+
+    for (id, url) in [
+        (
+            "settings-repository-application",
+            "https://github.com/jitingcn/SlimeNRF-Helper",
+        ),
+        (
+            "settings-repository-receiver",
+            "https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver",
+        ),
+        (
+            "settings-repository-tracker",
+            "https://github.com/jitingcn/SlimeVR-Tracker-nRF",
+        ),
+        (
+            "settings-repository-bootloader",
+            "https://github.com/jitingcn/Adafruit_nRF52_Bootloader",
+        ),
+    ] {
+        let previous_url = cx.opened_url();
+        cx.update_window(fixture.handle, |_, window, cx| {
+            assert!(window.find(id).visible());
+            window.hover(id, cx);
+        })
+        .unwrap();
+        assert_eq!(
+            cx.opened_url(),
+            previous_url,
+            "hovering {id} must not launch a browser"
+        );
+        cx.update_window(fixture.handle, |_, window, cx| {
+            window.click(id, cx);
+        })
+        .unwrap();
+        settle_settings(cx, &fixture);
+        assert_eq!(cx.opened_url().as_deref(), Some(url), "{id}");
+        cx.update_window(fixture.handle, |_, window, cx| {
+            let workbench = fixture.workbench.read(cx);
+            assert_eq!(workbench.settings.search.entity_id(), search_id);
+            assert_eq!(workbench.preferences, preferences);
+            assert!(!workbench.registry_is_open());
+            assert!(workbench.settings.selected == Section::About);
+            assert_eq!(window.find("settings-search").value(), Some("github"));
+            assert_eq!(window.find("settings-section-about").checked(), Some(true));
+            assert!(window.find("settings-repositories").visible());
+        })
+        .unwrap();
+    }
+
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.click("nav-home", cx);
+        window.click("nav-settings", cx);
+        assert_eq!(window.find("settings-search").value(), Some("github"));
+        assert_eq!(window.find("settings-section-about").checked(), Some(true));
+        assert!(window.find("settings-repositories").visible());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn repository_links_reveal_and_open_with_enter_at_minimum_width_and_zoom(cx: &mut TestAppContext) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 760., 360.);
+    let preferences = cx.update(|cx| {
+        gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
+        fixture.workbench.read(cx).preferences.clone()
+    });
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        window.click("settings-section-about", cx);
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
+    settings_key(cx, &fixture, "home");
+    cx.update_window(fixture.handle, |_, window, _| {
+        assert!(!window.find("settings-repository-application").visible());
+    })
+    .unwrap();
+    tab_to_setting(cx, &fixture, "settings-repository-application", "tab");
+    assert_eq!(cx.opened_url(), None);
+
+    for (ix, (id, url)) in [
+        (
+            "settings-repository-application",
+            "https://github.com/jitingcn/SlimeNRF-Helper",
+        ),
+        (
+            "settings-repository-receiver",
+            "https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver",
+        ),
+        (
+            "settings-repository-tracker",
+            "https://github.com/jitingcn/SlimeVR-Tracker-nRF",
+        ),
+        (
+            "settings-repository-bootloader",
+            "https://github.com/jitingcn/Adafruit_nRF52_Bootloader",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let previous_url = cx.opened_url();
+        if ix > 0 {
+            settings_key(cx, &fixture, "tab");
+        }
+        assert_setting_focus_visible(cx, &fixture, id);
+        assert_eq!(
+            cx.opened_url(),
+            previous_url,
+            "focusing {id} must not launch a browser"
+        );
+        cx.update_window(fixture.handle, |_, window, cx| {
+            let group = window.find("settings-repositories").bounds();
+            let link = window.find(id).bounds();
+            let viewport = fixture.workbench.read(cx).settings.scroll.bounds();
+            assert!(group.left() >= viewport.left());
+            assert!(group.right() <= viewport.right());
+            assert!(link.left() >= group.left());
+            assert!(link.right() <= group.right());
+        })
+        .unwrap();
+        settings_key(cx, &fixture, "enter");
+        assert_eq!(cx.opened_url().as_deref(), Some(url), "{id}");
+        assert_setting_focus_visible(cx, &fixture, id);
+        cx.update_window(fixture.handle, |_, window, cx| {
+            let workbench = fixture.workbench.read(cx);
+            assert_eq!(workbench.preferences, preferences);
+            assert!(!workbench.registry_is_open());
+            assert!(workbench.settings.selected == Section::About);
+            assert_eq!(window.find("settings-search").value(), Some(""));
+            assert_eq!(window.find("settings-section-about").checked(), Some(true));
+        })
+        .unwrap();
+    }
+}
+
+#[gpui_kit::test]
 fn tab_and_reverse_tab_reveal_real_controls_after_section_and_page_jumps(cx: &mut TestAppContext) {
     let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
     let fixture = fixture(cx, 1100., 620.);
@@ -355,6 +517,10 @@ fn tab_and_reverse_tab_reveal_real_controls_after_section_and_page_jumps(cx: &mu
         "settings-accent-sakura",
         "manage-devices",
         "advanced-features",
+        "settings-repository-application",
+        "settings-repository-receiver",
+        "settings-repository-tracker",
+        "settings-repository-bootloader",
         "open-notices",
     ] {
         settings_key(cx, &fixture, "tab");
@@ -362,6 +528,10 @@ fn tab_and_reverse_tab_reveal_real_controls_after_section_and_page_jumps(cx: &mu
     }
     settings_key(cx, &fixture, "end");
     for target in [
+        "settings-repository-bootloader",
+        "settings-repository-tracker",
+        "settings-repository-receiver",
+        "settings-repository-application",
         "advanced-features",
         "manage-devices",
         "settings-accent-sakura",

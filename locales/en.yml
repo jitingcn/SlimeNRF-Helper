@@ -34,6 +34,13 @@ app:
     version:
       title: "SlimeNRF Helper"
       hint: "Installed version"
+    repositories:
+      title: "Project repositories"
+      hint: "View the application and firmware source on GitHub in your browser."
+      application: "Application"
+      receiver: "Receiver firmware"
+      tracker: "Tracker firmware"
+      bootloader: "Bootloader"
     accent:
       amber: "Amber"
       blue: "Blue"

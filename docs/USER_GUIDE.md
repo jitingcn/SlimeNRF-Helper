@@ -360,6 +360,7 @@ Open **Settings** at the bottom of the sidebar.
 - Choose **General**, **Appearance**, **Devices**, or **About** to jump to that group.
 - Under **Language / 语言**, choose **English** or **简体中文**. Choose **Light** or **Dark** directly. **Theme color** shows every name with a color swatch; checkmarks identify the selected choices. Use Tab or Shift+Tab to move between choices and Enter or Space to select. Drag the divider to resize the settings navigation.
 - Open **Manage devices** in **Devices** to edit remembered hardware. Open **View licenses and notices** in **About** to read the bundled notices.
+- Under **About**, use **Project repositories** to open the application, receiver firmware, tracker firmware, or bootloader repository in your browser.
 
 Language, light or dark appearance, theme color, and advanced features take effect immediately. Preferences are saved in the platform's user configuration directory, not the source directory. Without an explicit language choice, Chinese systems use Simplified Chinese and other systems use English. An explicit setting takes precedence. Damaged, unsupported, unreadable, oversized, or non-regular preference inputs are not overwritten. If saving fails, the existing preference file remains intact. The application reports that the change applies only to this session and offers a retry. Switching pages or themes does not recreate communication sessions.
 

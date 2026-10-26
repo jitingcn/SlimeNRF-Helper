@@ -34,6 +34,13 @@ app:
     version:
       title: "SlimeNRF Helper"
       hint: "当前版本"
+    repositories:
+      title: "项目仓库"
+      hint: "在浏览器中查看 GitHub 上的应用与固件源码。"
+      application: "应用"
+      receiver: "接收器固件"
+      tracker: "追踪器固件"
+      bootloader: "引导程序"
     accent:
       amber: "琥珀色"
       blue: "蓝色"
