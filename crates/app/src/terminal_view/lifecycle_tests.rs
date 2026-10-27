@@ -193,8 +193,16 @@ impl Fixture {
     }
 
     fn settle(&self, cx: &mut TestAppContext) {
+        self.settle_frames(cx, Self::draw);
+    }
+
+    fn settle_natural(&self, cx: &mut TestAppContext) {
+        self.settle_frames(cx, Self::draw_natural);
+    }
+
+    fn settle_frames(&self, cx: &mut TestAppContext, draw: fn(&Self, &mut TestAppContext)) {
         for _ in 0..MAX_LINES + 10 {
-            self.draw(cx);
+            draw(self, cx);
             let delivered = self.deliver(cx);
             assert!(delivered <= 1, "a transcript must coalesce frame callbacks");
             if delivered == 0 {
@@ -876,6 +884,141 @@ fn native_follow_reaches_the_reflowed_bottom_after_resize_without_output(cx: &mu
         top
     });
     fixture.assert_coordinates(cx, top);
+}
+
+#[gpui_kit::test]
+fn native_resuming_follow_reaches_the_tail_without_new_output_and_keeps_selection(
+    cx: &mut TestAppContext,
+) {
+    cx.update(gpui_kit::init);
+    for soft_wrap in [false, true] {
+        for scale in [1., 1.25] {
+            let fixture = Fixture::new(
+                cx,
+                &short_lines(50),
+                soft_wrap,
+                false,
+                scale,
+                size(px(160.), px(200.)),
+            );
+            fixture.settle_natural(cx);
+            fixture.focus(cx);
+            fixture.press(cx, "secondary-home");
+            for _ in 0..5 {
+                fixture.press(cx, "shift-right");
+            }
+            fixture.settle_natural(cx);
+            fixture.wheel(cx, -320.);
+            fixture.settle_natural(cx);
+            let (revision, selected, endpoints, paused) = fixture.inspect(cx, |view| {
+                let state = view.state.borrow();
+                (
+                    view.buffer.revision(),
+                    state.selected_text(),
+                    state.endpoints,
+                    view.scroll.offset().y,
+                )
+            });
+            assert_eq!(selected.as_deref(), Some("abcde"));
+            assert!(
+                paused < px(0.),
+                "fixture must be scrolled before resuming Follow"
+            );
+            fixture
+                .window
+                .update(cx, |view, _, cx| {
+                    view.follow = true;
+                    view.scroll.scroll_to_bottom();
+                    cx.notify();
+                })
+                .unwrap();
+            fixture.settle_natural(cx);
+            let tail = fixture.inspect(cx, |view| {
+                let state = view.state.borrow();
+                let expected = -(state.height() - view.scroll.bounds().size.height);
+                assert!(
+                    f32::from(view.scroll.offset().y - expected).abs() < 0.01,
+                    "Follow must reach the current tail without output: wrap={soft_wrap}, scale={scale}"
+                );
+                assert_eq!(view.buffer.revision(), revision);
+                assert_eq!(state.selected_text(), selected);
+                assert_eq!(state.endpoints, endpoints);
+                view.scroll.offset().y
+            });
+            assert!(
+                tail < paused,
+                "resuming Follow must leave the paused viewport"
+            );
+
+            // Follow is a one-shot transition, not a reason to undo the next
+            // deliberate wheel step on otherwise unchanged geometry.
+            fixture.wheel(cx, 60.);
+            fixture.settle_natural(cx);
+            fixture.inspect(cx, |view| {
+                assert!(view.follow);
+                assert!(
+                    f32::from(view.scroll.offset().y - (tail + px(60.))).abs() < 0.01,
+                    "a later wheel step must preserve its exact delta"
+                );
+                assert_eq!(view.buffer.revision(), revision);
+                assert_eq!(view.state.borrow().selected_text(), selected);
+            });
+        }
+    }
+}
+
+#[gpui_kit::test]
+fn native_wheel_before_follow_correction_keeps_the_later_user_intent(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let fixture = Fixture::new(
+        cx,
+        &short_lines(50),
+        true,
+        false,
+        1.25,
+        size(px(640.), px(200.)),
+    );
+    fixture.settle_natural(cx);
+    fixture.wheel(cx, -320.);
+    fixture.settle_natural(cx);
+    // Exercise the presentation's deferred correction before the owner or
+    // parent div applies an immediate bottom offset.
+    fixture
+        .window
+        .update(cx, |view, _, cx| {
+            view.follow = true;
+            cx.notify();
+        })
+        .unwrap();
+    fixture.draw_natural(cx);
+    let tail = fixture.inspect(cx, |view| {
+        let state = view.state.borrow();
+        let pending = state
+            .pending
+            .as_ref()
+            .expect("resuming Follow queues a tail correction");
+        assert_eq!(pending.expected_offset, view.scroll.offset());
+        assert!(pending.follow);
+        assert!(pending.target_offset.y < pending.expected_offset.y);
+        pending.target_offset.y
+    });
+    fixture
+        .window
+        .update(cx, |view, _, cx| {
+            view.follow = false;
+            cx.notify();
+        })
+        .unwrap();
+    fixture.wheel(cx, 30.);
+    fixture.settle_natural(cx);
+    fixture.inspect(cx, |view| {
+        assert!(!view.follow);
+        assert!(
+            f32::from(view.scroll.offset().y - (tail + px(30.))).abs() < 0.01,
+            "the stale Follow correction must preserve the later wheel delta"
+        );
+        assert!(view.state.borrow().pending.is_none());
+    });
 }
 
 #[gpui_kit::test]

@@ -362,6 +362,7 @@ mod tests {
             viewport: Bounds::new(point(px(0.), px(0.)), size(px(100.), px(40.))),
             visible: 0..1,
             offset: point(px(0.), px(0.)),
+            follow: false,
             height: state.height(),
         });
         (buffer, state, ScrollHandle::default())

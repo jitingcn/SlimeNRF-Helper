@@ -579,6 +579,7 @@ struct PresentedFrame {
     viewport: Bounds<Pixels>,
     visible: Range<usize>,
     offset: Point<Pixels>,
+    follow: bool,
     height: Pixels,
 }
 
@@ -835,6 +836,10 @@ impl Element for TerminalTranscript {
         let paint_region = window.content_mask().bounds;
         let offset = self.viewport.scroll.offset();
         let unscrolled_origin = bounds.origin - window.pixel_snap_point(offset);
+        // A newly enabled Follow is an explicit request even when no text or
+        // geometry changed; later frames must still preserve user scrolling.
+        let follow_resumed =
+            self.viewport.follow && state.presented.as_ref().is_some_and(|frame| !frame.follow);
         let presented_top = state.presented_top(*requested_offset);
         let prior_anchor = if state
             .presented
@@ -893,7 +898,7 @@ impl Element for TerminalTranscript {
                 top,
                 viewport.size.height,
                 self.viewport.follow,
-                geometry_changed,
+                geometry_changed || follow_resumed,
             );
             target_offset = point(
                 if self.viewport.soft_wrap {
@@ -988,6 +993,7 @@ impl Element for TerminalTranscript {
             viewport,
             visible: rows,
             offset,
+            follow: self.viewport.follow,
             height: state.height(),
         });
         state.extent_dirty = false;
@@ -1141,6 +1147,7 @@ mod tests {
             viewport: Bounds::new(point(px(0.), px(0.)), size(px(100.), px(40.))),
             visible,
             offset: point(px(0.), px(-top)),
+            follow: false,
             height: state.height(),
         });
     }

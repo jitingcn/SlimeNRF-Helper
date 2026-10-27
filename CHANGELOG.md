@@ -22,6 +22,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- Resuming terminal Follow immediately shows the latest line even without new output, while preserving deliberate scrolling and selection.
 - Tracker cards retain equal widths at fractional display scaling, and their content no longer shifts when activity changes.
 - Settings navigation remains scrollable and keyboard-accessible when the available window height is reduced or interface text is enlarged.
 - Settings and other scrollable pages keep scrollbar tracks and pointer hit areas fixed to their viewports, so thumb positions and drag ranges remain aligned with the visible content.
