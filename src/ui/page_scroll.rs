@@ -2,7 +2,7 @@ use gpui_kit::base::{ElementExt as _, InteractiveElementExt as _};
 use gpui_kit::component::{
     ActiveTheme,
     input::{MovePageDown, MovePageUp},
-    scroll::ScrollableElement,
+    scroll::Scrollbar,
 };
 use gpui_kit::{
     AnyElement, App, Bounds, ElementId, FocusHandle, IntoElement, KeyDownEvent, Pixels, RenderOnce,
@@ -232,9 +232,6 @@ impl RenderOnce for PageScroll {
             .border_color(cx.theme().border.opacity(0.))
             .flex()
             .flex_col()
-            .overflow_y_scroll()
-            .lock_scroll_axis()
-            .track_scroll(&scroll)
             .when(self.focus_scope, |this| {
                 this.track_focus(&self.focus)
                     .focus_visible(|style| style.border_color(cx.theme().ring))
@@ -246,8 +243,27 @@ impl RenderOnce for PageScroll {
                         handle_page_key(event, &keyboard_scroll, window, cx);
                     })
             })
-            .child(self.content)
-            .vertical_scrollbar(&scroll)
+            .child(
+                div()
+                    .id((ElementId::from(self.id), "area"))
+                    .size_full()
+                    .flex_1()
+                    .min_w_0()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .overflow_y_scroll()
+                    .lock_scroll_axis()
+                    .track_scroll(&scroll)
+                    .child(self.content),
+            )
+            // Keep the scrollbar outside the translated scrolling children.
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .child(Scrollbar::vertical(&scroll)),
+            )
     }
 }
 

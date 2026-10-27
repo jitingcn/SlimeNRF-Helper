@@ -16,7 +16,7 @@ use gpui_kit::component::{
     h_resizable,
     input::{Input, InputEvent, InputState, MovePageDown, MovePageUp},
     resizable_panel,
-    sidebar::{Sidebar, SidebarMenu},
+    scroll::Scrollbar,
     switch::Switch,
 };
 use gpui_kit::{
@@ -66,6 +66,7 @@ pub(super) struct SettingsUiState {
     search: Entity<InputState>,
     selected: Section,
     scroll: ScrollHandle,
+    navigation_scroll: ScrollHandle,
     anchors: [ScrollAnchor; 4],
     layout: Entity<ResizableState>,
     control_focus: [Option<ControlFocus>; 8],
@@ -101,6 +102,7 @@ impl SettingsUiState {
                 .then(|| ControlFocus::new(window, cx))
             }),
             repository_focus: std::array::from_fn(|_| ControlFocus::new(window, cx)),
+            navigation_scroll: ScrollHandle::new(),
             scroll,
             layout: cx.new(|_| ResizableState::default()),
             _search_subscription: subscription,
@@ -460,7 +462,8 @@ impl Workbench {
                     .iter()
                     .enumerate()
                     .any(|(ix, setting)| setting.section() == section && matching[ix]);
-            navigation = navigation.child(
+            navigation = navigation.child(reveal_on_focus(
+                section.id(),
                 Button::new(section.id())
                     .label(tr(section.title_key()))
                     .w_full()
@@ -479,14 +482,32 @@ impl Workbench {
                         this.page_focus.focus(window, cx);
                         cx.notify();
                     })),
-            );
+                &self.settings.navigation_scroll,
+            ));
         }
-        let sidebar = Sidebar::<SidebarMenu>::new("settings-sidebar")
-            .w_full()
-            .border_0()
-            .collapsible(false)
-            .collapsed(false)
-            .header(navigation);
+        let sidebar = div()
+            .id("settings-sidebar")
+            .size_full()
+            .min_h_0()
+            .relative()
+            .bg(cx.theme().tokens.sidebar)
+            .text_color(cx.theme().sidebar_foreground)
+            .child(
+                div()
+                    .id("settings-navigation-scroll")
+                    .size_full()
+                    .min_w_0()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .track_scroll(&self.settings.navigation_scroll)
+                    .child(navigation.p_3()),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .child(Scrollbar::vertical(&self.settings.navigation_scroll)),
+            );
         let mut content = div()
             .w_full()
             .min_w_0()

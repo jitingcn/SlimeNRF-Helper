@@ -13,6 +13,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - Main, license notices, RSSI analysis, and temperature calibration analysis windows now use theme-aware GPUI Kit title bars instead of system title-bar styling, while preserving window controls and shutdown cleanup.
 
+### Fixed
+
+- Settings navigation remains scrollable and keyboard-accessible when the available window height is reduced or interface text is enlarged.
+- Settings and other scrollable pages keep scrollbar tracks and pointer hit areas fixed to their viewports, so thumb positions and drag ranges remain aligned with the visible content.
+
 ## [0.1.1] - 2026-10-26
 
 ### Added

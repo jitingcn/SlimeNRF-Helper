@@ -5,8 +5,10 @@ use crate::{
 };
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, Bounds, Entity, TestAppContext, WindowBounds, WindowOptions,
-    px, size, test::TestWindowExt as _,
+    AnyWindowHandle, App, AppContext as _, Bounds, Entity, MouseButton, PlatformInput, ScrollDelta,
+    ScrollEvent, ScrollHandle, TestAppContext, Window, WindowBounds, WindowOptions, point, px,
+    size,
+    test::{TestEventExt as _, TestWindowExt as _},
 };
 
 struct SettingsFixture {
@@ -159,6 +161,98 @@ fn settings_key(cx: &mut TestAppContext, fixture: &SettingsFixture, key: &str) {
     })
     .unwrap();
     settle_settings(cx, fixture);
+}
+
+fn assert_scrollbar_reaches_both_edges(
+    window: &mut Window,
+    cx: &mut App,
+    scroll: &ScrollHandle,
+    region: &'static str,
+) {
+    let viewport = scroll.bounds();
+    let extent = scroll.max_offset().y;
+    assert!(extent > px(0.), "{region} must overflow");
+    let position = viewport.center();
+    window.pointer_move(position, None, cx);
+    window.dispatch_event(
+        PlatformInput::Scroll(ScrollEvent {
+            position,
+            delta: ScrollDelta::Pixels(point(px(0.), -extent * 0.5)),
+            ..Default::default()
+        }),
+        cx,
+    );
+    window.render_frame(cx);
+    assert!(
+        scroll.offset().y < px(0.) && scroll.offset().y > -extent,
+        "{region} must start the pointer test between the scroll edges"
+    );
+    assert_eq!(
+        scroll.bounds(),
+        viewport,
+        "scrolling must not move the viewport"
+    );
+
+    let x = viewport.right() - px(8.);
+    let track_bottom = point(x, viewport.bottom() - px(1.));
+    window.pointer_move(track_bottom, None, cx);
+    window.pointer_down(track_bottom, MouseButton::Left, cx);
+    window.pointer_up(track_bottom, MouseButton::Left, cx);
+    assert!(
+        f32::from(scroll.offset().y + extent).abs() < 0.001,
+        "the track at the viewport's bottom must reach the content end within floating-point precision"
+    );
+    assert_eq!(scroll.bounds(), viewport);
+
+    let thumb_bottom = point(x, viewport.bottom() - px(12.));
+    let track_top = point(x, viewport.top() + px(4.));
+    window.pointer_move(thumb_bottom, None, cx);
+    window.pointer_down(thumb_bottom, MouseButton::Left, cx);
+    window.pointer_move(track_top, Some(MouseButton::Left), cx);
+    window.pointer_up(track_top, MouseButton::Left, cx);
+    assert_eq!(
+        scroll.offset().y,
+        px(0.),
+        "dragging the thumb to the viewport's top must reach the content start"
+    );
+    assert_eq!(scroll.bounds(), viewport);
+}
+
+#[gpui_kit::test]
+fn settings_scrollbars_track_viewports_during_pointer_navigation(cx: &mut TestAppContext) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 760., 360.);
+    cx.simulate_window_scale_factor_change(fixture.handle, 1.25);
+    cx.update(|cx| {
+        gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
+    });
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let body = fixture.workbench.read(cx).settings.scroll.clone();
+        let navigation = fixture
+            .workbench
+            .read(cx)
+            .settings
+            .navigation_scroll
+            .clone();
+        assert_scrollbar_reaches_both_edges(window, cx, &body, "settings body");
+        assert_scrollbar_reaches_both_edges(window, cx, &navigation, "settings navigation");
+        assert!(
+            window
+                .find((gpui_kit::ElementId::from(Section::General.id()), "anchor"))
+                .visible(),
+            "the first settings section must be visible at the top of the body"
+        );
+        assert!(window.find("settings-search").visible());
+        window.click("settings-search", cx);
+        assert_eq!(window.find("settings-search").focused(), Some(true));
+    })
+    .unwrap();
 }
 
 fn settle_settings(cx: &mut TestAppContext, fixture: &SettingsFixture) {
@@ -391,6 +485,43 @@ fn repository_links_open_exact_urls_without_leaving_the_searched_about_section(
 }
 
 #[gpui_kit::test]
+fn minimum_height_sidebar_reveals_sections_during_keyboard_navigation(cx: &mut TestAppContext) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 760., 360.);
+    cx.update(|cx| {
+        gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
+    });
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        window.click("settings-search", cx);
+    })
+    .unwrap();
+    for _ in 0..5 {
+        settings_key(cx, &fixture, "tab");
+    }
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let about = window.find("settings-section-about");
+        let viewport = fixture
+            .workbench
+            .read(cx)
+            .settings
+            .navigation_scroll
+            .bounds();
+        assert_eq!(about.focused(), Some(true));
+        assert!(about.bounds().top() >= viewport.top());
+        assert!(about.bounds().bottom() <= viewport.bottom());
+    })
+    .unwrap();
+    settings_key(cx, &fixture, "enter");
+    cx.update_window(fixture.handle, |_, window, cx| {
+        assert!(fixture.workbench.read(cx).settings.selected == Section::About);
+        assert_eq!(window.find("settings-section-about").checked(), Some(true));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 fn repository_links_reveal_and_open_with_enter_at_minimum_width_and_zoom(cx: &mut TestAppContext) {
     let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
     let fixture = fixture(cx, 760., 360.);
@@ -401,6 +532,16 @@ fn repository_links_reveal_and_open_with_enter_at_minimum_width_and_zoom(cx: &mu
     cx.update_window(fixture.handle, |_, window, cx| {
         window.render_frame(cx);
         window.click("nav-settings", cx);
+        window.scroll(
+            "settings-search",
+            gpui_kit::ScrollDelta::Pixels(gpui_kit::point(px(0.), px(-1000.))),
+            cx,
+        );
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        assert!(window.find("settings-section-about").visible());
         window.click("settings-section-about", cx);
     })
     .unwrap();
