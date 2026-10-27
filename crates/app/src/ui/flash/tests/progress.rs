@@ -1,6 +1,30 @@
 use super::support::target;
 use crate::ui::flash::{Action, FlashState, OtaQueryPlan};
 use crate::update::UpdateOutcome;
+use crate::{
+    app_runtime::AppRuntime,
+    firmware_update::{ResultIdentity, UpdateCompletion},
+    settings::{Language, Preferences},
+    ui::{
+        FeaturePage, Workbench,
+        flash::{ActivityKind, Mode, Payload, ResultTarget},
+        test_support::{UiTestSession, offline_workbench},
+    },
+    update::{Job, Progress},
+};
+use gpui_kit::{
+    AnyWindowHandle, AppContext as _, Bounds, Context, Entity, IntoElement, Pixels, Render,
+    ScrollDelta, ScrollHandle, SharedString, TestAppContext, Window, WindowBounds, WindowOptions,
+    div, point,
+    prelude::*,
+    px, size,
+    test::{TestSupportExt as _, TestWindowExt as _},
+};
+use std::{
+    path::PathBuf,
+    sync::{atomic::Ordering, mpsc},
+    time::Duration,
+};
 
 fn ota_progress(target: &crate::esb_ota::Target) -> crate::update::OtaTargetProgress {
     crate::update::OtaTargetProgress {
@@ -530,5 +554,412 @@ fn uf2_pending_details_retain_counts_and_os_diagnostic_for_each_finalization_sta
         assert!(details.contains("102400/102400"), "{details}");
         assert!(details.contains(&report.diagnostic), "{details}");
         assert!(details.contains("433"), "{details}");
+    }
+}
+
+struct ProgressHarness {
+    workbench: Entity<Workbench>,
+    scroll: ScrollHandle,
+}
+
+impl Render for ProgressHarness {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.workbench.update(cx, |this, cx| {
+            let mut content = div()
+                .id("progress-fixture-viewport")
+                .test_support()
+                .size_full()
+                .min_w_0()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .overflow_y_scroll()
+                .overflow_x_hidden()
+                .track_scroll(&self.scroll);
+            if this.flash.shows_activity(Mode::Uf2) {
+                content = content.child(this.flash_activity(cx));
+            }
+            if this.flash.shows_results(Mode::Uf2) {
+                content = content.child(this.flash_results(cx));
+            }
+            div().size_full().p_3().child(content)
+        })
+    }
+}
+
+struct ProgressFixture {
+    window: AnyWindowHandle,
+    harness: Entity<ProgressHarness>,
+    workbench: Entity<Workbench>,
+    scroll: ScrollHandle,
+}
+
+fn progress_fixture(
+    cx: &mut TestAppContext,
+    runtime: &AppRuntime,
+    preferences_path: PathBuf,
+) -> ProgressFixture {
+    let executor = runtime.executor();
+    let scroll = ScrollHandle::new();
+    let view_scroll = scroll.clone();
+    let (window, harness) = cx.update(|cx| {
+        gpui_kit::open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    Default::default(),
+                    size(px(740.), px(540.)),
+                ))),
+                ..Default::default()
+            },
+            cx,
+            move |window, cx| {
+                let workbench = cx.new(|cx| {
+                    let mut this = offline_workbench(
+                        window,
+                        cx,
+                        crate::sessions::SessionManager::new(),
+                        executor,
+                    );
+                    this.active_page = FeaturePage::Uf2;
+                    this.preferences_io =
+                        crate::ui::preferences::PreferenceIo::for_test(preferences_path);
+                    this
+                });
+                cx.new(|_| ProgressHarness {
+                    workbench,
+                    scroll: view_scroll,
+                })
+            },
+        )
+        .expect("open the production firmware activity and results components")
+    });
+    let workbench = cx.update(|cx| harness.read(cx).workbench.clone());
+    cx.update_window(window, |_, window, _| window.activate_window())
+        .expect("activate the firmware fixture window");
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        assert!(window.is_window_active(), "fixture window must be active");
+        window.render_frame(cx);
+    })
+    .expect("render the activated firmware fixture");
+    ProgressFixture {
+        window,
+        harness,
+        workbench,
+        scroll,
+    }
+}
+
+fn settle_progress(cx: &mut TestAppContext, fixture: &ProgressFixture) {
+    fixture.harness.update(cx, |_, cx| cx.notify());
+    for _ in 0..2 {
+        cx.run_until_parked();
+        cx.update_window(fixture.window, |_, window, cx| {
+            window.simulate_next_frame(cx);
+            window.render_frame(cx);
+        })
+        .expect("settle firmware fixture frames");
+    }
+}
+
+fn assert_horizontal_containment(
+    window: &Window,
+    outer: Bounds<Pixels>,
+    inner: Bounds<Pixels>,
+    context: &str,
+) {
+    assert!(
+        inner.size.width > px(0.)
+            && window.pixel_snap(inner.left()) >= window.pixel_snap(outer.left())
+            && window.pixel_snap(inner.right()) <= window.pixel_snap(outer.right()),
+        "{context} must fit horizontally: outer {outer:?}, inner {inner:?}",
+    );
+}
+
+fn assert_vertical_containment(
+    window: &Window,
+    outer: Bounds<Pixels>,
+    inner: Bounds<Pixels>,
+    context: &str,
+) {
+    assert!(
+        inner.size.height > px(0.)
+            && window.pixel_snap(inner.top()) >= window.pixel_snap(outer.top())
+            && window.pixel_snap(inner.bottom()) <= window.pixel_snap(outer.bottom()),
+        "{context} must fit vertically: outer {outer:?}, inner {inner:?}",
+    );
+}
+
+#[gpui_kit::test]
+fn synthetic_uf2_progress_cancellation_and_results_survive_locales_and_resize(
+    cx: &mut TestAppContext,
+) {
+    // The runtime outlives the session's real window/context cleanup, even on unwind.
+    let runtime = AppRuntime::new().expect("create isolated I/O runtime");
+    let private_preferences = tempfile::tempdir().expect("create isolated preference directory");
+    let _ui_session = UiTestSession::new(cx);
+    let fixture = progress_fixture(
+        cx,
+        &runtime,
+        private_preferences.path().join("preferences.json"),
+    );
+    cx.simulate_window_scale_factor_change(fixture.window, 1.25);
+
+    // Inspect only private temporary markers; neither discovery nor any firmware write runs.
+    let directories: Vec<_> = (0..3)
+        .map(|_| tempfile::tempdir().expect("create synthetic UF2 directory"))
+        .collect();
+    let volumes: Vec<_> = directories
+        .iter()
+        .enumerate()
+        .map(|(index, directory)| {
+            std::fs::write(
+                directory.path().join("INFO_UF2.TXT"),
+                "Board-ID: synthetic\n",
+            )
+            .expect("write synthetic UF2 marker");
+            let mut volume = crate::uf2::inspect_volume(directory.path(), "INFO_UF2.TXT")
+                .expect("freeze synthetic UF2 identity");
+            // These are presentation-only names; the worker never accesses the paths.
+            volume.label = format!("Synthetic target {}", index + 1);
+            volume.mount = PathBuf::from(format!("fixture/target-{}", index + 1));
+            volume
+        })
+        .collect();
+    let ids: Vec<_> = volumes
+        .iter()
+        .map(|volume| SharedString::from(format!("firmware-result-{}", volume.identity)))
+        .collect();
+    let details_id = SharedString::from(format!("firmware-result-details-{}", volumes[1].identity));
+    let diagnostic = "The synthetic target disconnected after the bytes were submitted; verify the firmware version before retrying. "
+        .repeat(12);
+    let mut report = uf2_pending_report();
+    report.diagnostic = diagnostic.clone();
+    let outcomes = [
+        UpdateOutcome::Completed,
+        UpdateOutcome::Uf2CopyUnconfirmed(report),
+        UpdateOutcome::Failed("Synthetic target disconnected before the copy completed".into()),
+    ];
+
+    for (language, cancel_label, dismiss_label) in [
+        (Language::English, "Cancel", "Dismiss results"),
+        (Language::SimplifiedChinese, "取消", "关闭结果"),
+    ] {
+        let preferences = Preferences {
+            language,
+            ..Preferences::default()
+        };
+        cx.update(|cx| {
+            crate::ui::theme::apply(&preferences, cx);
+            gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
+        });
+        let expected: Vec<_> = volumes
+            .iter()
+            .cloned()
+            .zip(outcomes.iter().cloned())
+            .map(|(volume, outcome)| (ResultTarget::from(ResultIdentity::Uf2(volume)), outcome))
+            .collect();
+        let worker_results: Vec<_> = volumes
+            .iter()
+            .cloned()
+            .zip(outcomes.iter().cloned())
+            .map(|(volume, outcome)| (ResultIdentity::Uf2(volume), outcome))
+            .collect();
+        let (published, progress_published) = mpsc::channel();
+        let (cancelled, cancel_observed) = mpsc::channel();
+        let (release, wait_for_release) = mpsc::channel();
+        let job = Job::start(move |cancel, emit| {
+            emit(Progress::bytes("Writing test.uf2", 65536, 102400));
+            let _ = published.send(());
+            while !cancel.load(Ordering::Acquire) {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            let _ = cancelled.send(());
+            wait_for_release
+                .recv_timeout(Duration::from_secs(5))
+                .map_err(|_| "synthetic worker was not released".to_owned())?;
+            Ok(Payload::Update(UpdateCompletion::Results(worker_results)))
+        })
+        .expect("start synthetic held firmware job");
+        fixture.workbench.update(cx, |this, cx| {
+            this.preferences = preferences;
+            this.flash = FlashState {
+                activity_origin: Mode::Uf2,
+                operation_origin: Mode::Uf2,
+                activity_kind: ActivityKind::Operation,
+                result_success: "firmware.result.copy_completed",
+                job: Some(job),
+                ..FlashState::default()
+            };
+            cx.notify();
+        });
+        progress_published
+            .recv_timeout(Duration::from_secs(3))
+            .expect("synthetic worker publishes transfer progress");
+        fixture.workbench.update(cx, |this, cx| {
+            assert!(this.poll_flash());
+            assert!(this.flash.running_operation(Mode::Uf2));
+            assert_eq!(
+                this.flash
+                    .job
+                    .as_ref()
+                    .unwrap()
+                    .progress
+                    .as_ref()
+                    .unwrap()
+                    .completed,
+                65536
+            );
+            assert!(this.flash.results.is_empty());
+            cx.notify();
+        });
+
+        cx.simulate_window_resize(fixture.window, size(px(740.), px(540.)));
+        fixture.scroll.set_offset(Default::default());
+        settle_progress(cx, &fixture);
+        let wide = cx
+            .update_window(fixture.window, |_, window, _| {
+                let viewport = window.find("progress-fixture-viewport").bounds();
+                let message = window.find("flash-progress-message");
+                let cancel = window.find("flash-cancel");
+                assert_eq!(window.rem_size(), px(20.), "{language:?}");
+                assert_eq!(cancel.label(), Some(cancel_label), "{language:?}");
+                assert!(message.visible() && cancel.visible(), "{language:?}");
+                assert_horizontal_containment(window, viewport, message.bounds(), "progress");
+                assert_horizontal_containment(window, viewport, cancel.bounds(), "cancel");
+                assert_vertical_containment(window, viewport, cancel.bounds(), "cancel");
+                assert!(message.bounds().bottom() <= cancel.bounds().top());
+                assert!(window.try_find("flash-results-panel").is_none());
+                viewport.size.width
+            })
+            .expect("inspect wide transferring layout");
+
+        // This intentionally stresses the component below the application's minimum window.
+        cx.simulate_window_resize(fixture.window, size(px(420.), px(360.)));
+        settle_progress(cx, &fixture);
+        cx.update_window(fixture.window, |_, window, cx| {
+            let viewport = window.find("progress-fixture-viewport").bounds();
+            let message = window.find("flash-progress-message");
+            let cancel = window.find("flash-cancel");
+            assert!(viewport.size.width < wide, "{language:?}");
+            assert_eq!(cancel.label(), Some(cancel_label), "{language:?}");
+            assert!(message.visible() && cancel.visible(), "{language:?}");
+            assert_horizontal_containment(window, viewport, message.bounds(), "narrow progress");
+            assert_horizontal_containment(window, viewport, cancel.bounds(), "narrow cancel");
+            assert_vertical_containment(window, viewport, cancel.bounds(), "narrow cancel");
+            assert!(message.bounds().bottom() <= cancel.bounds().top());
+            window.click("flash-cancel", cx);
+        })
+        .expect("click the real narrow-layout cancel button");
+        cancel_observed
+            .recv_timeout(Duration::from_secs(3))
+            .expect("the actual worker receives cancellation");
+        fixture.workbench.update(cx, |this, cx| {
+            assert!(this.poll_flash());
+            assert!(
+                this.flash.job.is_some() && this.flash.running_operation(Mode::Uf2),
+                "cancellation must not release the still-held worker"
+            );
+            assert!(this.flash.results.is_empty());
+            cx.notify();
+        });
+        release.send(()).expect("release the synthetic worker");
+        fixture.workbench.update(cx, |this, cx| {
+            crate::sessions::test_support::until(|| {
+                this.poll_flash();
+                this.flash.job.is_none()
+            });
+            assert!(!this.flash.running_operation(Mode::Uf2));
+            assert!(!this.flash.shows_activity(Mode::Uf2));
+            assert!(
+                this.flash.last_progress.is_none(),
+                "UF2 results replace Writing"
+            );
+            assert!(this.flash.shows_results(Mode::Uf2));
+            assert_eq!(this.flash.results, expected);
+            assert!(this.flash.volume_scan.is_none());
+            assert!(!this.flash.catalog_loaded);
+            cx.notify();
+        });
+        settle_progress(cx, &fixture);
+
+        cx.update_window(fixture.window, |_, window, cx| {
+            assert!(window.try_find("flash-progress-message").is_none());
+            assert!(window.try_find("flash-cancel").is_none());
+            let viewport = window.find("progress-fixture-viewport").bounds();
+            let panel = window.find("flash-results-panel").bounds();
+            let dismiss = window.find("flash-results-dismiss");
+            let success = window.find(ids[0].clone()).bounds();
+            let pending = window.find(ids[1].clone()).bounds();
+            let details = window.find(details_id.clone()).bounds();
+            assert_eq!(dismiss.label(), Some(dismiss_label), "{language:?}");
+            assert_horizontal_containment(window, viewport, panel, "results panel");
+            assert_horizontal_containment(window, panel, dismiss.bounds(), "dismiss");
+            assert_vertical_containment(window, viewport, dismiss.bounds(), "dismiss");
+            for (name, bounds) in [
+                ("success", success),
+                ("pending", pending),
+                ("diagnostic", details),
+            ] {
+                assert_horizontal_containment(window, panel, bounds, name);
+            }
+            assert!(success.bottom() <= pending.top(), "{language:?}");
+            assert!(pending.bottom() <= details.top(), "{language:?}");
+            assert!(
+                details.size.height > success.size.height * 2.,
+                "the long diagnostic must wrap in the narrow results panel: {language:?}"
+            );
+
+            let extent = fixture.scroll.max_offset().y;
+            assert!(
+                extent > px(0.),
+                "long diagnostic must overflow the viewport"
+            );
+            window.scroll(
+                "progress-fixture-viewport",
+                ScrollDelta::Pixels(point(px(0.), -extent * 2.)),
+                cx,
+            );
+            assert!(fixture.scroll.offset().y < px(0.));
+            let viewport = window.find("progress-fixture-viewport").bounds();
+            let failed = window.find(ids[2].clone());
+            let panel = window.find("flash-results-panel").bounds();
+            let details = window.find(details_id.clone()).bounds();
+            assert_horizontal_containment(window, panel, failed.bounds(), "failure");
+            assert!(details.bottom() <= failed.bounds().top(), "{language:?}");
+            assert!(failed.visible(), "scrolling must reveal the failed result");
+            assert_vertical_containment(window, viewport, failed.bounds(), "scrolled failure");
+            window.scroll(
+                "progress-fixture-viewport",
+                ScrollDelta::Pixels(point(px(0.), extent * 2.)),
+                cx,
+            );
+            let dismiss = window.find("flash-results-dismiss");
+            assert!(dismiss.visible(), "scrolling back must reveal dismiss");
+            assert_vertical_containment(window, viewport, dismiss.bounds(), "restored dismiss");
+            window.click("flash-results-dismiss", cx);
+        })
+        .expect("scroll and dismiss actual mixed result components");
+        settle_progress(cx, &fixture);
+        fixture.workbench.read_with(cx, |this, _| {
+            assert!(this.flash.operation_results_dismissed);
+            assert!(!this.flash.shows_results(Mode::Uf2));
+            assert!(this.flash.last_progress.is_none());
+            assert_eq!(
+                this.flash.results, expected,
+                "dismissal must hide the results without erasing any outcomes"
+            );
+            assert!(matches!(
+                &this.flash.results[1].1,
+                UpdateOutcome::Uf2CopyUnconfirmed(report) if report.diagnostic == diagnostic
+            ));
+        });
+        cx.update_window(fixture.window, |_, window, _| {
+            assert!(window.try_find("flash-results-panel").is_none());
+            assert!(window.try_find("flash-results-dismiss").is_none());
+            assert!(window.try_find("flash-progress-message").is_none());
+        })
+        .expect("inspect dismissed results");
     }
 }

@@ -895,16 +895,19 @@ impl Workbench {
             );
         }
         if let Some(error) = &self.preferences_io.save_error {
+            let message =
+                rust_i18n::t!("app.settings.error.session_only", error = error).to_string();
             status = status
                 .child(
                     div()
+                        .id("settings-save-error")
+                        .role(gpui_kit::Role::Alert)
+                        .test_support()
+                        .aria_label(message.clone())
                         .text_sm()
                         .whitespace_normal()
                         .text_color(cx.theme().danger)
-                        .child(
-                            rust_i18n::t!("app.settings.error.session_only", error = error)
-                                .to_string(),
-                        ),
+                        .child(message),
                 )
                 .child(
                     Button::new("retry-save-preferences")

@@ -15,14 +15,24 @@ struct SettingsFixture {
     handle: AnyWindowHandle,
     workbench: Entity<Workbench>,
     directory: tempfile::TempDir,
-    _runtime: crate::app_runtime::AppRuntime,
+    _runtime: Option<crate::app_runtime::AppRuntime>,
 }
 
 fn fixture(cx: &mut TestAppContext, width: f32, height: f32) -> SettingsFixture {
-    let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("preferences.json");
     let runtime = crate::app_runtime::AppRuntime::new().unwrap();
     let executor = runtime.executor();
+    fixture_with_executor(cx, width, height, executor, Some(runtime))
+}
+
+fn fixture_with_executor(
+    cx: &mut TestAppContext,
+    width: f32,
+    height: f32,
+    executor: crate::app_runtime::Executor,
+    runtime: Option<crate::app_runtime::AppRuntime>,
+) -> SettingsFixture {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("preferences.json");
 
     let (handle, workbench) = cx.update(|cx| {
         gpui_kit::open_window(
@@ -908,8 +918,9 @@ fn named_accent_choices_wrap_inside_the_control_area_at_minimum_width_and_zoom(
 fn real_preference_controls_apply_immediately_and_save_only_to_the_private_store(
     cx: &mut TestAppContext,
 ) {
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
     let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
-    let fixture = fixture(cx, 1100., 760.);
+    let fixture = fixture_with_executor(cx, 1100., 760., runtime.executor(), None);
     cx.update_window(fixture.handle, |_, window, cx| {
         window.render_frame(cx);
         window.click("nav-settings", cx);
@@ -928,10 +939,20 @@ fn real_preference_controls_apply_immediately_and_save_only_to_the_private_store
             window.click("settings-search", cx);
             window.input("language", cx);
             let input_id = fixture.workbench.read(cx).settings.search.entity_id();
-            let choice = SettingsChoice::Language(language);
-            window.click(choice.id(), cx);
-            assert!(window.try_find("popup-menu").is_none());
-            assert_eq!(fixture.workbench.read(cx).preferences.language, language);
+            // The language handler starts real inventory discovery; initialize
+            // locale in memory for these geometry and rendering assertions.
+            let preferences = fixture.workbench.update(cx, |this, _| {
+                this.preferences.language = language;
+                this.preferences.clone()
+            });
+            super::theme::apply(&preferences, cx);
+            fixture.workbench.update(cx, |this, cx| {
+                this.refresh_input_placeholders(window, cx);
+                cx.notify();
+            });
+            window.render_frame(cx);
+            assert!(!fixture.workbench.read(cx).scanning_inventory);
+            assert!(fixture.workbench.read(cx).inventory_task.is_none());
             assert_eq!(
                 fixture.workbench.read(cx).settings.search.entity_id(),
                 input_id
@@ -962,23 +983,13 @@ fn real_preference_controls_apply_immediately_and_save_only_to_the_private_store
             }
         })
         .unwrap();
-        let choice = SettingsChoice::Language(language);
-        tab_to_setting(cx, &fixture, choice.id(), "tab");
-        settings_key(cx, &fixture, "space");
         cx.update_window(fixture.handle, |_, window, cx| {
-            assert_eq!(fixture.workbench.read(cx).preferences.language, language);
-            assert_eq!(window.find(choice.id()).checked(), Some(true));
             window.click("settings-search", cx);
             window.press("secondary-a", cx);
             window.press("backspace", cx);
         })
         .unwrap();
         settle_settings(cx, &fixture);
-        let stored: crate::settings::Preferences = serde_json::from_slice(
-            &std::fs::read(fixture.directory.path().join("preferences.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(stored.language, language);
     }
     cx.update_window(fixture.handle, |_, window, cx| {
         for appearance in [Appearance::Light, Appearance::Dark] {
@@ -1079,6 +1090,194 @@ fn save_failure_and_retry_remain_visible_when_search_has_no_results(cx: &mut Tes
         );
     });
     assert!(fixture.directory.path().join("preferences.json").is_file());
+}
+
+fn assert_searched_accent_geometry(
+    cx: &mut TestAppContext,
+    fixture: &SettingsFixture,
+    language: Language,
+) -> gpui_kit::Pixels {
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let search = window.find("settings-search");
+        let navigation = fixture
+            .workbench
+            .read(cx)
+            .settings
+            .navigation_scroll
+            .bounds();
+        let search_bounds = search.bounds();
+        assert_eq!(search.value(), Some("sakura"));
+        assert_eq!(search.focused(), Some(true));
+        assert!(
+            search.visible(),
+            "the retained search must remain reachable"
+        );
+        assert!(search_bounds.left() >= navigation.left());
+        assert!(search_bounds.right() <= navigation.right());
+        assert!(search_bounds.top() >= navigation.top());
+        assert!(search_bounds.bottom() <= navigation.bottom());
+
+        let accent_group = window.find("settings-accent");
+        let title = rust_i18n::t!("app.settings.accent.title", locale = language.code());
+        assert_eq!(accent_group.label(), Some(title.as_ref()));
+        let group = accent_group.bounds();
+        let viewport = fixture.workbench.read(cx).settings.scroll.bounds();
+        assert!(viewport.size.width > px(0.) && viewport.size.height > px(0.));
+        assert!(window.pixel_snap(group.left()) >= window.pixel_snap(viewport.left()));
+        assert!(window.pixel_snap(group.right()) <= window.pixel_snap(viewport.right()));
+        for accent in AccentColor::ALL {
+            let bounds = window.find(SettingsChoice::Accent(accent).id()).bounds();
+            assert!(
+                window.pixel_snap(bounds.left()) >= window.pixel_snap(group.left())
+                    && window.pixel_snap(bounds.right()) <= window.pixel_snap(group.right()),
+                "{accent:?} must fit the searched control group: {bounds:?}, group {group:?}"
+            );
+        }
+        viewport.top()
+    })
+    .unwrap()
+}
+
+fn assert_save_diagnostic(cx: &mut TestAppContext, fixture: &SettingsFixture, detail: &str) {
+    cx.update_window(fixture.handle, |_, window, _| {
+        let alert = window.find("settings-save-error");
+        let retry = window.find("retry-save-preferences");
+        let bounds = alert.bounds();
+        assert_eq!(alert.role(), Some(gpui_kit::Role::Alert));
+        assert!(alert.label().is_some_and(|label| label.contains(detail)));
+        assert!(alert.visible());
+        assert!(bounds.left() >= px(0.));
+        assert!(bounds.right() <= window.viewport_size().width);
+        assert!(bounds.bottom() <= retry.bounds().top());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn searched_settings_survive_error_locale_and_narrow_resize_with_real_preference_input(
+    cx: &mut TestAppContext,
+) {
+    const ENGLISH_DIAGNOSTIC: &str = "Cannot save the isolated preference file because the synthetic directory is unavailable; changes remain in this session.";
+    const CHINESE_DIAGNOSTIC: &str = "无法写入隔离的首选项目录；请检查访问权限并重试，当前会话中的更改不会自动保存。合成诊断：目录不可用。";
+
+    // The runtime must also outlive session cleanup if an assertion unwinds.
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture_with_executor(cx, 1100., 760., runtime.executor(), None);
+    cx.simulate_window_scale_factor_change(fixture.handle, 1.25);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let preferences = fixture.workbench.read(cx).preferences.clone();
+        super::theme::apply(&preferences, cx);
+        gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        window.click("settings-search", cx);
+        window.input("sakura", cx);
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
+    let input_id = cx.update(|cx| fixture.workbench.read(cx).settings.search.entity_id());
+    assert_searched_accent_geometry(cx, &fixture, Language::English);
+
+    // This size is below the native minimum and deliberately stresses the layout.
+    cx.simulate_window_resize(fixture.handle, size(px(760.), px(360.)));
+    settle_settings(cx, &fixture);
+    let narrow_top = assert_searched_accent_geometry(cx, &fixture, Language::English);
+    cx.update(|cx| {
+        fixture.workbench.update(cx, |this, cx| {
+            this.preferences_io.save_error = Some(ENGLISH_DIAGNOSTIC.into());
+            cx.notify();
+        });
+    });
+    settle_settings(cx, &fixture);
+    let error_top = assert_searched_accent_geometry(cx, &fixture, Language::English);
+    assert_save_diagnostic(cx, &fixture, ENGLISH_DIAGNOSTIC);
+    assert!(
+        error_top > narrow_top,
+        "the error occupies space above the viewport",
+    );
+
+    // Apply locale in memory instead of the language control: that control
+    // deliberately starts real inventory discovery.
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let preferences = fixture.workbench.update(cx, |this, _| {
+            this.preferences.language = Language::SimplifiedChinese;
+            this.preferences.clone()
+        });
+        super::theme::apply(&preferences, cx);
+        gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
+        fixture.workbench.update(cx, |this, cx| {
+            this.preferences_io.save_error = Some(CHINESE_DIAGNOSTIC.into());
+            this.refresh_input_placeholders(window, cx);
+            cx.notify();
+        });
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
+    let translated_error_top =
+        assert_searched_accent_geometry(cx, &fixture, Language::SimplifiedChinese);
+    assert_save_diagnostic(cx, &fixture, CHINESE_DIAGNOSTIC);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let workbench = fixture.workbench.read(cx);
+        assert_eq!(workbench.settings.search.entity_id(), input_id);
+        assert!(!workbench.scanning_inventory);
+        assert!(workbench.inventory_task.is_none());
+        let retry = window.find("retry-save-preferences");
+        assert!(retry.visible());
+        assert!(
+            window.pixel_snap(retry.bounds().bottom())
+                <= window.pixel_snap(workbench.settings.navigation_scroll.bounds().top()),
+            "retry must remain above the settings navigation after the diagnostic changes",
+        );
+        window.click("retry-save-preferences", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    settle_settings(cx, &fixture);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        assert!(
+            fixture
+                .workbench
+                .read(cx)
+                .preferences_io
+                .save_error
+                .is_none()
+        );
+        assert!(window.try_find("retry-save-preferences").is_none());
+        assert!(window.try_find("settings-save-error").is_none());
+        window.click("settings-search", cx);
+    })
+    .unwrap();
+    let recovered_top = assert_searched_accent_geometry(cx, &fixture, Language::SimplifiedChinese);
+    assert!(
+        recovered_top < translated_error_top,
+        "clearing the error must return space to the scrolling content",
+    );
+
+    let choice = SettingsChoice::Accent(AccentColor::Sakura);
+    tab_to_setting(cx, &fixture, choice.id(), "tab");
+    settings_key(cx, &fixture, "space");
+    cx.update_window(fixture.handle, |_, window, cx| {
+        assert_eq!(window.find(choice.id()).checked(), Some(true));
+        assert_eq!(
+            fixture.workbench.read(cx).preferences.accent,
+            AccentColor::Sakura
+        );
+        assert_eq!(
+            fixture.workbench.read(cx).settings.search.entity_id(),
+            input_id
+        );
+        assert_eq!(window.find("settings-search").value(), Some("sakura"));
+        assert!(!fixture.workbench.read(cx).scanning_inventory);
+        assert!(fixture.workbench.read(cx).inventory_task.is_none());
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let stored: crate::settings::Preferences = serde_json::from_slice(
+        &std::fs::read(fixture.directory.path().join("preferences.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(stored.accent, AccentColor::Sakura);
 }
 
 #[gpui_kit::test]

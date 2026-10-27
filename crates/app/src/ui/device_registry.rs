@@ -60,6 +60,11 @@ pub(super) struct RegistryUiState {
 }
 
 impl RegistryUiState {
+    #[cfg(test)]
+    pub(super) fn set_test_snapshot(&mut self, snapshot: DeviceRegistry) {
+        self.snapshot = Some(Arc::new(snapshot));
+    }
+
     fn next_observation_edit(&mut self) -> RegistryEdit {
         let absent = std::mem::take(&mut self.absent);
         self.pending_observe = self.observed.keys().any(|key| absent.contains(key));

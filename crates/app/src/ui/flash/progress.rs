@@ -629,7 +629,10 @@ impl Workbench {
             } else {
                 progress.message.clone()
             };
-            return div().text_sm().child(text).into_any_element();
+            let message = div().text_sm().child(text);
+            #[cfg(test)]
+            let message = message.id("flash-progress-message").test_support();
+            return message.into_any_element();
         }
         let counts = OtaCounts::from_progress(&progress.ota);
         let mut panel = div()
@@ -821,12 +824,14 @@ impl Workbench {
         cx: &Context<Self>,
     ) -> AnyElement {
         let mut row = div().flex().flex_col().gap_2();
+        let title = div().id(SharedString::from(format!(
+            "firmware-result-{}",
+            target.key
+        )));
+        #[cfg(test)]
+        let title = title.test_support();
         row = row.child(
-            div()
-                .id(SharedString::from(format!(
-                    "firmware-result-{}",
-                    target.key
-                )))
+            title
                 .text_sm()
                 .whitespace_normal()
                 .when(
@@ -859,6 +864,18 @@ impl Workbench {
                 )),
         );
         if let UpdateOutcome::Uf2CopyUnconfirmed(report) = result {
+            let details = div()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .whitespace_normal()
+                .child(uf2_report_details(report));
+            #[cfg(test)]
+            let details = details
+                .id(SharedString::from(format!(
+                    "firmware-result-details-{}",
+                    target.key
+                )))
+                .test_support();
             row = row
                 .child(
                     div()
@@ -866,13 +883,7 @@ impl Workbench {
                         .whitespace_normal()
                         .child(tr("firmware.result.uf2.check_version")),
                 )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .whitespace_normal()
-                        .child(uf2_report_details(report)),
-                );
+                .child(details);
         }
         if matches!(result, UpdateOutcome::Completed)
             && let Some(note) = self.flash.result_notes.get(&target.key)
@@ -885,7 +896,10 @@ impl Workbench {
     #[inline(never)]
     pub(super) fn flash_results(&self, cx: &mut Context<Self>) -> AnyElement {
         let mode = self.flash_mode();
-        let mut results = flash_panel(cx).child(
+        let panel = flash_panel(cx);
+        #[cfg(test)]
+        let panel = panel.id("flash-results-panel").test_support();
+        let mut results = panel.child(
             div()
                 .flex()
                 .items_center()
