@@ -1,11 +1,12 @@
 param([switch]$Force, [switch]$NoFirmware)
 
+$originalErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = 'Stop'
 $originalEnvironment = [Environment]::GetEnvironmentVariables('Process')
 $originalDirectory = (Get-Location).Path
 try {
     . (Join-Path $PSScriptRoot 'scripts\environment.ps1')
-    . (Join-Path $PSScriptRoot 'scripts\publish-file.ps1')
+    $upxScript = Join-Path $PSScriptRoot 'scripts\package-upx.ps1'
     Initialize-SlimeNRFBuildEnvironment
     Invoke-SlimeNRFCargo -Action build -NoFirmware:$NoFirmware
     if ($script:CargoExitCode -ne 0) { exit $script:CargoExitCode }
@@ -27,16 +28,13 @@ try {
     [IO.Directory]::CreateDirectory($dist) | Out-Null
     $variant = if ($NoFirmware) { '-no-firmware' } else { '' }
     $destination = Join-Path $dist "slimenrf-helper-$version-windows-x64$variant.exe"
-    $publication = [SlimeNRF.FilePublisher]::Publish($source, $destination, $Force.IsPresent)
-    switch ($publication.State) {
-        'Identical' { Write-Host "Identical package already exists: $destination" }
-        'Replaced' { Write-Host "Replaced package executable: $destination" }
-        'Created' { Write-Host "Packaged single executable: $destination" }
-    }
+    & $upxScript -InputPath $source -OutputPath $destination -Force:$Force
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     exit 0
 } catch {
     Write-Error -ErrorRecord $_ -ErrorAction Continue
     exit 1
 } finally {
     Restore-SlimeNRFBuildEnvironment -Environment $originalEnvironment -Directory $originalDirectory
+    $ErrorActionPreference = $originalErrorActionPreference
 }

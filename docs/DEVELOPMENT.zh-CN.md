@@ -172,21 +172,19 @@ Cargo 跟踪生成器、冻结输入及仓库来源文件。生成文档不纳�
 
 按版权文档说明，另行保证 MPL-2.0 覆盖源码可获取。每次发布保留校验和一致的精确源码归档，或提供等效的稳定位置。修改覆盖文件后，提供实际修改的源码并更新说明。生成版权文档不代表取得固件或最终产物所含原生库、DLL、运行时和工具链材料的再分发权，每次发布仍需审查。
 
-## Windows 发布与 UPX
+## Windows 发布
 
-`package.ps1` 生成 `dist/slimenrf-helper-<版本>-windows-x64.exe`；`-NoFirmware` 生成独立的 `-no-firmware.exe`，仍内置默认配置。不发布整个 target、PDB 或测试程序。静态 CRT 不等于全新 Windows 或签名已验收。
-
-先生成普通包，再按实际版本文件名生成独立压缩包：
+`package.ps1` 构建并发布 UPX 压缩的 `dist/slimenrf-helper-<版本>-windows-x64.exe`；`-NoFirmware` 发布 `-no-firmware.exe`，仍内置默认配置。Cargo 构建的未压缩原始文件保留在构建缓存中，不予发布；没有公开的未压缩备用版本。不发布整个 target、PDB 或测试程序。静态 CRT 不等于全新 Windows 或签名已验收。
 
 ```powershell
-./scripts/package-upx.ps1 -InputPath ./dist/slimenrf-helper-0.1.1-windows-x64-no-firmware.exe
+./package.ps1 -NoFirmware
 ```
 
-工具版本与哈希由[脚本](../scripts/package-upx.ps1)固定；输出独立 `-upx.exe`，不修改输入。压缩可能增加启动开销或安全软件误报，兼容性问题优先普通包。压缩改变 EXE 字节，已有 Authenticode 签名失效，若签名应在最终压缩后进行并重新验收。CI 不签名。
+`package.ps1` 以明确的必填 `-InputPath` 和 `-OutputPath` 调用内部 [UPX 辅助脚本](../scripts/package-upx.ps1)。该脚本固定工具版本与哈希，使用 `--best --lzma --strip-relocs=0`，不使用 `--exact`。发布前先运行 UPX 完整性检查，再解压到独立临时文件。解压后的可执行文件可能与原文件字节不同；Cargo 构建的输入保持不变。
 
-脚本使用 `--best --ultra-brute --strip-relocs=0`，不使用 `--exact`。发布前先运行 UPX 完整性检查，再解压到独立临时文件。解压后的可执行文件可能与原文件字节不同，原始发布包保持不变。
+压缩可能增加启动开销或引发安全软件误报。压缩改变 EXE 字节，已有 Authenticode 签名失效；若签名应在最终压缩后进行并重新验收。CI 不签名。
 
-两种脚本使用[共用原子发布器](../scripts/publish-file.ps1)。已有输出内容相同时保留，不同内容须明确 `-Force`。发布器在目标卷暂存，再移动或替换目标，不原地覆盖字节，因此保留输入及指向旧输出的其他硬链接。发布路径中的符号链接和 reparse point 会被拒绝。文件锁允许读取但拒绝写入，输入锁还拒绝删除。无法取得所需锁时，发布失败且不替换输出。这些检查不保证能抵御所有恶意文件系统竞态。
+辅助脚本使用[共用原子发布器](../scripts/publish-file.ps1)。已有输出内容相同时保留，不同内容须在 `package.ps1` 明确传入 `-Force`。发布器在目标卷暂存，再移动或替换目标，不原地覆盖字节，因此保留输入及指向旧输出的其他硬链接。发布路径中的符号链接和 reparse point 会被拒绝。文件锁允许读取但拒绝写入，输入锁还拒绝删除。无法取得所需锁时，发布失败且不替换输出。这些检查不保证能抵御所有恶意文件系统竞态。
 
 <a id="linux"></a>
 ## Linux
@@ -262,11 +260,11 @@ SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架�
 
 [Native no-firmware CI](../.github/workflows/ci.yml) 在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业检查公开边界、冻结的版权输入和发布说明生成，并运行对应的 Python 测试。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。两者打包前都运行隔离的解释器发现测试和维护的质量入口；Linux 发现测试还会测试 `package.sh`。
 
-Windows 分别上传普通 EXE 和最高压缩率的 UPX EXE。Linux 上传 AppImage。三个文件均不含固件，文件名包含 Cargo 版本，并作为 Actions artifact 保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。
+Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage。两个文件均不含固件，文件名包含 Cargo 版本，并作为 Actions artifact 保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。
 
 推送 `v<版本号>` 标签后，还会在三个前置作业全部成功后运行预发布作业。标签必须匹配主应用的 Cargo 版本和英文 `CHANGELOG.md` 中带日期的版本条目。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
 
-发布作业下载本次运行的准确产物，不重新编译。它检查远程标签对应的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，禁止覆盖附件。最后一步核对三个附件的名称和大小，再公开预发布版本，不将其标记为 latest。上传或验证失败可能留下草稿。重试前先人工检查该草稿。工作流不会覆盖或删除它。
+发布作业下载本次运行的准确产物，不重新编译。它检查远程标签对应的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，禁止覆盖附件。最后一步核对两个附件的完整名称和大小集合，再公开预发布版本，不将其标记为 latest。上传或验证失败可能留下草稿。重试前先人工检查该草稿。工作流不会覆盖或删除它。
 
 仓库权限保持只读，仅预发布作业拥有 `contents: write`。发布使用工作流令牌，不需要额外 secret。工作流不推送提交或标签。
 

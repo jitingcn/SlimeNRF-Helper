@@ -87,18 +87,17 @@ jobs:
       - name: Check formatting, strict workspace Clippy and all-target tests
         run: powershell -NoProfile -ExecutionPolicy Bypass -File ./quality.ps1 -NoFirmware
 
-      - name: Package normal Release executable
+      - name: Package compressed Release executable
         run: powershell -NoProfile -ExecutionPolicy Bypass -File ./package.ps1 -NoFirmware
 
-      - name: Select sole normal no-firmware executable
+      - name: Select sole no-firmware executable
         id: normal
         run: |
           $packages = @(Get-ChildItem -Path './dist/slimenrf-helper-*-windows-x64-no-firmware.exe' -File)
-          if ($packages.Count -ne 1) { throw "Expected one normal no-firmware EXE, found $($packages.Count)." }
+          if ($packages.Count -ne 1) { throw "Expected one no-firmware EXE, found $($packages.Count)." }
           "path=$($packages[0].FullName)" >> $env:GITHUB_OUTPUT
 
-      # Upload first: a later compression failure must not discard a valid normal EXE.
-      - name: Upload normal Windows executable only
+      - name: Upload Windows executable only
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: ${{ steps.normal.outputs.path }}
@@ -106,29 +105,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Produce separate maximum-compression UPX executable
-        env:
-          NORMAL_EXE: ${{ steps.normal.outputs.path }}
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/package-upx.ps1 -InputPath $env:NORMAL_EXE
-
-      - name: Select sole UPX no-firmware executable
-        id: upx
-        env:
-          NORMAL_EXE: ${{ steps.normal.outputs.path }}
-        run: |
-          $packages = @(Get-ChildItem -Path './dist/slimenrf-helper-*-windows-x64-no-firmware-upx.exe' -File)
-          if ($packages.Count -ne 1) { throw "Expected one UPX no-firmware EXE, found $($packages.Count)." }
-          $expected = Join-Path (Split-Path $env:NORMAL_EXE -Parent) (([IO.Path]::GetFileNameWithoutExtension($env:NORMAL_EXE)) + '-upx.exe')
-          if ($packages[0].FullName -ne $expected) { throw 'UPX output does not match the selected normal executable.' }
-          "path=$($packages[0].FullName)" >> $env:GITHUB_OUTPUT
-
-      - name: Upload UPX Windows executable only
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          path: ${{ steps.upx.outputs.path }}
-          archive: false
-          if-no-files-found: error
-          retention-days: 14
 
   linux:
     name: Linux x64 / no firmware
@@ -265,16 +241,10 @@ jobs:
 
       # Named downloads use this run's artifact service, including v7 archive:false files.
       # No cross-run API token or actions:read permission is needed.
-      - name: Download exact normal Windows executable
+      - name: Download exact Windows executable
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: slimenrf-helper-${{ steps.release.outputs.version }}-windows-x64-no-firmware.exe
-          path: ${{ runner.temp }}/prerelease-assets
-
-      - name: Download exact UPX Windows executable
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: slimenrf-helper-${{ steps.release.outputs.version }}-windows-x64-no-firmware-upx.exe
           path: ${{ runner.temp }}/prerelease-assets
 
       - name: Download exact Linux AppImage
@@ -296,7 +266,6 @@ jobs:
           [[ -f "$notes" && ! -L "$notes" && -s "$notes" ]]
           assets=(
             "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware.exe"
-            "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware-upx.exe"
             "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-linux-x64-no-firmware.AppImage"
           )
           for asset in "${assets[@]}"; do
@@ -320,7 +289,7 @@ jobs:
             exit 1
           fi
 
-      - name: Create draft prerelease and upload all three assets
+      - name: Create draft prerelease and upload assets
         id: upload_release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
@@ -336,7 +305,6 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             ${{ runner.temp }}/prerelease-assets/slimenrf-helper-${{ steps.release.outputs.version }}-windows-x64-no-firmware.exe
-            ${{ runner.temp }}/prerelease-assets/slimenrf-helper-${{ steps.release.outputs.version }}-windows-x64-no-firmware-upx.exe
             ${{ runner.temp }}/prerelease-assets/slimenrf-helper-${{ steps.release.outputs.version }}-linux-x64-no-firmware.AppImage
 
       - name: Verify uploaded draft and publish the prerelease
@@ -350,7 +318,6 @@ jobs:
           [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
           assets=(
             "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware.exe"
-            "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware-upx.exe"
             "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-linux-x64-no-firmware.AppImage"
           )
           expected_assets='[]'

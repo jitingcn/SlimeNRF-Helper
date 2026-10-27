@@ -13,7 +13,7 @@
 
 For a development build, open **Actions**, select a successful **Native no-firmware CI** run, and download its **Artifacts**.
 
-On Windows, download the regular package whose filename ends in `windows-x64-no-firmware.exe`. Run the downloaded file directly. UPX is a separate, optional compressed version. If security software or compatibility problems affect the UPX version, use the regular EXE.
+On Windows, download the package whose filename ends in `windows-x64-no-firmware.exe` and run it directly. It is UPX-compressed, which can trigger security software or compatibility problems. No uncompressed fallback is published; a local Cargo build retains the original uncompressed executable.
 
 On Linux, download the AppImage. Replace the example filename below with the actual filename. Run these commands in the directory that contains the file.
 

@@ -15,6 +15,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Builds and Linux packaging can use an already installed Python 3.11+ interpreter discovered through `uv` when ordinary Python commands are unavailable, without downloading Python or creating an environment.
 - Repeated Windows build-environment setup no longer accumulates static-CRT flags or Visual Studio tool and compiler search paths, avoiding unnecessary Cargo cache invalidation from nested developer terminals.
 - Debug builds, runs, and tests can continue when license notices need review, with a Cargo warning and a pending-review message in the copyright page instead of a stale inventory. Release builds and packaging still require current reviewed notices.
+- Windows packaging and CI now publish only the UPX-compressed executable under the normal filename, without a separate uncompressed download or `-upx` suffix. Compression uses `--best --lzma` instead of exhaustive `--ultra-brute` search.
 
 ### Fixed
 

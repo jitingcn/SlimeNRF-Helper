@@ -22,7 +22,7 @@
 
 从 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 下载 Windows x64 EXE 或 Linux x64 AppImage。预发布版本标记为 **Pre-release**，供测试使用。开发构建位于 **Actions** 中成功的 **Native no-firmware CI** 运行记录下的 **Artifacts** 区域。
 
-- Windows 普通 EXE 文件名以 `windows-x64-no-firmware.exe` 结尾。可选的独立 UPX 压缩版本文件名以 `windows-x64-no-firmware-upx.exe` 结尾。UPX 版本遇到安全软件或兼容性问题时，可改用普通 EXE。
+- Windows EXE 文件名以 `windows-x64-no-firmware.exe` 结尾，使用 UPX 压缩。压缩可能引发安全软件误报或兼容性问题；不发布未压缩的备用版本。本地 Cargo 构建仍保留未压缩的原始可执行文件。
 - Linux AppImage 以 Ubuntu 22.04 和 glibc 2.35 为构建基线，并非完全静态包。运行仍需兼容的宿主图形栈、字体、桌面与设备服务，以及 USB、HID 和串口权限。
 - macOS 尚未单独验收。
 

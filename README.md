@@ -22,7 +22,7 @@ Start on **Home** and choose **Connect your devices** to check your receiver and
 
 Download the Windows x64 EXE or Linux x64 AppImage from [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Prereleases are marked for testing. Development builds are available under **Actions**, in the **Artifacts** section of a successful **Native no-firmware CI** run.
 
-- Normal Windows EXE filenames end in `windows-x64-no-firmware.exe`. Separate optional UPX-compressed filenames end in `windows-x64-no-firmware-upx.exe`. The normal EXE is the fallback for UPX-related security software or compatibility problems.
+- The Windows EXE filename ends in `windows-x64-no-firmware.exe` and is UPX-compressed. Compression can trigger security software or compatibility problems; no uncompressed fallback is published. A local Cargo build retains the original uncompressed executable.
 - The Linux AppImage uses an Ubuntu 22.04 build baseline with glibc 2.35. It is not fully static and requires a compatible host graphics stack, fonts, desktop and device services, and USB, HID, and serial permissions.
 - macOS has not undergone separate validation.
 

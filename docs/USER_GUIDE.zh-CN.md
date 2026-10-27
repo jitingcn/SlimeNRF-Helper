@@ -13,7 +13,7 @@
 
 需要开发构建时，打开 **Actions**，选择成功的 **Native no-firmware CI** 运行记录，再下载其中的 **Artifacts**。
 
-Windows 下载文件名以 `windows-x64-no-firmware.exe` 结尾的普通包。下载完成后直接运行。UPX 是可选的独立压缩版本。遇到安全软件或兼容性问题时，改用普通 EXE。
+Windows 下载文件名以 `windows-x64-no-firmware.exe` 结尾的包，下载完成后直接运行。该文件使用 UPX 压缩，可能引发安全软件误报或兼容性问题。不发布未压缩的备用版本；本地 Cargo 构建仍保留未压缩的原始可执行文件。
 
 Linux 下载 AppImage。将以下示例文件名替换为实际下载文件名。在文件所在目录执行以下命令。
 

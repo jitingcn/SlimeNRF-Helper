@@ -172,21 +172,19 @@ Cargo tracks the generator, frozen inputs, and repository-origin files. Generate
 
 Keep MPL-2.0 covered source available separately as the notice document instructs. Retain the exact checksum-verified source archives with each release or provide an equivalent stable location. If covered files change, provide the actual modified source and update the instructions. Notice generation does not clear redistribution rights for firmware or the native libraries, DLLs, runtimes, and toolchain materials in final artifacts. Review those for each release.
 
-## Package Windows releases and UPX variants
+## Package Windows releases
 
-`package.ps1` creates `dist/slimenrf-helper-<version>-windows-x64.exe`. `-NoFirmware` creates a separate `-no-firmware.exe` that still embeds default configuration. Do not publish the whole target directory, PDB files, or test programs. A static CRT does not prove acceptance on a fresh Windows installation or acceptance of signing.
-
-Create the regular package first. Then use its actual versioned filename to create a separate compressed package:
+`package.ps1` builds and publishes the UPX-compressed `dist/slimenrf-helper-<version>-windows-x64.exe`. `-NoFirmware` publishes `-no-firmware.exe`, which still embeds default configuration. The Cargo-built original remains uncompressed in the build cache and is not published; there is no published uncompressed fallback. Do not publish the whole target directory, PDB files, or test programs. A static CRT does not prove acceptance on a fresh Windows installation or acceptance of signing.
 
 ```powershell
-./scripts/package-upx.ps1 -InputPath ./dist/slimenrf-helper-0.1.1-windows-x64-no-firmware.exe
+./package.ps1 -NoFirmware
 ```
 
-The [script](../scripts/package-upx.ps1) pins the tool version and hash. It creates a separate `-upx.exe` without changing the input. Compression can add startup overhead or antivirus false positives. Prefer the regular package for compatibility problems. Compression changes EXE bytes and invalidates any existing Authenticode signature. If you sign, sign after final compression and repeat acceptance checks. CI does not sign packages.
+`package.ps1` invokes the internal [UPX helper](../scripts/package-upx.ps1) with explicit mandatory `-InputPath` and `-OutputPath`. The helper pins the tool version and hash and uses `--best --lzma --strip-relocs=0` without `--exact`. Before publication, it runs UPX's integrity check and decompresses to a separate temporary file. Decompression may produce different executable bytes; the Cargo-built input remains unchanged.
 
-The script uses `--best --ultra-brute --strip-relocs=0` without `--exact`. Before publication, it runs UPX's integrity check and decompresses to a separate temporary file. Decompression may produce different executable bytes. The original package remains unchanged.
+Compression can add startup overhead or antivirus false positives. Compression changes EXE bytes and invalidates any existing Authenticode signature. If you sign, sign after final compression and repeat acceptance checks. CI does not sign packages.
 
-Both scripts use the [shared atomic publisher](../scripts/publish-file.ps1). An identical existing output is kept. Different content requires explicit `-Force`. The publisher stages on the destination volume, then moves or replaces the destination instead of overwriting its bytes. This preserves the input and other hardlinks to the old output. It refuses symlinks and reparse points in publication paths. File locks allow readers but deny writers, and input locks also deny deletion. If a required lock cannot be acquired, publication fails without replacing the output. These checks do not promise safety against every hostile filesystem race.
+The helper uses the [shared atomic publisher](../scripts/publish-file.ps1). An identical existing output is kept. Different content requires explicit `-Force` on `package.ps1`. The publisher stages on the destination volume, then moves or replaces the destination instead of overwriting its bytes. This preserves the input and other hardlinks to the old output. It refuses symlinks and reparse points in publication paths. File locks allow readers but deny writers, and input locks also deny deletion. If a required lock cannot be acquired, publication fails without replacing the output. These checks do not promise safety against every hostile filesystem race.
 
 <a id="linux"></a>
 ## Linux
@@ -262,11 +260,11 @@ The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatp
 
 [Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. The `ubuntu-24.04` source job checks publication boundaries, frozen notice inputs, and release-note preparation. It also runs their Python tests. After it passes, the `windows-2022` and `ubuntu-22.04` x64 jobs run independently. Both run the isolated interpreter-discovery tests and maintained quality entry points before packaging; the Linux discovery tests also exercise `package.sh`.
 
-Windows uploads separate normal and maximum-compression UPX executables. Linux uploads an AppImage. All three omit firmware, use the Cargo version in their filenames, and remain available as Actions artifacts for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets.
+Windows uploads one UPX-compressed executable under the normal filename. Linux uploads an AppImage. Both omit firmware, use the Cargo version in their filenames, and remain available as Actions artifacts for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets.
 
 A `v<version>` tag push also runs the prerelease job after all three prerequisite jobs succeed. The tag must match the root application's Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md). Release notes use that entry and link to the Chinese changelog at the same commit.
 
-The publisher downloads the exact artifacts from that run without rebuilding them. It checks the remote tag's commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files with overwrites disabled. The final step verifies all three uploaded names and sizes before publishing a prerelease that is not marked latest. A failed upload or verification can leave a draft. Review that draft manually before retrying. The workflow does not overwrite or delete it.
+The publisher downloads the exact artifacts from that run without rebuilding them. It checks the remote tag's commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files with overwrites disabled. The final step verifies the exact set of both uploaded names and sizes before publishing a prerelease that is not marked latest. A failed upload or verification can leave a draft. Review that draft manually before retrying. The workflow does not overwrite or delete it.
 
 Repository permissions remain read-only except for `contents: write` on the prerelease job. Publication uses the workflow token and needs no additional secret. The workflow never pushes commits or tags.
 

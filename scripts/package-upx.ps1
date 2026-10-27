@@ -1,5 +1,6 @@
 param(
     [Parameter(Mandatory = $true)][string]$InputPath,
+    [Parameter(Mandatory = $true)][string]$OutputPath,
     [switch]$Force
 )
 
@@ -16,11 +17,11 @@ try {
     }
     $inputLock = [SlimeNRF.FilePublisher]::OpenInput($source)
     $source = $inputLock.PathName
-    $inputDirectory = [IO.Path]::GetDirectoryName($source)
-    $destination = Join-Path $inputDirectory ([IO.Path]::GetFileNameWithoutExtension($source) + '-upx.exe')
+    $destination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
+    $outputDirectory = [IO.Path]::GetDirectoryName($destination)
     $inputHash = $inputLock.Hash
     $inputBytes = $inputLock.Length
-    $workDirectory = [SlimeNRF.FilePublisher]::CreateWorkDirectory($inputDirectory)
+    $workDirectory = [SlimeNRF.FilePublisher]::CreateWorkDirectory($outputDirectory)
     $archive = Join-Path $workDirectory 'upx-5.2.1-win64.zip'
     $archiveHash = 'eabc6792a347d45e945be7748423e7868fd01b0d2bcaa2f4b1031fd71ff69bda'
     Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/upx/upx/releases/download/v5.2.1/upx-5.2.1-win64.zip' -OutFile $archive
@@ -57,10 +58,10 @@ try {
     } finally {
         $snapshotStream.Dispose()
     }
-    # Highest documented search settings. Retain relocations for ASLR; never force unsafe PE changes.
-    $compression = @('--best', '--ultra-brute', '--strip-relocs=0', '--no-progress')
+    # Use LZMA without exhaustive search. Retain relocations for ASLR; never force unsafe PE changes.
+    $compression = @('--best', '--lzma', '--strip-relocs=0', '--no-progress')
     $result = Invoke-PinnedUpx -Arguments ($compression + @('-o', $packed, $snapshot))
-    if ($result.ExitCode -ne 0) { throw "UPX maximum compression failed (exit $($result.ExitCode)); no package was published." }
+    if ($result.ExitCode -ne 0) { throw "UPX compression failed (exit $($result.ExitCode)); no package was published." }
     $result = Invoke-PinnedUpx -Arguments @('--test', $packed)
     if ($result.ExitCode -ne 0) { throw "UPX integrity test failed (exit $($result.ExitCode)); no package was published." }
     $result = Invoke-PinnedUpx -Arguments @('--decompress', '-o', $restored, $packed)
@@ -78,7 +79,7 @@ try {
     switch ($publication.State) {
         'Identical' { Write-Host "Identical UPX package already exists: $destination" }
         'Replaced' { Write-Host "Replaced UPX package executable: $destination" }
-        'Created' { Write-Host "Packaged separate UPX executable: $destination" }
+        'Created' { Write-Host "Packaged UPX executable: $destination" }
     }
     Write-Host "Input:  $source ($inputBytes bytes; SHA256 $inputHash)"
     Write-Host "Output: $destination ($outputBytes bytes; SHA256 $outputHash)"
