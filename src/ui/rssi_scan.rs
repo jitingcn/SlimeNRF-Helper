@@ -1,8 +1,9 @@
 use super::Workbench;
 use crate::{i18n::tr, rssi_scan::ScanReport, sessions::RssiScanUpdate};
+use gpui_kit::component::TitleBar;
 use gpui_kit::{
     self as gpui, AnyWindowHandle, Bounds, Context, Entity, FocusHandle, Subscription, Task,
-    TitlebarOptions, WindowBounds, WindowOptions, prelude::*, px, size,
+    TitlebarOptions, WindowBounds, WindowDecorations, WindowOptions, prelude::*, px, size,
 };
 use std::sync::Arc;
 
@@ -205,11 +206,12 @@ impl Workbench {
             WindowOptions {
                 titlebar: Some(TitlebarOptions {
                     title: Some(tr("rssi.window.title").into()),
-                    ..Default::default()
+                    ..TitleBar::title_bar_options()
                 }),
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(560.), px(360.))),
-                ..Default::default()
+                window_decorations: Some(WindowDecorations::Client),
+                ..TitleBar::window_options()
             },
             cx,
             move |window, cx| {

@@ -40,7 +40,7 @@ use futures_util::{FutureExt as _, future::Shared};
 
 use gpui_kit::base::{h_resizable, v_resizable};
 use gpui_kit::component::{
-    ActiveTheme, Disableable, IconName, ResizableState, Selectable, Sizable,
+    ActiveTheme, Disableable, IconName, ResizableState, Selectable, Sizable, TitleBar,
     button::Button,
     checkbox::Checkbox,
     input::{Input, InputState},
@@ -49,7 +49,8 @@ use gpui_kit::component::{
 use gpui_kit::{
     self as gpui, AnyElement, AssetSource, Axis, Bounds, Context, Entity, FocusHandle, FontWeight,
     IntoElement, KeyBinding, PathBuilder, Pixels, Render, SharedString, Task, TitlebarOptions,
-    Window, WindowBounds, WindowOptions, actions, canvas, div, point, prelude::*, px, rgb, size,
+    Window, WindowBounds, WindowDecorations, WindowOptions, actions, canvas, div, point,
+    prelude::*, px, rgb, size,
 };
 
 use crate::{
@@ -257,11 +258,12 @@ pub fn run(async_io: Executor) {
             WindowOptions {
                 titlebar: Some(TitlebarOptions {
                     title: Some(concat!("SlimeNRF Helper ", env!("CARGO_PKG_VERSION")).into()),
-                    ..Default::default()
+                    ..TitleBar::title_bar_options()
                 }),
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(1100.), px(760.))),
-                ..Default::default()
+                window_decorations: Some(WindowDecorations::Client),
+                ..TitleBar::window_options()
             },
             cx,
             move |window, cx| {
@@ -788,12 +790,34 @@ impl Workbench {
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let owner = cx.weak_entity();
+        let title_bar = TitleBar::new()
+            .text_sm()
+            .on_close_window(move |_, _, cx| {
+                let _ = owner.update(cx, |this, cx| this.begin_shutdown(cx));
+            })
+            .child(concat!("SlimeNRF Helper ", env!("CARGO_PKG_VERSION")));
+        div()
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .flex()
+            .flex_col()
+            .child(title_bar)
+            .child(self.render_content(window, cx))
+    }
+}
+
+impl Workbench {
+    fn render_content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         if self.shutting_down || self.active_page != FeaturePage::VqfReplay {
             self.hide_replay(window, cx);
         }
         if self.shutting_down {
             return div()
-                .size_full()
+                .w_full()
+                .flex_1()
+                .min_h_0()
                 .flex()
                 .items_center()
                 .justify_center()
@@ -809,7 +833,8 @@ impl Render for Workbench {
         self.resume_preparation();
         self.resume_terminal_command(window, cx);
         let root = div()
-            .size_full()
+            .w_full()
+            .flex_1()
             .flex()
             .min_w_0()
             .min_h_0()

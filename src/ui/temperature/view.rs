@@ -1,6 +1,6 @@
 use super::{TemperatureWindow, full_range, plot};
 use crate::i18n::tr;
-use gpui_kit::component::{ActiveTheme, Disableable, Sizable, button::Button};
+use gpui_kit::component::{ActiveTheme, Disableable, Sizable, TitleBar, button::Button};
 use gpui_kit::{
     AnyElement, Context, FontWeight, IntoElement, Render, SharedString, Window, div, prelude::*, px,
 };
@@ -11,10 +11,16 @@ impl Render for TemperatureWindow {
             .track_focus(&self.focus)
             .size_full()
             .flex()
+            .flex_col()
             .min_w_0()
             .min_h_0()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
+            .child(
+                TitleBar::new()
+                    .text_sm()
+                    .child(tr("temperature.window.title")),
+            )
             .child(self.content(window, cx))
     }
 }
@@ -69,7 +75,6 @@ impl TemperatureWindow {
         let page = div()
             .id("temperature-window-content")
             .flex_1()
-            .h_full()
             .min_w_0()
             .min_h_0()
             .flex()

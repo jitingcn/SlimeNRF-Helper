@@ -1,6 +1,6 @@
 use super::{RssiWindow, plot};
 use crate::{i18n::tr, rssi_scan::Recommendation};
-use gpui_kit::component::{ActiveTheme, Disableable, Sizable, button::Button};
+use gpui_kit::component::{ActiveTheme, Disableable, Sizable, TitleBar, button::Button};
 use gpui_kit::{AnyElement, Context, FontWeight, IntoElement, Render, Window, div, prelude::*};
 
 impl Render for RssiWindow {
@@ -191,7 +191,8 @@ impl Render for RssiWindow {
         };
         let page: AnyElement = div()
             .id("rssi-window-content")
-            .size_full()
+            .w_full()
+            .flex_1()
             .min_w_0()
             .min_h_0()
             .flex()
@@ -205,8 +206,11 @@ impl Render for RssiWindow {
             .size_full()
             .min_w_0()
             .min_h_0()
+            .flex()
+            .flex_col()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
+            .child(TitleBar::new().text_sm().child(tr("rssi.window.title")))
             .child(page)
     }
 }

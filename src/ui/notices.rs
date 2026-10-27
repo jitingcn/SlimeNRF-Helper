@@ -1,15 +1,15 @@
 use super::Workbench;
 use crate::i18n::tr;
 use gpui_kit::component::{
-    ActiveTheme, Sizable,
+    ActiveTheme, Sizable, TitleBar,
     button::Button,
     scroll::{Scrollbar, ScrollbarAxis, ScrollbarMode},
 };
 use gpui_kit::{
     self as gpui, AnyWindowHandle, Bounds, ClipboardItem, Context, Entity, FontWeight,
     ListHorizontalSizingBehavior, Render, SharedString, Subscription, TitlebarOptions,
-    UniformListScrollHandle, Window, WindowBounds, WindowOptions, div, prelude::*, px, size,
-    uniform_list,
+    UniformListScrollHandle, Window, WindowBounds, WindowDecorations, WindowOptions, div,
+    prelude::*, px, size, uniform_list,
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -82,11 +82,12 @@ impl Workbench {
             WindowOptions {
                 titlebar: Some(TitlebarOptions {
                     title: Some(tr("notices.window.title").into()),
-                    ..Default::default()
+                    ..TitleBar::title_bar_options()
                 }),
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(480.), px(320.))),
-                ..Default::default()
+                window_decorations: Some(WindowDecorations::Client),
+                ..TitleBar::window_options()
             },
             cx,
             |_, cx| cx.new(|_| NoticesWindow::new()),
@@ -181,6 +182,7 @@ impl Render for NoticesWindow {
             .flex_col()
             .bg(cx.theme().background)
             .text_color(cx.theme().foreground)
+            .child(TitleBar::new().text_sm().child(tr("notices.window.title")))
             .child(
                 div()
                     .flex()

@@ -6,9 +6,11 @@ use crate::{
     sessions::{ConnectionState, ThermalDumpOutcome, ThermalDumpRequest},
 };
 use futures_util::{FutureExt as _, future::Shared};
+use gpui_kit::component::TitleBar;
 use gpui_kit::{
     self as gpui, AnyWindowHandle, Bounds, Context, Entity, FocusHandle, Subscription, Task,
-    TitlebarOptions, WeakEntity, WindowBounds, WindowOptions, prelude::*, px, size,
+    TitlebarOptions, WeakEntity, WindowBounds, WindowDecorations, WindowOptions, prelude::*, px,
+    size,
 };
 use slimenrf_recording::thermal_dump::{self, ThermalDump, ThermalDumpAnalysis};
 use std::sync::Arc;
@@ -340,11 +342,12 @@ impl Workbench {
             WindowOptions {
                 titlebar: Some(TitlebarOptions {
                     title: Some(tr("temperature.window.title").into()),
-                    ..Default::default()
+                    ..TitleBar::title_bar_options()
                 }),
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 window_min_size: Some(size(px(560.), px(360.))),
-                ..Default::default()
+                window_decorations: Some(WindowDecorations::Client),
+                ..TitleBar::window_options()
             },
             cx,
             move |window, cx| {
