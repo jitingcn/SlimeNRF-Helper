@@ -14,6 +14,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Main, license notices, RSSI analysis, and temperature calibration analysis windows now use theme-aware GPUI Kit title bars instead of system title-bar styling, while preserving window controls and shutdown cleanup.
 - Builds and Linux packaging can use an already installed Python 3.11+ interpreter discovered through `uv` when ordinary Python commands are unavailable, without downloading Python or creating an environment.
 - Repeated Windows build-environment setup no longer accumulates static-CRT flags or Visual Studio tool and compiler search paths, avoiding unnecessary Cargo cache invalidation from nested developer terminals.
+- Debug builds, runs, and tests can continue when license notices need review, with a Cargo warning and a pending-review message in the copyright page instead of a stale inventory. Release builds and packaging still require current reviewed notices.
 
 ### Fixed
 

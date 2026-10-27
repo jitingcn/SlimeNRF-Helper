@@ -139,6 +139,14 @@ On Windows, the discovery harness and controlled probe executables must share a 
 
 [scripts/notices-inputs.json](../scripts/notices-inputs.json) freezes portable, reviewed package metadata, target graphs, original notice bytes, source origins, and SHA-256 hashes. These inputs, their provenance, and repository license sources remain tracked. The generator checks input hashes, locked package checksums, and package coverage against those frozen graphs. It renders `THIRD_PARTY_NOTICES.txt` deterministically offline, without Cargo, a registry cache, or a network. It does not discover dependencies or collect license texts.
 
+For an approved profile-only `Cargo.toml` change, refresh the frozen input hashes and validate the result:
+
+```bash
+python3 scripts/generate_notices.py --refresh-inputs --check
+```
+
+The semantic fingerprint excludes profile settings; direct dependency changes still require the review below. Do not use a profile-only refresh to bypass dependency or provenance review.
+
 When Cargo inputs, vendored sources, or license materials change:
 
 1. Review the changed inputs. For dependency changes, capture both locked target graphs with the commands below. Follow normal and build edges from `slimenrf-helper`, excluding dev edges. Mark build and proc-macro paths as compile tools, and preserve the conservative union and feature unification described in the generator header.
@@ -158,7 +166,9 @@ When Cargo inputs, vendored sources, or license materials change:
 
 Writing requires an explicit `--output` path. `--check` alone validates inputs and rendering without an output file. With `--output`, it compares the explicit artifact byte-for-byte and never rewrites it.
 
-The root application build script invokes this same renderer for both full and no-firmware builds, writes to `OUT_DIR/THIRD_PARTY_NOTICES.txt`, and embeds those bytes. Cargo tracks the generator, frozen inputs, and repository-origin files. Generated notices are untracked; do not commit a root copy or duplicate the renderer in Rust. AppImage and Flatpak packaging use the same renderer for their installed copies. AppImage installs `LICENSE-MIT`, `LICENSE-APACHE`, and `THIRD_PARTY_NOTICES.txt` under `usr/share/licenses/slimenrf-helper` inside the AppDir. Flatpak installs the same files under `/app/share/licenses/slimenrf-helper`.
+The root application build script invokes this same renderer for both full and no-firmware builds, writes to `OUT_DIR/THIRD_PARTY_NOTICES.txt`, and embeds those bytes. For application builds with Cargo `PROFILE=debug`, it enables `--development`: stale notices do not block debug builds, runs, or tests, but Cargo emits a warning and the copyright page displays `DEVELOPMENT LICENSE REVIEW PENDING` instead of a stale inventory. Python 3.11+ remains required. `--development` cannot be combined with `--check`; release builds, packaging, and `--check` remain strict and require reviewed current inputs.
+
+Cargo tracks the generator, frozen inputs, and repository-origin files. Generated notices are untracked; do not commit a root copy or duplicate the renderer in Rust. AppImage and Flatpak packaging use the same renderer for their installed copies. AppImage installs `LICENSE-MIT`, `LICENSE-APACHE`, and `THIRD_PARTY_NOTICES.txt` under `usr/share/licenses/slimenrf-helper` inside the AppDir. Flatpak installs the same files under `/app/share/licenses/slimenrf-helper`.
 
 Keep MPL-2.0 covered source available separately as the notice document instructs. Retain the exact checksum-verified source archives with each release or provide an equivalent stable location. If covered files change, provide the actual modified source and update the instructions. Notice generation does not clear redistribution rights for firmware or the native libraries, DLLs, runtimes, and toolchain materials in final artifacts. Review those for each release.
 

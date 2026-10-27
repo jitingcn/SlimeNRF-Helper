@@ -14,7 +14,8 @@ pub(super) fn build_notices() -> Result<(), Box<dyn Error>> {
         PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").ok_or("missing CARGO_MANIFEST_DIR")?);
     let output = PathBuf::from(env::var_os("OUT_DIR").ok_or("missing OUT_DIR")?)
         .join("THIRD_PARTY_NOTICES.txt");
-    let status = python_command()?
+    let mut command = python_command()?;
+    command
         .current_dir(&root)
         .env("PYTHONIOENCODING", "utf-8")
         .arg(root.join("scripts/generate_notices.py"))
@@ -22,7 +23,12 @@ pub(super) fn build_notices() -> Result<(), Box<dyn Error>> {
         .arg(&root)
         .arg("--output")
         .arg(&output)
-        .arg("--cargo-rerun")
+        .arg("--refresh-inputs")
+        .arg("--cargo-rerun");
+    if env::var("PROFILE").as_deref() == Ok("debug") {
+        command.arg("--development");
+    }
+    let status = command
         .status()
         .map_err(|error| format!("Cannot run the notices generator: {error}"))?;
     if !status.success() {

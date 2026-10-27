@@ -139,6 +139,14 @@ Windows 上，探测测试程序必须与受控的探测可执行文件放在同
 
 [scripts/notices-inputs.json](../scripts/notices-inputs.json)冻结经审查的可移植包元数据、目标依赖图、原始版权文本字节、来源和 SHA-256 哈希。这些输入、来源记录和仓库许可证源文件仍纳入版本控制。生成器核对输入哈希、锁定包校验和，以及包条目对冻结依赖图的覆盖情况。它离线确定性生成 `THIRD_PARTY_NOTICES.txt`，不需要 Cargo、registry 缓存或网络，也不会发现依赖或收集许可证文本。
 
+对于已批准的仅涉及 `Cargo.toml` profile 设置的变更，可刷新冻结输入哈希并校验结果：
+
+```bash
+python3 scripts/generate_notices.py --refresh-inputs --check
+```
+
+语义指纹不包含 profile 设置；直接依赖变更仍须按下述流程审查。不得借仅 profile 刷新绕过依赖或来源审查。
+
 Cargo 输入、vendor 源码或许可材料变更时：
 
 1. 审查变更输入。依赖变更时，用以下命令获取两个锁定目标依赖图。从 `slimenrf-helper` 沿 normal 和 build 边追踪，排除 dev 边。将 build 和 proc-macro 路径标为编译工具，保留生成器文件头说明的保守并集与 feature 合并。
@@ -158,7 +166,9 @@ Cargo 输入、vendor 源码或许可材料变更时：
 
 写入必须显式指定 `--output` 路径。单独使用 `--check` 只校验输入与文本生成，不需要输出文件。加上 `--output` 时，它逐字节比较指定产物，绝不重写文件。
 
-根应用构建脚本在完整和无固件模式下调用同一个生成器，写入 `OUT_DIR/THIRD_PARTY_NOTICES.txt` 并嵌入这些字节。Cargo 跟踪生成器、冻结输入及仓库来源文件。生成文档不纳入版本控制，不要提交根目录副本或在 Rust 中重复实现生成器。AppImage 和 Flatpak 打包用同一个生成器产生安装副本。AppImage 将 `LICENSE-MIT`、`LICENSE-APACHE` 和 `THIRD_PARTY_NOTICES.txt` 安装到 AppDir 内的 `usr/share/licenses/slimenrf-helper`，Flatpak 将同样文件安装到 `/app/share/licenses/slimenrf-helper`。
+根应用构建脚本在完整和无固件模式下调用同一个生成器，写入 `OUT_DIR/THIRD_PARTY_NOTICES.txt` 并嵌入这些字节。应用以 Cargo `PROFILE=debug` 构建时启用 `--development`：版权输入过期不阻断 debug 构建、运行或测试，但 Cargo 会给出警告，版权页面显示 `DEVELOPMENT LICENSE REVIEW PENDING`，而不是过期的清单。仍然需要 Python 3.11+。`--development` 不能与 `--check` 同用；release 构建、打包和 `--check` 仍严格要求输入经过审查且保持最新。
+
+Cargo 跟踪生成器、冻结输入及仓库来源文件。生成文档不纳入版本控制，不要提交根目录副本或在 Rust 中重复实现生成器。AppImage 和 Flatpak 打包用同一个生成器产生安装副本。AppImage 将 `LICENSE-MIT`、`LICENSE-APACHE` 和 `THIRD_PARTY_NOTICES.txt` 安装到 AppDir 内的 `usr/share/licenses/slimenrf-helper`，Flatpak 将同样文件安装到 `/app/share/licenses/slimenrf-helper`。
 
 按版权文档说明，另行保证 MPL-2.0 覆盖源码可获取。每次发布保留校验和一致的精确源码归档，或提供等效的稳定位置。修改覆盖文件后，提供实际修改的源码并更新说明。生成版权文档不代表取得固件或最终产物所含原生库、DLL、运行时和工具链材料的再分发权，每次发布仍需审查。
 
