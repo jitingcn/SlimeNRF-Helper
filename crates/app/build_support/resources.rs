@@ -16,11 +16,12 @@ type BuildResult<T> = Result<T, Box<dyn Error>>;
 pub fn build_resource_bundle() -> BuildResult<()> {
     println!("cargo:rerun-if-env-changed=SLIMENRF_CONFIG_PATH");
     let embed_firmware = env::var_os("CARGO_FEATURE_EMBED_FIRMWARE").is_some();
-    let manifest_dir =
-        PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").ok_or("missing CARGO_MANIFEST_DIR")?);
+    let root =
+        PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").ok_or("missing CARGO_MANIFEST_DIR")?)
+            .join("../..");
     let config_path = env::var_os("SLIMENRF_CONFIG_PATH")
-        .map(|path| manifest_dir.join(path))
-        .unwrap_or_else(|| manifest_dir.join("slimenrf-helper.yaml"));
+        .map(|path| root.join(path))
+        .unwrap_or_else(|| root.join("slimenrf-helper.yaml"));
     println!("cargo:rerun-if-changed={}", config_path.display());
     let mut config: Value = serde_yaml::from_slice(&fs::read(&config_path)?)?;
     if config["schema_version"].as_u64() != Some(1) {
@@ -33,7 +34,7 @@ pub fn build_resource_bundle() -> BuildResult<()> {
     let firmware_dir = if embed_firmware {
         println!("cargo:rerun-if-env-changed=SLIMENRF_FIRMWARE_ROOT");
         Some(match env::var_os("SLIMENRF_FIRMWARE_ROOT") {
-            Some(root) => manifest_dir.join(root),
+            Some(firmware_root) => root.join(firmware_root),
             None => config_path
                 .parent()
                 .ok_or("configuration has no parent")?

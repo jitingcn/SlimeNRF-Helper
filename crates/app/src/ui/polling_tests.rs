@@ -1,7 +1,7 @@
 use super::{
-    InventoryScanIntent, InventoryScanTrigger, ShutdownHost, ShutdownPayload,
-    command_panel::CommandFocus, devices::revoke_receiver_tracker_selection,
-    inventory_display_changed, inventory_scan_trigger, serial_poll_result, serial_visible_revision,
+    InventoryScanIntent, InventoryScanTrigger, command_panel::CommandFocus,
+    devices::revoke_receiver_tracker_selection, inventory_display_changed, inventory_scan_trigger,
+    serial_poll_result, serial_visible_revision,
 };
 use crate::discovery::{BindingResetCause, ReceiverMonitor};
 use crate::domain::{Inventory, ReceiverEndpoint, SerialEndpoint, SerialPortKind};
@@ -9,11 +9,7 @@ use crate::sessions::{
     SessionManager,
     test_support::{display_manager, display_test_session},
 };
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
-    mpsc,
-};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 fn poll_serial(
@@ -265,138 +261,4 @@ fn scan_already_running_cannot_discard_a_new_due_loss_follow_up() {
         ),
         Some(InventoryScanTrigger::Scheduled)
     );
-}
-
-fn gated_shutdown_payload() -> (ShutdownPayload, mpsc::Sender<()>, Arc<AtomicUsize>) {
-    let (release, gate) = mpsc::channel();
-    let joined = Arc::new(AtomicUsize::new(0));
-    let completed = joined.clone();
-    let worker = std::thread::spawn(move || {
-        gate.recv().unwrap();
-        completed.fetch_add(1, Ordering::SeqCst);
-    });
-    (
-        ShutdownPayload {
-            replay: vec![worker],
-            ..ShutdownPayload::default()
-        },
-        release,
-        joined,
-    )
-}
-
-#[test]
-fn shutdown_spawn_failure_defers_payload_without_blocking_and_host_joins_once() {
-    let host = Arc::new(ShutdownHost::default());
-    use futures_util::FutureExt as _;
-    let (mut payload, release, joined) = gated_shutdown_payload();
-    let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("accepted.txt");
-    let target = path.clone();
-    let (release_file, file_gate) = mpsc::channel();
-    let executor = background_executor();
-    let file = executor
-        .spawn(async move {
-            file_gate.recv().unwrap();
-            std::fs::write(target, b"accepted work completed").unwrap();
-        })
-        .shared();
-    payload.files.push(file.clone());
-    payload._background = Some(executor.clone());
-    let completion_task = executor.spawn(file);
-    drop(completion_task);
-    let mut permission = host.start_with(payload, |_, _| {
-        Err(std::io::Error::other("fixture spawn failure"))
-    });
-    assert!(matches!(
-        permission.try_recv(),
-        Err(tokio::sync::oneshot::error::TryRecvError::Closed)
-    ));
-    assert_eq!(joined.load(Ordering::SeqCst), 0);
-    let (finished, completion) = mpsc::channel();
-    let draining = host.clone();
-    let waiter = std::thread::spawn(move || {
-        draining.finish();
-        finished.send(()).unwrap();
-    });
-    assert!(matches!(
-        completion.recv_timeout(Duration::from_millis(30)),
-        Err(mpsc::RecvTimeoutError::Timeout)
-    ));
-    release.send(()).unwrap();
-    assert!(matches!(
-        completion.recv_timeout(Duration::from_millis(30)),
-        Err(mpsc::RecvTimeoutError::Timeout)
-    ));
-    release_file.send(()).unwrap();
-    completion.recv_timeout(Duration::from_secs(2)).unwrap();
-    waiter.join().unwrap();
-    host.finish();
-    assert_eq!(joined.load(Ordering::SeqCst), 1);
-    assert_eq!(std::fs::read(path).unwrap(), b"accepted work completed");
-}
-
-#[test]
-fn shutdown_worker_and_host_share_exactly_one_cleanup_payload() {
-    let host = Arc::new(ShutdownHost::default());
-    let (payload, release, joined) = gated_shutdown_payload();
-    let mut permission = host.start(payload);
-    assert!(matches!(
-        permission.try_recv(),
-        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
-    ));
-    release.send(()).unwrap();
-    host.finish();
-    permission.try_recv().unwrap();
-    host.finish();
-    assert_eq!(joined.load(Ordering::SeqCst), 1);
-}
-
-pub(super) fn background_executor() -> gpui_kit::BackgroundExecutor {
-    background_executor_with_gate(None)
-}
-
-pub(super) fn background_executor_with_gate(
-    gate: Option<mpsc::Receiver<()>>,
-) -> gpui_kit::BackgroundExecutor {
-    struct Dispatcher(parking_lot::Mutex<Option<mpsc::Receiver<()>>>);
-    impl gpui_kit::PlatformDispatcher for Dispatcher {
-        fn is_main_thread(&self) -> bool {
-            false
-        }
-
-        fn dispatch(&self, runnable: gpui_kit::RunnableVariant, _: gpui_kit::Priority) {
-            let gate = self.0.lock().take();
-            std::thread::spawn(move || {
-                if let Some(gate) = gate {
-                    gate.recv().unwrap();
-                }
-                runnable.run();
-            });
-        }
-
-        fn dispatch_on_main_thread(&self, _: gpui_kit::RunnableVariant, _: gpui_kit::Priority) {
-            panic!("Background fixture must not schedule UI work");
-        }
-
-        fn dispatch_after(&self, duration: Duration, runnable: gpui_kit::RunnableVariant) {
-            std::thread::spawn(move || {
-                std::thread::sleep(duration);
-                runnable.run();
-            });
-        }
-
-        fn spawn_realtime(&self, work: Box<dyn FnOnce() + Send>) {
-            std::thread::spawn(work);
-        }
-    }
-    gpui_kit::BackgroundExecutor::new(Arc::new(Dispatcher(parking_lot::Mutex::new(gate))))
-}
-
-pub(super) fn join_background(task: futures_util::future::Shared<gpui_kit::Task<()>>) {
-    ShutdownPayload {
-        files: vec![task],
-        ..ShutdownPayload::default()
-    }
-    .join();
 }

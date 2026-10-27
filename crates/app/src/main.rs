@@ -6,6 +6,8 @@
 mod app_runtime;
 mod ble_ota;
 mod board_catalog;
+#[cfg(test)]
+mod build_resource_tests;
 mod bundled_resources;
 mod calibration;
 mod capture_device;
@@ -36,7 +38,7 @@ mod uf2;
 mod ui;
 mod update;
 
-rust_i18n::i18n!("locales", fallback = "en");
+rust_i18n::i18n!("../../locales", fallback = "en");
 
 fn main() {
     let runtime = match app_runtime::AppRuntime::new() {

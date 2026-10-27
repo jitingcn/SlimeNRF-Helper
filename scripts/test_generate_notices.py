@@ -32,6 +32,7 @@ class NoticeGeneratorTests(unittest.TestCase):
         self.inputs = {}
         for name, content in {
             "Cargo.toml": b'[workspace.package]\nlicense = "MIT OR Apache-2.0"\n',
+            "crates/app/Cargo.toml": b'[package]\nname = "slimenrf-helper"\nlicense.workspace = true\n',
             "crates/recording/Cargo.toml": b'[package]\nlicense.workspace = true\n',
             "Cargo.lock": b'[[package]]\nname = "example"\nversion = "1.2.3"\nchecksum = "abc123"\n',
             "LICENSE-MIT": b"Application MIT terms\n",
@@ -168,7 +169,10 @@ class NoticeGeneratorTests(unittest.TestCase):
         before = snapshot.read_bytes()
         for name in notices.MANIFESTS:
             path = self.root / name
-            path.write_bytes(path.read_bytes() + b'\n# formatting\n[profile.dev]\nopt-level = 1\n')
+            change = b'\n# formatting\n'
+            if name == "Cargo.toml":
+                change += b'[profile.dev]\nopt-level = 1\n'
+            path.write_bytes(path.read_bytes() + change)
         self.assertEqual(self.invoke("--check"), 1)
         self.assertIn("--check --refresh-inputs", self.stderr)
         self.assertEqual(snapshot.read_bytes(), before)
@@ -228,6 +232,7 @@ class NoticeGeneratorTests(unittest.TestCase):
         for name, addition, message in (
             ("Cargo.toml", b'\n[workspace.dependencies]\nnew = "1"\n', "Manifest semantics changed"),
             ("Cargo.toml", b'\n[workspace.metadata]\nversion = "new"\n', "Manifest semantics changed"),
+            ("crates/app/Cargo.toml", b'\n[dependencies]\nnew = "1"\n', "Manifest semantics changed"),
             ("crates/recording/Cargo.toml", b'version = "2.0.0"\n', "Manifest semantics changed"),
             ("Cargo.lock", b"\n# changed lock\n", "Stale input hash: Cargo.lock"),
             (notices.VENDOR_LICENSES[0], b"changed source\n", "Stale input hash:"),
@@ -358,7 +363,7 @@ class NoticeGeneratorTests(unittest.TestCase):
     def test_real_build_wrapper_distinguishes_debug_from_release(self):
         source = self.root / "harness.rs"
         binary = self.root / ("harness.exe" if os.name == "nt" else "harness")
-        module = SCRIPT.resolve().parents[1] / "build_support" / "notices.rs"
+        module = SCRIPT.resolve().parents[1] / "crates" / "app" / "build_support" / "notices.rs"
         source.write_text(
             f'#[path = r#"{module}"#] mod notices;\n'
             'fn main() { if let Err(error) = notices::build_notices() '
@@ -371,7 +376,7 @@ class NoticeGeneratorTests(unittest.TestCase):
         output_dir = self.root / "build output"
         output_dir.mkdir()
         output = output_dir / notices.OUTPUT
-        env = os.environ | {"CARGO_MANIFEST_DIR": str(self.root), "OUT_DIR": str(output_dir),
+        env = os.environ | {"CARGO_MANIFEST_DIR": str(self.root / "crates/app"), "OUT_DIR": str(output_dir),
                             "SLIMENRF_PYTHON": sys.executable}
         manifest = self.root / "Cargo.toml"
         manifest.write_bytes(manifest.read_bytes() + b"\n[profile.dev]\nopt-level = 1\n")

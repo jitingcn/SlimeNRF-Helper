@@ -4,7 +4,7 @@
 
 [Home](../README.md) · [Development](DEVELOPMENT.md) · [Protocol contracts](PROTOCOLS.md)
 
-The project has one product, one desktop executable, and a small Cargo workspace. The root package, `slimenrf-helper`, is the composition point. The internal `slimenrf-recording` library owns the recording and replay core, which can be consumed independently but is not released separately. Module boundaries follow dependencies and resource ownership, not pages or file length. There is no dynamic DLL plugin system or forwarding layer for old paths. The [root AGENTS](../AGENTS.md) and [core AGENTS](../crates/recording/AGENTS.md) define the mandatory engineering rules.
+The project has one product, one desktop executable, and a small Cargo workspace. The root is a virtual workspace; `crates/app` contains the `slimenrf-helper` composition point and is the default member. The internal `crates/recording` (`slimenrf-recording`) library owns the recording and replay core, which can be consumed independently but is not released separately. App source, build script and build support live under `crates/app`; shared configuration, translations, scripts, assets and workspace settings remain at the repository root. Module boundaries follow dependencies and resource ownership, not pages or file length. There is no dynamic DLL plugin system or forwarding layer for old paths. The [root AGENTS](../AGENTS.md) and [core AGENTS](../crates/recording/AGENTS.md) define the mandatory engineering rules.
 
 ## Dependency direction and modules
 
@@ -15,9 +15,12 @@ flowchart TD
 	App --> Core[slimenrf-recording]
 ```
 
+Unless a package is named explicitly, module paths below are relative to `crates/app/src`.
+
 | Owner | Responsibility |
 |---|---|
 | `ui` / `ui/flash` / `ui/capture` / `ui/replay` | Forms, selection, confirmation, localization, rendering, and scheduling. Does not open device handles. |
+| `ui/lifecycle` | Workbench shutdown payload and transfer, retained cleanup, and shutdown host. Window and quit callbacks remain in `ui`; the host finishes after the event loop. Cancellation and join ordering and the nonblocking fallback remain intact. This app-internal ownership does not require another crate. |
 | `ui/home` / `ui/home/readiness` / `ui/home/shortcuts` | Task chooser, connection guide, help, borrowed read-only device status, and saved-card library/editor presentation. Device execution is delegated to `ui/shortcuts`; no device handles are owned here. |
 | `domain` | Endpoints, native USB interface facts, receiver and tracker relationships, identity, and shared receiver serial association and console admission. |
 | `discovery` | Passive enumeration and native interface metadata ingestion, the single passive reader for the receiver's main HID interface, and HID leases. |
@@ -47,9 +50,9 @@ flowchart TD
 | `ui/page_scroll` | Page scroll containers, viewport-edge scrollbars, and page-navigation keys. Does not own forms or device state. |
 | `crates/recording` | Recording, protocols, normalization, interchange formats, calibration and replay math, analysis, and preset I/O. |
 
-The recording core's `capture/{protocol,normalize,format}` modules do not access devices. `replay` owns segmented computation and safe FFI. `analysis` owns availability and A/B analysis. `presets` takes an explicit storage path from its caller. Numerical C and CMSIS sources, licenses, and the native build belong to the library's `vendor/vqf` and `build.rs`. The root build script handles application configuration and firmware resources, generates license notices with the existing Python renderer, and tracks changes to the translation directory. Notice generation requires Python 3.11+ only for application builds, not core-only builds or application runtime. The core does not depend on GPUI, Tokio, HID or serial access, desktop directories, translations, or application configuration.
+The recording core's `capture/{protocol,normalize,format}` modules do not access devices. `replay` owns segmented computation and safe FFI. `analysis` owns availability and A/B analysis. `presets` takes an explicit storage path from its caller. Numerical C and CMSIS sources, licenses, and the native build belong to the library's `vendor/vqf` and `build.rs`. The app's `build.rs` handles application configuration and firmware resources, generates license notices with the existing Python renderer, and tracks changes to the translation directory. Notice generation requires Python 3.11+ only for application builds, not core-only builds or application runtime. The core does not depend on GPUI, Tokio, HID or serial access, desktop directories, translations, or application configuration.
 
-`board_catalog/loading/bounded_yaml` bounds input size and shares expanded text, node, and depth limits across the typed parse. Alias expansion, mapping keys, and ignored fields consume the same limits before schema visitors retain values. Ordinary aliases remain supported. The [parser constants](../src/board_catalog/loading/bounded_yaml.rs) define the limits.
+`board_catalog/loading/bounded_yaml` bounds input size and shares expanded text, node, and depth limits across the typed parse. Alias expansion, mapping keys, and ignored fields consume the same limits before schema visitors retain values. Ordinary aliases remain supported. The [parser constants](../crates/app/src/board_catalog/loading/bounded_yaml.rs) define the limits.
 
 The recording core's `replay::presets` reads a flat map of known parameter names to finite numbers or booleans. It rejects unknown keys before reading their values and rejects nested values without traversing their children. Validation completes before a patch changes the effective parameters.
 

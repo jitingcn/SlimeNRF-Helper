@@ -28,18 +28,20 @@ class ReleaseMetadata:
 
 
 def application_version(root: Path) -> str:
-    with (root / "Cargo.toml").open("rb") as source:
+    with (root / "crates/app/Cargo.toml").open("rb") as source:
         manifest = tomllib.load(source)
     package = manifest.get("package")
     if not isinstance(package, dict) or package.get("name") != "slimenrf-helper":
-        raise ValueError("Cargo.toml must describe the root slimenrf-helper application")
+        raise ValueError("crates/app/Cargo.toml must describe the slimenrf-helper application")
     version = package.get("version")
     if isinstance(version, dict) and set(version) == {"workspace"} and version["workspace"] is True:
-        workspace = manifest.get("workspace", {})
+        with (root / "Cargo.toml").open("rb") as source:
+            workspace_manifest = tomllib.load(source)
+        workspace = workspace_manifest.get("workspace", {})
         workspace_package = workspace.get("package", {}) if isinstance(workspace, dict) else {}
         version = workspace_package.get("version") if isinstance(workspace_package, dict) else None
     if not isinstance(version, str) or VERSION.fullmatch(version) is None:
-        raise ValueError("The root application must have a valid literal or inherited Cargo version")
+        raise ValueError("The application must have a valid literal or inherited Cargo version")
     return version
 
 

@@ -134,7 +134,7 @@ fn validate_resources(resources: &[(String, String)]) -> Result<Catalogs, String
 
 #[test]
 fn actual_catalogs_match_compiled_translations_and_english_fallback() {
-    let resources = read_resources(&Path::new(env!("CARGO_MANIFEST_DIR")).join("locales"))
+    let resources = read_resources(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../locales"))
         .expect("Read application catalogs");
     let catalogs = validate_resources(&resources).expect("Valid application catalog contract");
     let resource_locales: BTreeSet<_> = catalogs.keys().map(String::as_str).collect();

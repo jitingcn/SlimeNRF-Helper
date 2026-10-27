@@ -29,7 +29,7 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 INPUT = "scripts/notices-inputs.json"
 OUTPUT = "THIRD_PARTY_NOTICES.txt"
-MANIFESTS = ("Cargo.toml", "crates/recording/Cargo.toml")
+MANIFESTS = ("Cargo.toml", "crates/app/Cargo.toml", "crates/recording/Cargo.toml")
 REVIEW_GUIDE = "docs/DEVELOPMENT.md#license-notices"
 VENDOR_LICENSES = (
     "crates/recording/vendor/vqf/LICENSE",

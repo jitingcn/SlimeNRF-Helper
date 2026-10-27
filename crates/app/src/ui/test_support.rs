@@ -1,6 +1,9 @@
 use super::{FeaturePage, Workbench};
 use gpui_kit::AppContext as _;
-use std::sync::Arc;
+use std::{
+    sync::{Arc, mpsc},
+    time::Duration,
+};
 
 static UI_TEST_LOCALE: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
@@ -112,6 +115,47 @@ pub(super) fn offline_workbench(
         _serial_poll_task: gpui_kit::Task::ready(()),
         inventory_task: None,
     }
+}
+
+pub(super) fn background_executor() -> gpui_kit::BackgroundExecutor {
+    background_executor_with_gate(None)
+}
+
+pub(super) fn background_executor_with_gate(
+    gate: Option<mpsc::Receiver<()>>,
+) -> gpui_kit::BackgroundExecutor {
+    struct Dispatcher(parking_lot::Mutex<Option<mpsc::Receiver<()>>>);
+    impl gpui_kit::PlatformDispatcher for Dispatcher {
+        fn is_main_thread(&self) -> bool {
+            false
+        }
+
+        fn dispatch(&self, runnable: gpui_kit::RunnableVariant, _: gpui_kit::Priority) {
+            let gate = self.0.lock().take();
+            std::thread::spawn(move || {
+                if let Some(gate) = gate {
+                    gate.recv().unwrap();
+                }
+                runnable.run();
+            });
+        }
+
+        fn dispatch_on_main_thread(&self, _: gpui_kit::RunnableVariant, _: gpui_kit::Priority) {
+            panic!("Background fixture must not schedule UI work");
+        }
+
+        fn dispatch_after(&self, duration: Duration, runnable: gpui_kit::RunnableVariant) {
+            std::thread::spawn(move || {
+                std::thread::sleep(duration);
+                runnable.run();
+            });
+        }
+
+        fn spawn_realtime(&self, work: Box<dyn FnOnce() + Send>) {
+            std::thread::spawn(work);
+        }
+    }
+    gpui_kit::BackgroundExecutor::new(Arc::new(Dispatcher(parking_lot::Mutex::new(gate))))
 }
 
 mod tests {

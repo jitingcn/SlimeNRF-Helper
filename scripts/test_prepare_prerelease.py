@@ -27,12 +27,13 @@ class PrereleasePreparationTests(unittest.TestCase):
         self.output = self.temporary / "notes.md"
         self.commit = "1234567890abcdef1234567890abcdef12345678"
         self.body = "### Added\n\n- A user-facing feature.\n\n### Fixed\n\n- A corrected behavior."
-        self.manifest = (
-            '[workspace]\nmembers = ["crates/member"]\n'
+        self.workspace_manifest = (
+            '[workspace]\nmembers = ["crates/app", "crates/member"]\n'
             '[workspace.package]\nversion = "1.2.3"\n'
-            '[package]\nname = "slimenrf-helper"\nversion.workspace = true\n'
         )
-        self.put("Cargo.toml", self.manifest)
+        self.app_manifest = '[package]\nname = "slimenrf-helper"\nversion.workspace = true\n'
+        self.put("Cargo.toml", self.workspace_manifest)
+        self.put("crates/app/Cargo.toml", self.app_manifest)
         self.put("crates/member/Cargo.toml", '[package]\nname = "member"\nversion = "9.9.9"\n')
         self.changelog = (
             "# Changelog\n\n## [Unreleased]\n\n### Changed\n\n- Not yet released.\n\n"
@@ -80,8 +81,9 @@ class PrereleasePreparationTests(unittest.TestCase):
         self.assertEqual(self.output.read_bytes(), expected.encode("utf-8"))
         self.assertEqual({path: path.read_bytes() for path in originals}, originals)
 
-    def test_root_literal_version_takes_precedence_over_workspace_and_members(self):
-        self.put("Cargo.toml", self.manifest.replace('version.workspace = true', 'version = "2.0.0-rc.1+build.7"'))
+    def test_app_literal_version_takes_precedence_over_workspace_and_members(self):
+        self.put("crates/app/Cargo.toml", self.app_manifest.replace(
+            'version.workspace = true', 'version = "2.0.0-rc.1+build.7"'))
         self.put("CHANGELOG.md", self.changelog.replace("1.2.3", "2.0.0-rc.1+build.7"))
         result, stdout, stderr = self.invoke(tag="v2.0.0-rc.1+build.7")
         self.assertEqual((result, stdout, stderr), (0, "2.0.0-rc.1+build.7\n", ""))
@@ -89,26 +91,30 @@ class PrereleasePreparationTests(unittest.TestCase):
 
     def test_missing_invalid_or_nonapplication_versions_fail_without_output(self):
         manifests = [
-            self.manifest.replace('[workspace.package]\nversion = "1.2.3"\n', ""),
-            self.manifest.replace('version.workspace = true', 'version.workspace = false'),
-            self.manifest.replace('version.workspace = true', 'version.workspace = 1'),
-            self.manifest.replace('version.workspace = true', 'version = 123'),
-            self.manifest.replace('version.workspace = true', ''),
-            self.manifest.replace('name = "slimenrf-helper"', 'name = "some-other-package"'),
-            '[workspace]\nmembers = ["crates/member"]\n',
-            '[workspace.package]\nversion = "1.2.3"\npackage = 7\n',
-            'this is not TOML',
+            ("Cargo.toml", self.workspace_manifest.replace('[workspace.package]\nversion = "1.2.3"\n', "")),
+            ("Cargo.toml", '[workspace.package]\nversion = 7\n'),
+            ("Cargo.toml", 'this is not TOML'),
+            ("crates/app/Cargo.toml", self.app_manifest.replace('version.workspace = true', 'version.workspace = false')),
+            ("crates/app/Cargo.toml", self.app_manifest.replace('version.workspace = true', 'version.workspace = 1')),
+            ("crates/app/Cargo.toml", self.app_manifest.replace('version.workspace = true', 'version = 123')),
+            ("crates/app/Cargo.toml", self.app_manifest.replace('version.workspace = true', '')),
+            ("crates/app/Cargo.toml", self.app_manifest.replace('name = "slimenrf-helper"', 'name = "some-other-package"')),
+            ("crates/app/Cargo.toml", '[workspace]\nmembers = ["crates/member"]\n'),
+            ("crates/app/Cargo.toml", 'this is not TOML'),
         ]
-        for manifest in manifests:
-            with self.subTest(manifest=manifest):
-                self.put("Cargo.toml", manifest)
+        for path, manifest in manifests:
+            with self.subTest(path=path, manifest=manifest):
+                self.put("Cargo.toml", self.workspace_manifest)
+                self.put("crates/app/Cargo.toml", self.app_manifest)
+                self.put(path, manifest)
                 self.assert_refused()
 
     def test_unsafe_or_nonsemantic_versions_cannot_enter_workflow_output(self):
         for version in ("01.2.3", "1.2", "1.2.3-01", "1.2.3/other", "1.2.3\nversion=evil", "1.2.3+", "1.2.3 "):
             with self.subTest(version=version):
                 escaped = version.replace("\n", r"\n")
-                self.put("Cargo.toml", self.manifest.replace('version.workspace = true', f'version = "{escaped}"'))
+                self.put("crates/app/Cargo.toml", self.app_manifest.replace(
+                    'version.workspace = true', f'version = "{escaped}"'))
                 self.assert_refused(tag=f"v{version}")
 
     def test_tag_must_be_exactly_the_application_version(self):
@@ -161,10 +167,12 @@ class PrereleasePreparationTests(unittest.TestCase):
             self.invoke(**{"notes-output": None})
         self.assertEqual(raised.exception.code, 2)
         for destination in ("notes.md", self.root / "generated.md", self.root / ".." / "source" / "generated.md",
-                            self.root / "Cargo.toml", self.root / "CHANGELOG.md"):
+                            self.root / "Cargo.toml", self.root / "crates/app/Cargo.toml",
+                            self.root / "CHANGELOG.md"):
             with self.subTest(destination=str(destination)):
                 self.assert_refused(**{"notes-output": str(destination)})
-        self.assertEqual((self.root / "Cargo.toml").read_text(encoding="utf-8"), self.manifest)
+        self.assertEqual((self.root / "Cargo.toml").read_text(encoding="utf-8"), self.workspace_manifest)
+        self.assertEqual((self.root / "crates/app/Cargo.toml").read_text(encoding="utf-8"), self.app_manifest)
         self.assertEqual((self.root / "CHANGELOG.md").read_text(encoding="utf-8"), self.changelog)
         self.assertFalse((self.root / "generated.md").exists())
 

@@ -16,7 +16,7 @@
 *.slimecap
 *.log
 # Public protocol examples without device identifiers.
-!/src/rssi_scan/fixtures/*.log
+!/crates/app/src/rssi_scan/fixtures/*.log
 *.tmp
 *.temp
 

@@ -143,10 +143,10 @@ def main():
         metadata = json.load(metadata_file)
     packages = [package for package in metadata["packages"]
                 if package["name"] == APP
-                and Path(package["manifest_path"]).resolve() == root / "Cargo.toml"
+                and Path(package["manifest_path"]).resolve() == root / "crates/app/Cargo.toml"
                 and package["id"] in metadata["workspace_members"]]
     if len(packages) != 1:
-        raise ValueError("Cargo metadata must identify exactly one root slimenrf-helper package.")
+        raise ValueError("Cargo metadata must identify exactly one workspace slimenrf-helper application.")
     package = packages[0]
     version = package["version"]
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)*", version):

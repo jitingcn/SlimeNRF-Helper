@@ -27,6 +27,8 @@ jobs:
           python3 -B -m unittest discover -s scripts -p 'test_check_public.py'
           python3 -B -m unittest discover -s scripts -p 'test_generate_notices.py'
           python3 -B -m unittest discover -s scripts -p 'test_prepare_prerelease.py'
+          python3 -B -m unittest discover -s scripts -p 'test_packaging_workspace.py'
+          python3 -B -m unittest discover -s scripts -p 'test_git_hook.py'
           python3 -B scripts/check-public.py
           python3 -B scripts/generate_notices.py --check
 
@@ -89,6 +91,8 @@ jobs:
           . ./scripts/environment.ps1
           Initialize-SlimeNRFBuildEnvironment
           & $env:SLIMENRF_PYTHON -B -m unittest discover -s scripts -p 'test_python_discovery.py'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $env:SLIMENRF_PYTHON -B -m unittest discover -s scripts -p 'test_git_hook.py'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Cache native Rust dependencies

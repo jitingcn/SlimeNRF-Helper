@@ -6,6 +6,8 @@
 
 以下命令均从仓库根目录执行。工程规则以[根 AGENTS](../AGENTS.md)和[记录内核 AGENTS](../crates/recording/AGENTS.md)为准；本页维护操作步骤，不保存历史测试数量或工作站测量。
 
+根清单是虚拟 workspace。默认桌面应用及其源码、构建支持位于 `crates/app`；记录库仍位于 `crates/recording`。共享配置、翻译、脚本、锁文件、工具链和输出目录仍保留在仓库根目录。
+
 命令、行为或链接变更时，同步更新默认英文文档及其同目录的 `.zh-CN.md` 对应文档。导航和跨文档链接保持当前语言。
 
 ## 工具链与构建模式
@@ -16,7 +18,7 @@
 
 应用构建需要 Python 3.11+ 及标准库 `tomllib`，用于生成版权材料。这是仅构建时需要的工具，适用于完整和无固件模式下的脚本、直接 Cargo、测试、检查与编辑器分析。运行打包后的应用或只构建 `slimenrf-recording` 不需要 Python。
 
-可选的 `SLIMENRF_PYTHON` 只接受一个解释器可执行文件名或路径，不接受带参数的 shell 命令。显式选择无效或为空时直接失败，不回退。未设置时，应用构建在 Windows 上先探测 `py -3`，再探测 `python3` 和 `python`；Linux 打包探测 `python3` 和 `python`。这些候选均失败时，两种入口都可通过 `PATH` 上的 `uv` 查找已安装的 Python 3.11+。查找忽略项目、虚拟环境、配置和网络，绝不下载 Python。每个选中的解释器都须通过版本及 `tomllib` 探测；编辑器环境也必须能使用该解释器。
+可选的 `SLIMENRF_PYTHON` 只接受一个解释器可执行文件名或路径，不接受带参数的 shell 命令。应用 Cargo 构建中，含路径分隔符的相对路径以仓库根目录为基准解析；单独的可执行文件名按正常可执行文件搜索规则查找。显式选择无效或为空时直接失败，不回退。未设置时，应用构建在 Windows 上先探测 `py -3`，再探测 `python3` 和 `python`；Linux 打包探测 `python3` 和 `python`。这些候选均失败时，两种入口都可通过 `PATH` 上的 `uv` 查找已安装的 Python 3.11+。查找忽略项目、虚拟环境、配置和网络，绝不下载 Python。每个选中的解释器都须通过版本及 `tomllib` 探测；编辑器环境也必须能使用该解释器。
 
 CLI 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷时，所有 CLI 构建、运行、检查、打包命令明确加 `-NoFirmware` 或 `--no-firmware`，直接 Cargo 用 `--no-default-features`。完整构建必须提供预期固件，不能用无固件包代替完整包验收。
 
@@ -47,7 +49,7 @@ Cargo 默认根据可用 CPU 自动选择构建并发数，可用 `CARGO_BUILD_J
 
 Nextest 在 `--` 之后只支持其模拟的 libtest 参数：`--ignored`、`--include-ignored`、`--skip`、`--exact` 和 `--nocapture`。尤其不要在 `--` 后传 libtest `--test-threads`；应在其之前使用 nextest 的 `-j` / `--test-threads`。使用 `--doc` 时改用 Cargo 和 libtest 参数，不要混入 nextest 专用选项。
 
-正在运行的 EXE 可能锁住输出；先正常退出自己的实例。确需保留时可设置 `$env:CARGO_TARGET_DIR='target/verified'`，相对路径以应用目录解析；输出在其 `x86_64-pc-windows-msvc/{debug,release}/`，不要为编辑器另建缓存。
+正在运行的 EXE 可能锁住输出；先正常退出自己的实例。确需保留时可设置 `$env:CARGO_TARGET_DIR='target/verified'`，相对路径以仓库根目录解析；输出在其 `x86_64-pc-windows-msvc/{debug,release}/`，不要为编辑器另建缓存。
 
 <a id="checks-and-editor"></a>
 ## 检查与编辑器
@@ -67,13 +69,13 @@ cargo test --workspace --doc --locked
 
 创建 `Workbench` GUI 测试 fixture 前，在测试函数的最外层创建一个 `ui::test_support::UiTestSession`。同一 `TestAppContext` 的所有 fixture 共用这个会话。让会话保持到回调和断言结束，以隔离进程级语言状态。
 
-在 `#[gpui_kit::test]` 之外创建上下文时，遵循 [GUI 测试 fixture](../src/ui/test_support.rs)中的独立调度器所有权顺序。先销毁上下文，再清理 `TestDispatcher` 的待处理任务，期间保持调度器存活。让 `AppRuntime` 保持到 UI 清理结束。
+在 `#[gpui_kit::test]` 之外创建上下文时，遵循 [GUI 测试 fixture](../crates/app/src/ui/test_support.rs)中的独立调度器所有权顺序。先销毁上下文，再清理 `TestDispatcher` 的待处理任务，期间保持调度器存活。让 `AppRuntime` 保持到 UI 清理结束。
 
 `.vscode` 只维护项目级设置。rust-analyzer 使用正常 `check`，并启用 `rust-analyzer.cargo.noDefaultFeatures`，因此编辑器分析不需要固件载荷。此默认值只影响编辑器，不改变 CLI feature。严格 Clippy 在显式质量入口执行。Windows 关闭所有 VS Code 后可运行 `./scripts/open-editor.ps1`，复用 MSVC/CRT 环境与正常缓存；脚本拒绝复用旧 Code 进程，不关闭别人的窗口或改全局设置。
 
 保持已固定的 stable 工具链、正常 rust-analyzer `check` 和现有原生缓存。Windows 上调用 Cargo 的工具需要继承一致的宿主 MSVC、C 和 C++ 环境。环境差异可能使原生构建指纹失效，即使源码没有变化。仅凭指纹失效不能证明源码陈旧，也不能据此例行 `clean`。
 
-可选 `./scripts/install-hooks.ps1` 仅在应用本身已是独立 Git 根目录时安装非修改式格式 hook，拒绝父仓库、保留其他 hooks、不覆盖不同的 pre-commit，不自动暂存或提交。hook 不替代质量入口或原生 GUI 验证；部分暂存需自行确保已检工作树与暂存内容一致。
+可选 `./scripts/install-hooks.ps1` 仅在应用本身已是独立 Git 根目录时安装非修改式格式 hook，拒绝父仓库、保留其他 hooks、不覆盖不同的 pre-commit。虚拟 workspace 迁移前已安装的副本使用旧标记，不会自动升级；安装当前 hook 前须自行审查并手动替换旧副本。脚本不自动暂存或提交。hook 不替代质量入口或原生 GUI 验证；部分暂存需自行确保已检工作树与暂存内容一致。
 
 ## 更新依赖
 
@@ -105,7 +107,7 @@ cargo test --workspace --doc --locked
 权威配置见 [slimenrf-helper.yaml](../slimenrf-helper.yaml)。`schema_version`、板型、精确资源/alias、OpenDFU 参数和远程 application/bootloader 命名空间在此维护，不复制另一份配置表。
 
 - 开发默认 `firmware_root: ../firmwares`，仓库外目录不随 checkout 提供。资源相对于所选 YAML 所在目录解析。
-- 构建用 `SLIMENRF_CONFIG_PATH` 显式选择 YAML，用 `SLIMENRF_FIRMWARE_ROOT` 提供本机固件根目录；公开和嵌入 YAML 保持可移植相对路径。无固件构建不读取固件根目录但仍校验配置。
+- 构建用 `SLIMENRF_CONFIG_PATH` 显式选择 YAML，用 `SLIMENRF_FIRMWARE_ROOT` 提供本机固件根目录；这两个变量的相对值均以仓库根目录为基准，YAML 中的 `firmware_root` 仍相对于该 YAML 所在目录解析。公开和嵌入 YAML 保持可移植相对路径。无固件构建不读取固件根目录但仍校验配置。
 - 运行时按可执行文件目录 → 工作目录 → 内置配置选择 `slimenrf-helper.yaml`；不读旧 Python 配置、不搜索父目录。外部配置权威，无效或缺失资源直接报错，不静默混入内置来源。构建输入变量不等于运行时自动加载任意私有 YAML。
 - `firmware` 和 `bootloader` 是精确默认资源，缺失不换版本。显式 aliases 只允许受限版本片段匹配；目录仅在加载时扫描顶层，候选不自动选最新或覆盖用户选择。
 - 完整包只嵌入配置和固件根目录顶层受支持 UF2/HEX/BIN/ZIP，不打包开发工作区、日志或备份。资源运行时单成员有界解压、大小/CRC/SHA 校验，不在程序旁释放整个目录。文件与内置成员的来源身份不能按 basename 混用。
@@ -173,7 +175,7 @@ Cargo 输入、vendor 源码或许可材料变更时：
 
 写入必须显式指定 `--output` 路径。单独使用 `--check` 只校验输入与文本生成，不需要输出文件。加上 `--output` 时，它逐字节比较指定产物，绝不重写文件。
 
-根应用构建脚本在完整和无固件模式下调用同一个生成器，写入 `OUT_DIR/THIRD_PARTY_NOTICES.txt` 并嵌入这些字节。应用以 Cargo `PROFILE=debug` 构建时启用 `--development`：版权输入过期不阻断 debug 构建、运行或测试，但 Cargo 会给出警告，版权页面显示 `DEVELOPMENT LICENSE REVIEW PENDING`，而不是过期的清单。仍然需要 Python 3.11+。`--development` 不能与 `--check` 同用；release 构建、打包和 `--check` 仍严格要求输入经过审查且保持最新。
+`crates/app` 中的应用构建脚本在完整和无固件模式下调用同一个生成器，写入 `OUT_DIR/THIRD_PARTY_NOTICES.txt` 并嵌入这些字节。应用以 Cargo `PROFILE=debug` 构建时启用 `--development`：版权输入过期不阻断 debug 构建、运行或测试，但 Cargo 会给出警告，版权页面显示 `DEVELOPMENT LICENSE REVIEW PENDING`，而不是过期的清单。仍然需要 Python 3.11+。`--development` 不能与 `--check` 同用；release 构建、打包和 `--check` 仍严格要求输入经过审查且保持最新。
 
 Cargo 跟踪生成器、冻结输入及仓库来源文件。生成文档不纳入版本控制，不要提交根目录副本或在 Rust 中重复实现生成器。AppImage 和 Flatpak 打包用同一个生成器产生安装副本。AppImage 将 `LICENSE-MIT`、`LICENSE-APACHE` 和 `THIRD_PARTY_NOTICES.txt` 安装到 AppDir 内的 `usr/share/licenses/slimenrf-helper`，Flatpak 将同样文件安装到 `/app/share/licenses/slimenrf-helper`。
 
@@ -223,7 +225,7 @@ bash ./package.sh --no-firmware
 
 附加 Cargo 参数用 `--cargo-arguments`，例如 `bash ./build.sh test --cargo-arguments -p slimenrf-recording`。`package.sh` 默认 ELF。它选择 `SLIMENRF_PYTHON` 或 `python3`，检查 Python 3.11+ 及 `tomllib`，并导出选定的可执行文件，让 Cargo 与打包使用同一解释器。Python 打包工具通过 `sys.executable` 调用版权材料生成器。打包根据 Cargo JSON 选择实际 Release 应用 ELF，按版本与 ELF 架构命名，无固件加后缀。同名冲突须明确 `--force`。ELF 并非静态通用包，应在计划支持的最旧 glibc 基线构建，再到目标发行版验收。
 
-原生缓存默认 target；`CARGO_TARGET_DIR` 相对应用根，显式 `--target-dir` 优先。不要混用 Windows/Linux/SDK 编译缓存；WSL 可将唯一 Linux 缓存放在 `$HOME/.cache/slimenrf-helper/target`，编辑器与脚本共用。
+原生缓存默认 target；`CARGO_TARGET_DIR` 相对仓库根目录，显式 `--target-dir` 优先。不要混用 Windows/Linux/SDK 编译缓存；WSL 可将唯一 Linux 缓存放在 `$HOME/.cache/slimenrf-helper/target`，编辑器与脚本共用。
 
 ### 可选 Linux mold 链接器
 

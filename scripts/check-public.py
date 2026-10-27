@@ -44,7 +44,7 @@ BINARY_SUFFIXES = frozenset({
     ".zip", ".gz", ".xz", ".bz2", ".7z", ".rar", ".tar", ".pdf",
     ".ttf", ".otf", ".woff", ".woff2", ".wav", ".mp3", ".mp4", ".sqlite", ".db",
 })
-PUBLIC_LOG = "src/rssi_scan/fixtures/receiver_scan.log"
+PUBLIC_LOG = "crates/app/src/rssi_scan/fixtures/receiver_scan.log"
 PAIR_PATHS = {path for english in MAINTAINED for path in (
     english, english.removesuffix(".md") + ".zh-CN.md",
 )}
@@ -208,7 +208,13 @@ def application_root(requested: str | None) -> Path:
     top = os.fsdecode(git(root, "rev-parse", "--show-toplevel")).rstrip("\r\n")
     if os.path.normcase(os.path.abspath(top)) != os.path.normcase(str(root)):
         raise BoundaryError("git-root-does-not-match-application")
-    for path, package in (("Cargo.toml", "slimenrf-helper"),
+    try:
+        workspace = read_public_bytes(root, "Cargo.toml").decode("utf-8-sig")
+    except UnicodeError as error:
+        raise BoundaryError("invalid-application-sentinel") from error
+    if not re.search(r"(?m)^\[workspace\]\s*$", workspace):
+        raise BoundaryError("invalid-application-sentinel")
+    for path, package in (("crates/app/Cargo.toml", "slimenrf-helper"),
                           ("crates/recording/Cargo.toml", "slimenrf-recording")):
         try:
             text = read_public_bytes(root, path).decode("utf-8-sig")
@@ -217,7 +223,7 @@ def application_root(requested: str | None) -> Path:
         section = re.search(r"(?ms)^\[package\]\s*\n(.*?)(?=^\[|\Z)", text)
         if section is None or not re.search(r'^name\s*=\s*"' + re.escape(package) + r'"\s*$', section[1], re.M):
             raise BoundaryError("invalid-application-sentinel")
-    if not stat.S_ISREG(candidate_stat(root, "src/main.rs").st_mode):
+    if not stat.S_ISREG(candidate_stat(root, "crates/app/src/main.rs").st_mode):
         raise BoundaryError("invalid-application-sentinel")
     return root
 
@@ -265,36 +271,36 @@ SIGNED_QUERY = re.compile(r"(?:[?&]|\b)(?:sig|signature|access_token|token|api_k
 # Exact synthetic credential values reviewed in HTTP rejection/redaction tests.
 # Neither an entire file nor an arbitrary replacement value is exempt.
 REVIEWED = {
-    ("src/firmware_source/http_tests.rs", "authorization-value"): {"bearer " + "fixture-secret"},
-    ("src/firmware_source/tests.rs", "authorization-value"): {"Bearer " + "ghp_private_token"},
-    ("src/firmware_source/http_tests.rs", "authenticated-url"): {
+    ("crates/app/src/firmware_source/http_tests.rs", "authorization-value"): {"bearer " + "fixture-secret"},
+    ("crates/app/src/firmware_source/tests.rs", "authorization-value"): {"Bearer " + "ghp_private_token"},
+    ("crates/app/src/firmware_source/http_tests.rs", "authenticated-url"): {
         "https://" + "user:password@api.github.com/credentials",
     },
-    ("src/firmware_source/tests.rs", "authenticated-url"): {
+    ("crates/app/src/firmware_source/tests.rs", "authenticated-url"): {
         "https://" + "user:password@nightly.link/private" + "?sig" + "=private-signature",
         "https://" + "user:secret@api.github.com/a",
     },
-    ("src/firmware_source/http_tests.rs", "signed-credential"): {"?sig" + "=fixture-signature"},
-    ("src/firmware_source/tests.rs", "signed-credential"): {
+    ("crates/app/src/firmware_source/http_tests.rs", "signed-credential"): {"?sig" + "=fixture-signature"},
+    ("crates/app/src/firmware_source/tests.rs", "signed-credential"): {
         "?sig" + "=private-signature", "sig" + "=detached-signature",
     },
 }
 
 # Absolute paths require complete reviewed lines, never regex-token prefixes.
 REVIEWED_LINES = {
-    ("src/bundled_resources/tests.rs", "private-absolute-path"): {
+    ("crates/app/src/bundled_resources/tests.rs", "private-absolute-path"): {
         "ddf69c2c4e85fcd02698314d3fc0fe7f142d9cccb30793083674970efa693e39",
     },
-    ("src/firmware_source/tests.rs", "private-absolute-path"): {
+    ("crates/app/src/firmware_source/tests.rs", "private-absolute-path"): {
         "2c8c73153f7a4a4f442695e8d039ba3db64a8ca0ee68b4946714ca359366acef",
         "5a59ce6bfe62671241ec414aa91729988dc2c38e3deaa90c8bbd9dbbac91fcab",
     },
-    ("src/uf2/linux.rs", "private-absolute-path"): {
+    ("crates/app/src/uf2/linux.rs", "private-absolute-path"): {
         "d1320baad7a8a5d72539d347aa0c66a2f82e18916fe0935e85347217d3872b07",
         "66e66d60df53e41798e5f223537f737d7e3ccc4378ea45a19ba18a108bbacb3d",
         "68b8c9de1d9714feda4e7191d4963d5c366f92b79723e6a6b621f8f9427b8cce",
     },
-    ("src/ui/flash/tests/images.rs", "private-absolute-path"): {
+    ("crates/app/src/ui/flash/tests/images.rs", "private-absolute-path"): {
         "5a316d00bdb4939ead3667c550edfe23ea47b6a3f42380a1842719ca7dea8227",
         "6f072659367d7cedf4c746c972e1dc0cf05acbaa6e612c1ba32cfff1ab0fc6d6",
         "290386f05d64744dc7c21888da104676f03ed56cc38b0e0111f4775b66bb9651",

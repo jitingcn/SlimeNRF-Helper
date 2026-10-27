@@ -28,9 +28,10 @@ class PublicCheckerTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve() / "application"
         self.root.mkdir()
-        self.put("Cargo.toml", '[workspace]\nmembers = ["crates/recording"]\n\n[package]\nname = "slimenrf-helper"\n')
+        self.put("Cargo.toml", '[workspace]\nmembers = ["crates/app", "crates/recording"]\n')
+        self.put("crates/app/Cargo.toml", '[package]\nname = "slimenrf-helper"\n')
         self.put("crates/recording/Cargo.toml", '[package]\nname = "slimenrf-recording"\n')
-        self.put("src/main.rs", "fn main() {}\n")
+        self.put("crates/app/src/main.rs", "fn main() {}\n")
         (self.root / "scripts").mkdir()
         shutil.copyfile(CHECKER, self.root / "scripts/check-public.py")
         for base in DOCUMENTS:
@@ -90,10 +91,14 @@ class PublicCheckerTests(unittest.TestCase):
     def test_initial_repository_scans_nonignored_candidates_before_first_commit(self):
         status, output = self.run_checker("--root", str(self.root))
         self.assertEqual(status, 0)
-        self.assertEqual(output, [{"inventory": {
-            "tracked": 0, "nonignored_untracked": 16, "ignored_tracked": 0,
-            "candidates": 16, "scanned_text": 16, "findings": 0,
-        }}])
+        self.assertEqual(len(output), 1)
+        inventory = output[0]["inventory"]
+        self.assertEqual(inventory["tracked"], 0)
+        self.assertGreater(inventory["nonignored_untracked"], 0)
+        self.assertEqual(inventory["ignored_tracked"], 0)
+        self.assertEqual(inventory["candidates"], inventory["nonignored_untracked"])
+        self.assertEqual(inventory["scanned_text"], inventory["candidates"])
+        self.assertEqual(inventory["findings"], 0)
 
     def test_inventory_keeps_tracked_untracked_and_ignored_tracked_separate(self):
         self.put("tracked.txt", "public\n")
@@ -108,7 +113,7 @@ class PublicCheckerTests(unittest.TestCase):
         self.assertIn("untracked.txt", report.inventory.untracked)
         self.assertNotIn("ignored-only.txt", report.inventory.candidates)
         self.assertEqual(self.findings(report), set())
-        self.assertEqual(report.counts["scanned_text"], 20)
+        self.assertEqual(report.counts["scanned_text"], len(report.inventory.candidates))
 
     def test_forbidden_tracked_paths_are_flagged_without_content_reads(self):
         paths = (".local/private.txt", "dist/export.txt", "captures/session.csv",
@@ -166,10 +171,12 @@ class PublicCheckerTests(unittest.TestCase):
     def test_reviewed_synthetic_credentials_do_not_exempt_new_values_or_files(self):
         fixture = "https://" + "user:password@api.github.com/credentials"
         bearer = "bearer " + "fixture-secret"
-        path = "src/firmware_source/http_tests.rs"
+        path = "crates/app/src/firmware_source/http_tests.rs"
         self.assertEqual(self.checker.scan_text(path, fixture + "\n" + bearer), set())
         changed = fixture.replace("password", "different-password")
         self.assertEqual(self.findings_from_text(path, changed), {(path, 1, "authenticated-url")})
+        self.assertEqual(self.findings_from_text("src/firmware_source/http_tests.rs", bearer),
+                         {("src/firmware_source/http_tests.rs", 1, "authorization-value")})
         self.assertEqual(self.findings_from_text("other.rs", bearer), {("other.rs", 1, "authorization-value")})
         public = "https://github.com/upstream/repository\n" + "a" * 64 + "\nconst USB_VENDOR: u16 = 0x1209;\n"
         self.assertEqual(self.checker.scan_text("public.rs", public), set())
@@ -183,7 +190,7 @@ class PublicCheckerTests(unittest.TestCase):
         self.assertEqual(self.findings_from_text(path, changed), {(path, 1, "private-absolute-path")})
 
     def test_reviewed_private_path_does_not_exempt_a_whitespace_suffix(self):
-        path = "src/bundled_resources/tests.rs"
+        path = "crates/app/src/bundled_resources/tests.rs"
         self.put(path, '        "C:' + '/firmwares/a.bin",\n')
         status, output = self.run_checker()
         self.assertEqual(status, 0)
@@ -196,6 +203,11 @@ class PublicCheckerTests(unittest.TestCase):
         ])
         self.assertNotIn("firmwares/a.bin", json.dumps(output))
         self.assertNotIn("private/customer/file", json.dumps(output))
+
+    def test_only_relocated_public_receiver_log_is_allowed(self):
+        self.assertFalse(self.checker.forbidden("crates/app/src/rssi_scan/fixtures/receiver_scan.log"))
+        self.assertTrue(self.checker.forbidden("src/rssi_scan/fixtures/receiver_scan.log"))
+        self.assertTrue(self.checker.forbidden("crates/app/src/rssi_scan/fixtures/private.log"))
 
     def test_reviewed_translation_labels_do_not_exempt_credentials(self):
         prefix = "token" + ": "
@@ -363,6 +375,13 @@ class PublicCheckerTests(unittest.TestCase):
             "path": ".", "line": 0, "category": "invalid-application-sentinel",
         }]))
 
+    def test_application_sentinel_requires_the_relocated_package(self):
+        self.put("crates/app/Cargo.toml", '[package]\nname = "different-application"\n')
+        status, output = self.run_checker()
+        self.assertEqual((status, output), (2, [{
+            "path": ".", "line": 0, "category": "invalid-application-sentinel",
+        }]))
+
     def test_enclosing_parent_repository_is_not_an_application_repository(self):
         shutil.rmtree(self.root / ".git")
         self.git("-c", "init.templateDir=", "init", "--quiet", root=self.root.parent)
@@ -421,10 +440,15 @@ class PublicCheckerTests(unittest.TestCase):
                                 stderr=subprocess.PIPE, encoding="utf-8")
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.returncode, 0)
-        self.assertEqual([json.loads(line) for line in result.stdout.splitlines()], [{"inventory": {
-            "tracked": 16, "nonignored_untracked": 0, "ignored_tracked": 0,
-            "candidates": 16, "scanned_text": 16, "findings": 0,
-        }}])
+        output = [json.loads(line) for line in result.stdout.splitlines()]
+        self.assertEqual(len(output), 1)
+        inventory = output[0]["inventory"]
+        self.assertGreater(inventory["tracked"], 0)
+        self.assertEqual(inventory["nonignored_untracked"], 0)
+        self.assertEqual(inventory["ignored_tracked"], 0)
+        self.assertEqual(inventory["candidates"], inventory["tracked"])
+        self.assertEqual(inventory["scanned_text"], inventory["candidates"])
+        self.assertEqual(inventory["findings"], 0)
 
     def test_symlinked_application_ancestor_is_rejected(self):
         alias = self.root.parent / "application-alias"

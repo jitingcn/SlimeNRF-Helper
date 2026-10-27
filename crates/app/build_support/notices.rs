@@ -11,10 +11,11 @@ pub(super) fn build_notices() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-env-changed=SLIMENRF_PYTHON");
     println!("cargo:rerun-if-env-changed=PATH");
     let root =
-        PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").ok_or("missing CARGO_MANIFEST_DIR")?);
+        PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").ok_or("missing CARGO_MANIFEST_DIR")?)
+            .join("../..");
     let output = PathBuf::from(env::var_os("OUT_DIR").ok_or("missing OUT_DIR")?)
         .join("THIRD_PARTY_NOTICES.txt");
-    let mut command = python_command()?;
+    let mut command = python_command(&root)?;
     command
         .current_dir(&root)
         .env("PYTHONIOENCODING", "utf-8")
@@ -40,13 +41,23 @@ pub(super) fn build_notices() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn python_command() -> Result<Command, String> {
+fn python_command(root: &Path) -> Result<Command, String> {
     if let Some(executable) = env::var_os("SLIMENRF_PYTHON") {
-        let command = Command::new(executable);
-        probe_python(&command).map_err(|error| {
+        // A bare name retains Command's PATH and Windows executable search.
+        // A relative path must resolve from the repository for both invocations.
+        let has_separator = executable
+            .as_encoded_bytes()
+            .iter()
+            .any(|&byte| byte == b'/' || (cfg!(windows) && byte == b'\\'));
+        let command = if has_separator {
+            Command::new(root.join(&executable))
+        } else {
+            Command::new(&executable)
+        };
+        probe_python(&command, root).map_err(|error| {
             format!(
                 "SLIMENRF_PYTHON {:?} must name one Python 3.11+ executable with tomllib, not shell command text: {error}",
-                command.get_program()
+                executable
             )
         })?;
         return Ok(command);
@@ -60,12 +71,12 @@ fn python_command() -> Result<Command, String> {
     for (program, arguments) in candidates {
         let mut command = Command::new(program);
         command.args(*arguments);
-        match probe_python(&command) {
+        match probe_python(&command, root) {
             Ok(()) => return Ok(command),
             Err(error) => failures.push(format!("{program} {arguments:?}: {error}")),
         }
     }
-    match uv_python_command() {
+    match uv_python_command(root) {
         Ok(command) => return Ok(command),
         Err(error) => failures.push(format!("uv python find: {error}")),
     }
@@ -75,8 +86,9 @@ fn python_command() -> Result<Command, String> {
     ))
 }
 
-fn uv_python_command() -> Result<Command, String> {
+fn uv_python_command(root: &Path) -> Result<Command, String> {
     let output = Command::new("uv")
+        .current_dir(root)
         .args([
             "python",
             "find",
@@ -109,12 +121,14 @@ fn uv_python_command() -> Result<Command, String> {
         return Err("expected one absolute interpreter path from uv".to_owned());
     }
     let command = Command::new(path);
-    probe_python(&command).map_err(|error| format!("{path:?} failed its Python probe: {error}"))?;
+    probe_python(&command, root)
+        .map_err(|error| format!("{path:?} failed its Python probe: {error}"))?;
     Ok(command)
 }
 
-fn probe_python(command: &Command) -> Result<(), String> {
+fn probe_python(command: &Command, root: &Path) -> Result<(), String> {
     let output = Command::new(command.get_program())
+        .current_dir(root)
         .args(command.get_args())
         .args(["-c", PYTHON_PROBE])
         .output()

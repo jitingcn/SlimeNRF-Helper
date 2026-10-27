@@ -543,8 +543,9 @@ mod tests {
         AnalysisInput, AnalysisRequest, AnalysisWork, TemperatureDocument, TemperatureWork, files,
         full_range, moved_range,
     };
-    use crate::ui::polling_tests::{
-        background_executor, background_executor_with_gate, join_background,
+    use crate::ui::{
+        lifecycle::join_background,
+        test_support::{background_executor, background_executor_with_gate},
     };
     use futures_util::FutureExt as _;
     use gpui_kit::{AppContext as _, TestAppContext, WindowOptions, test::TestWindowExt as _};
@@ -740,7 +741,7 @@ mod tests {
             .expect("open offline application")
         });
         let dump = thermal_dump::parse_text(include_str!(
-            "../../crates/recording/src/thermal_dump/fixtures/signed_sparse.txt"
+            "../../../recording/src/thermal_dump/fixtures/signed_sparse.txt"
         ))
         .unwrap();
         let analysis = Arc::new(thermal_dump::analyze(&dump));

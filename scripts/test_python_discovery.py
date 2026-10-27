@@ -121,7 +121,7 @@ class PythonDiscoveryTests(unittest.TestCase):
         cls.fixture = directory / ("fixture" + EXE)
         cls.compile(source, cls.fixture)
         harness = directory / "notices_harness.rs"
-        module = ROOT / "build_support/notices.rs"
+        module = ROOT / "crates/app/build_support/notices.rs"
         harness.write_text(
             f'#[path = r#"{module}"#] mod notices;\n'
             'fn main() { if let Err(error) = notices::build_notices() '
@@ -144,6 +144,7 @@ class PythonDiscoveryTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="slimenrf discovery case ")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
+        (self.root / "crates/app").mkdir(parents=True)
         if os.name == "nt":
             self.harness = self.root / self.harness.name
             shutil.copy2(type(self).harness, self.harness)
@@ -179,7 +180,7 @@ class PythonDiscoveryTests(unittest.TestCase):
                     and not key.startswith("UV_") and not key.startswith("SLIMENRF_TEST_")}
         self.env.update({
             "PATH": str(self.bin),
-            "CARGO_MANIFEST_DIR": str(self.root),
+            "CARGO_MANIFEST_DIR": str(self.root / "crates/app"),
             "OUT_DIR": str(self.output),
             "TMPDIR": str(self.root),
             "SLIMENRF_TEST_LOG": str(self.log),
@@ -198,7 +199,7 @@ class PythonDiscoveryTests(unittest.TestCase):
     def entries(self):
         return ("notices", "package") if sys.platform.startswith("linux") else ("notices",)
 
-    def run_entry(self, entry, **variables):
+    def run_entry(self, entry, *, cwd=None, **variables):
         self.log.unlink(missing_ok=True)
         result_file = (self.output / "THIRD_PARTY_NOTICES.txt" if entry == "notices"
                        else self.root / "package-result.json")
@@ -206,7 +207,7 @@ class PythonDiscoveryTests(unittest.TestCase):
         env = self.env | variables
         command = ([str(self.harness)] if entry == "notices"
                    else ["/bin/bash", str(self.root / "package.sh"), "--no-firmware"])
-        result = subprocess.run(command, cwd=self.root, env=env, capture_output=True,
+        result = subprocess.run(command, cwd=cwd or self.root, env=env, capture_output=True,
                                 text=True, errors="replace")
         events = self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
         self.assertNotIn("host-py", events, "discovery escaped to the host Python launcher")
@@ -228,6 +229,28 @@ class PythonDiscoveryTests(unittest.TestCase):
                 self.assertNotIn("python3", events)
                 self.assertNotIn("python", events)
                 self.assertNotIn("py", events)
+
+    def test_explicit_relative_interpreter_uses_repository_root_from_app_directory(self):
+        relative = self.resolved.relative_to(self.root)
+        choices = [relative]
+        if os.name == "nt":
+            choices.append(relative.with_suffix(""))
+        for choice in choices:
+            with self.subTest(interpreter=str(choice)):
+                result, events, output = self.run_entry(
+                    "notices", cwd=self.root / "crates/app", SLIMENRF_PYTHON=str(choice),
+                )
+                self.assert_success(result, output)
+                self.assertEqual(events, ["resolved-python", "resolved-python"])
+                self.assertEqual(Path(json.loads(output.read_text(encoding="utf-8"))["root"]).resolve(), self.root)
+
+    def test_explicit_executable_name_still_uses_path_from_app_directory(self):
+        result, events, output = self.run_entry(
+            "notices", cwd=self.root / "crates/app", SLIMENRF_PYTHON="python3",
+            SLIMENRF_TEST_PASS="python3",
+        )
+        self.assert_success(result, output)
+        self.assertEqual(events, ["python3", "python3"])
 
     def test_explicit_interpreter_probe_failure_never_falls_back(self):
         for entry in self.entries():

@@ -5,8 +5,9 @@ set -eu
 
 root=$(git rev-parse --show-toplevel)
 if [ ! -f "$root/quality.ps1" ] || [ ! -f "$root/quality.sh" ] ||
-    [ ! -f "$root/Cargo.toml" ] ||
-    ! grep -Eq '^[[:space:]]*name[[:space:]]*=[[:space:]]*"slimenrf-helper"[[:space:]]*(#.*)?$' "$root/Cargo.toml"; then
+    [ ! -f "$root/Cargo.toml" ] || [ ! -f "$root/crates/app/Cargo.toml" ] ||
+    ! grep -Eq '^[[:space:]]*\[workspace\][[:space:]]*(#.*)?$' "$root/Cargo.toml" ||
+    ! grep -Eq '^[[:space:]]*name[[:space:]]*=[[:space:]]*"slimenrf-helper"[[:space:]]*(#.*)?$' "$root/crates/app/Cargo.toml"; then
     echo 'Refusing to run: the Git working tree root is not the standalone SlimeNRF Helper application.' >&2
     exit 1
 fi

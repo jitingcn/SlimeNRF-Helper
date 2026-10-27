@@ -21,11 +21,12 @@ APP_ID = "io.github.jitingcn.SlimeNRFHelper"
 RUNTIME_REPO = "https://dl.flathub.org/repo/flathub.flatpakrepo"
 ASSETS = Path(__file__).resolve().parent / "flatpak"
 # Explicit source inputs, not a workspace copy: never stage native caches or user data.
-SOURCE_FILES = ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "build.rs",
+SOURCE_FILES = ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
                 "LICENSE-MIT", "LICENSE-APACHE",
                 "scripts/generate_notices.py", "scripts/notices-inputs.json",
+                "crates/app/Cargo.toml", "crates/app/build.rs",
                 "crates/recording/Cargo.toml", "crates/recording/build.rs")
-SOURCE_TREES = ("src", "build_support", "locales", "examples",
+SOURCE_TREES = ("crates/app/src", "crates/app/build_support", "locales",
                 "crates/recording/src", "crates/recording/vendor/vqf")
 EXCLUDED = {"target", "dist", ".git", ".flatpak-builder", "__pycache__", ".cache"}
 RUST_DIST = "https://static.rust-lang.org/dist"
@@ -219,7 +220,7 @@ def stage_sources(root, stage, no_firmware, open_regular):
         destination.mkdir()
         count = 0
         for entry in sorted(selected_root.iterdir()):
-            # Match build_support/resources.rs: regular top-level UF2/HEX/BIN/ZIP only,
+            # Match crates/app/build_support/resources.rs: regular top-level UF2/HEX/BIN/ZIP only,
             # case-insensitive extensions, no nested payloads or symlinked firmware.
             if stat.S_ISREG(entry.lstat().st_mode) and entry.suffix.lower() in (".uf2", ".hex", ".bin", ".zip"):
                 copy_file(entry, destination / entry.name, open_regular)

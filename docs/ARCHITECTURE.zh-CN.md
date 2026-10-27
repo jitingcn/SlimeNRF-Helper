@@ -4,7 +4,7 @@
 
 [首页](../README.zh-CN.md) · [开发步骤](DEVELOPMENT.zh-CN.md) · [协议契约](PROTOCOLS.zh-CN.md)
 
-一个产品、一个桌面可执行文件、一个小型 Cargo workspace。根包 `slimenrf-helper` 是装配点；内部库 `slimenrf-recording` 拥有可独立消费的记录与回放内核，不独立发布。模块划分按依赖与资源所有权，不按页面或文件长度；不建立动态 DLL 插件系统或旧路径转发层。强制工程规则以[根 AGENTS](../AGENTS.md)和[内核 AGENTS](../crates/recording/AGENTS.md)为准。
+一个产品、一个桌面可执行文件、一个小型 Cargo workspace。根目录是虚拟 workspace；`crates/app` 中的 `slimenrf-helper` 是装配点和默认成员；内部库 `crates/recording`（`slimenrf-recording`）拥有可独立消费的记录与回放内核，不独立发布。应用源码、构建脚本和构建支持位于 `crates/app`；共享配置、翻译、脚本、资源和 workspace 配置保留在仓库根目录。模块划分按依赖与资源所有权，不按页面或文件长度；不建立动态 DLL 插件系统或旧路径转发层。强制工程规则以[根 AGENTS](../AGENTS.md)和[内核 AGENTS](../crates/recording/AGENTS.md)为准。
 
 ## 依赖方向与模块
 
@@ -15,9 +15,12 @@ flowchart TD
 	App --> Core[slimenrf-recording]
 ```
 
+下表中除显式标明包的路径外，模块路径均相对于 `crates/app/src`。
+
 |所有者|职责|
 |---|---|
 |`ui` / `ui/flash` / `ui/capture` / `ui/replay`|表单、选择、确认、语言、绘制和调度；不打开设备句柄|
+|`ui/lifecycle`|Workbench 退出载荷与移交、保留的清理工作及 shutdown host；窗口和退出回调仍在 `ui`，host 在事件循环结束后完成清理。保留取消与 join 顺序以及非阻塞回退；这是应用内部所有权边界，无需新增 crate|
 |`ui/home` / `ui/home/readiness` / `ui/home/shortcuts`|任务入口、连接指引、帮助、借用的只读设备状态，以及已保存卡片的命令库与编辑器；设备执行委托给 `ui/shortcuts`，此处不持有设备句柄|
 |`domain`|端点、原生 USB 接口事实、接收器与追踪器关系、身份，以及共享接收器串口关联与控制台准入|
 |`discovery`|被动枚举与原生接口元数据读取、接收器主 HID 的唯一被动读取者及 HID 租约|
@@ -47,9 +50,9 @@ flowchart TD
 |`ui/page_scroll`|页面滚动容器、视口边缘滚动条与页面导航键，不持有表单或设备状态|
 |`crates/recording`|记录、协议、标准化、交换格式、校准与回放数学、分析、预设读写|
 
-记录内核的 `capture/{protocol,normalize,format}` 不访问设备。`replay` 拥有分段计算、安全 FFI，`analysis` 负责可用性与 A/B，`presets` 接收调用者显式存储路径。数值 C/CMSIS 源、许可及 native build 属于库的 `vendor/vqf` 和 `build.rs`。根构建脚本处理应用配置与固件资源，调用现有 Python 生成器生成版权材料，并跟踪翻译目录的变更。版权材料生成仅在应用构建时需要 Python 3.11+，只构建内核或运行应用时不需要。内核不依赖 GPUI、Tokio、HID/串口、桌面目录、翻译或应用配置。
+记录内核的 `capture/{protocol,normalize,format}` 不访问设备。`replay` 拥有分段计算、安全 FFI，`analysis` 负责可用性与 A/B，`presets` 接收调用者显式存储路径。数值 C/CMSIS 源、许可及 native build 属于库的 `vendor/vqf` 和 `build.rs`。应用的 `build.rs` 处理应用配置与固件资源，调用现有 Python 生成器生成版权材料，并跟踪翻译目录的变更。版权材料生成仅在应用构建时需要 Python 3.11+，只构建内核或运行应用时不需要。内核不依赖 GPUI、Tokio、HID/串口、桌面目录、翻译或应用配置。
 
-`board_catalog/loading/bounded_yaml` 限制输入大小，并在类型化解析过程中共享展开文本、节点数和深度上限。别名展开、映射键和忽略字段均计入同一组限制，在 schema visitor 保留值之前检查。普通别名仍受支持，具体上限见[解析器常量](../src/board_catalog/loading/bounded_yaml.rs)。
+`board_catalog/loading/bounded_yaml` 限制输入大小，并在类型化解析过程中共享展开文本、节点数和深度上限。别名展开、映射键和忽略字段均计入同一组限制，在 schema visitor 保留值之前检查。普通别名仍受支持，具体上限见[解析器常量](../crates/app/src/board_catalog/loading/bounded_yaml.rs)。
 
 记录内核的 `replay::presets` 只读取由已知参数名映射到有限数值或布尔值的平面结构。未知键在读取其值前拒绝，嵌套值不遍历子节点。所有校验通过后才将参数补丁应用到有效参数。
 

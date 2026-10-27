@@ -6,6 +6,8 @@
 
 Run all commands from the repository root. Follow the engineering rules in the [root AGENTS](../AGENTS.md) and [recording-core AGENTS](../crates/recording/AGENTS.md). This page maintains procedures, not historical test counts or workstation measurements.
 
+The root manifest is a virtual workspace. The default desktop package and its source and build support are in `crates/app`; the recording library remains in `crates/recording`. Shared configuration, translations, scripts, lockfile, toolchain, and output directories remain at the repository root.
+
 When commands, behavior, or links change, update both the default English document and its same-directory `.zh-CN.md` counterpart. Keep navigation and cross-document links in the selected language.
 
 ## Toolchain and build modes
@@ -16,7 +18,7 @@ Install cargo-nextest for script test actions and non-format-only quality checks
 
 Application builds require Python 3.11+ with standard-library `tomllib` to generate license notices. This build-only prerequisite applies to scripts, direct Cargo, tests, checks, and editor analysis in both full and no-firmware modes. Running the packaged application and building only `slimenrf-recording` do not require Python.
 
-Optionally set `SLIMENRF_PYTHON` to one interpreter executable name or path, not a shell command with arguments. An invalid or empty explicit selection fails without fallback. Without it, application builds probe `py -3` on Windows, then `python3` and `python`; Linux packaging probes `python3` and `python`. If those candidates fail, either entry point can ask `uv` on `PATH` for an already installed Python 3.11+ interpreter. The lookup ignores projects and virtual environments, configuration and network access; it never downloads Python. Every selected interpreter must pass a version and `tomllib` probe. Make it available in the editor's environment too.
+Optionally set `SLIMENRF_PYTHON` to one interpreter executable name or path, not a shell command with arguments. For application Cargo builds, a relative path containing a separator resolves from the repository root; a bare executable name uses normal executable search. An invalid or empty explicit selection fails without fallback. Without it, application builds probe `py -3` on Windows, then `python3` and `python`; Linux packaging probes `python3` and `python`. If those candidates fail, either entry point can ask `uv` on `PATH` for an already installed Python 3.11+ interpreter. The lookup ignores projects and virtual environments, configuration and network access; it never downloads Python. Every selected interpreter must pass a version and `tomllib` probe. Make it available in the editor's environment too.
 
 CLI builds keep the default `embed-firmware` feature enabled. If a standalone checkout has no firmware payloads, explicitly add `-NoFirmware` or `--no-firmware` to every CLI build, run, check, and packaging command. For direct Cargo commands, use `--no-default-features`. Full builds require the intended firmware inputs. A no-firmware package does not satisfy full-package acceptance.
 
@@ -47,7 +49,7 @@ If you need execution-policy isolation, use `powershell -NoProfile -ExecutionPol
 
 Nextest supports only its emulated libtest arguments after `--`: `--ignored`, `--include-ignored`, `--skip`, `--exact`, and `--nocapture`. In particular, do not pass libtest `--test-threads` after `--`; use nextest `-j` / `--test-threads` before it. With `--doc`, use Cargo and libtest arguments instead, without nextest-only options.
 
-A running EXE can lock the output. First, exit your own instance normally. If you must keep it running, set `$env:CARGO_TARGET_DIR='target/verified'`. Relative paths resolve from the application directory. Outputs are in its `x86_64-pc-windows-msvc/{debug,release}/` subdirectories. Do not create a separate editor cache.
+A running EXE can lock the output. First, exit your own instance normally. If you must keep it running, set `$env:CARGO_TARGET_DIR='target/verified'`. Relative paths resolve from the repository root. Outputs are in its `x86_64-pc-windows-msvc/{debug,release}/` subdirectories. Do not create a separate editor cache.
 
 <a id="checks-and-editor"></a>
 ## Checks and editor setup
@@ -67,13 +69,13 @@ For no-firmware mode, add `--no-default-features` to Clippy, nextest, and doctes
 
 Before creating a `Workbench` GUI fixture, acquire one `ui::test_support::UiTestSession` at the outer test scope. Reuse that session for all fixtures in the same `TestAppContext`. Keep it alive through callbacks and assertions to isolate the process-wide locale.
 
-For contexts created outside `#[gpui_kit::test]`, follow the standalone ownership in [the GUI test fixtures](../src/ui/test_support.rs). Keep the `TestDispatcher` alive until the context is dropped, then drain its pending tasks. Keep `AppRuntime` alive until UI cleanup finishes.
+For contexts created outside `#[gpui_kit::test]`, follow the standalone ownership in [the GUI test fixtures](../crates/app/src/ui/test_support.rs). Keep the `TestDispatcher` alive until the context is dropped, then drain its pending tasks. Keep `AppRuntime` alive until UI cleanup finishes.
 
 `.vscode` contains only project-level settings. rust-analyzer runs normal `check` with `rust-analyzer.cargo.noDefaultFeatures` enabled, so editor analysis needs no firmware payloads. This editor-only default does not change CLI features. Run strict Clippy through the explicit quality entry points. On Windows, close all VS Code instances before running `./scripts/open-editor.ps1` to reuse the MSVC and CRT environment and normal cache. The script refuses to reuse an existing Code process. It does not close other people's windows or change global settings.
 
 Keep the pinned stable toolchain, normal rust-analyzer `check`, and existing native cache. On Windows, tools that invoke Cargo need a consistent inherited host MSVC, C, and C++ environment. Environment differences can invalidate native-build fingerprints even when sources are unchanged. Fingerprint invalidation alone does not prove stale source or justify routine `clean`.
 
-The optional `./scripts/install-hooks.ps1` installs a non-mutating formatting hook only when the application itself is an independent Git root. It rejects parent repositories, preserves other hooks, and does not overwrite a different pre-commit hook. It never stages or commits automatically. The hook does not replace the quality entry points or native GUI validation. For partial staging, ensure that the checked working tree matches the staged content yourself.
+The optional `./scripts/install-hooks.ps1` installs a non-mutating formatting hook only when the application itself is an independent Git root. It rejects parent repositories, preserves other hooks, and does not overwrite a different pre-commit hook. A previously installed copy from before the virtual-workspace migration has an older sentinel and is not upgraded automatically; review it and replace it manually before installing the current hook. It never stages or commits automatically. The hook does not replace the quality entry points or native GUI validation. For partial staging, ensure that the checked working tree matches the staged content yourself.
 
 ## Update dependencies
 
@@ -105,7 +107,7 @@ Translation-resource tests check matching language keys, duplicate nested keys, 
 [slimenrf-helper.yaml](../slimenrf-helper.yaml) is the authoritative configuration. Maintain `schema_version`, boards, exact resources and aliases, OpenDFU parameters, and remote application and bootloader namespaces there. Do not copy them into another configuration table.
 
 - The development default is `firmware_root: ../firmwares`. This external directory is not included in a checkout. Resources resolve relative to the selected YAML file's directory.
-- At build time, explicitly select a YAML file with `SLIMENRF_CONFIG_PATH` and supply the local firmware root with `SLIMENRF_FIRMWARE_ROOT`. Keep public and embedded YAML paths portable and relative. A no-firmware build does not read the firmware root, but still validates configuration.
+- At build time, explicitly select a YAML file with `SLIMENRF_CONFIG_PATH` and supply the local firmware root with `SLIMENRF_FIRMWARE_ROOT`. Relative values for either variable are resolved from the repository root; `firmware_root` in the YAML remains relative to that YAML's directory. Keep public and embedded YAML paths portable and relative. A no-firmware build does not read the firmware root, but still validates configuration.
 - At runtime, the application looks for `slimenrf-helper.yaml` in the executable directory, then the working directory, then uses embedded configuration. It does not read old Python configuration or search parent directories. External configuration is authoritative. Invalid or missing resources cause errors, without silently mixing in embedded sources. Build-input variables do not mean that arbitrary private YAML files load automatically at runtime.
 - `firmware` and `bootloader` name exact default resources. Missing resources do not trigger a version substitution. Explicit aliases allow only restricted version-fragment matching. Directories are scanned only at the top level when loading. Candidates are not automatically selected by newest version and do not override user choices.
 - Full packages embed only configuration and supported UF2, HEX, BIN, and ZIP files at the top level of the firmware root. They do not include the development workspace, logs, or backups. At runtime, resources use bounded single-member extraction and size, CRC, and SHA checks. The application does not extract a whole directory beside itself. Do not conflate file and embedded-member source identities by basename.
@@ -173,7 +175,7 @@ When Cargo inputs, vendored sources, or license materials change:
 
 Writing requires an explicit `--output` path. `--check` alone validates inputs and rendering without an output file. With `--output`, it compares the explicit artifact byte-for-byte and never rewrites it.
 
-The root application build script invokes this same renderer for both full and no-firmware builds, writes to `OUT_DIR/THIRD_PARTY_NOTICES.txt`, and embeds those bytes. For application builds with Cargo `PROFILE=debug`, it enables `--development`: stale notices do not block debug builds, runs, or tests, but Cargo emits a warning and the copyright page displays `DEVELOPMENT LICENSE REVIEW PENDING` instead of a stale inventory. Python 3.11+ remains required. `--development` cannot be combined with `--check`; release builds, packaging, and `--check` remain strict and require reviewed current inputs.
+The application build script in `crates/app` invokes this same renderer for both full and no-firmware builds, writes to `OUT_DIR/THIRD_PARTY_NOTICES.txt`, and embeds those bytes. For application builds with Cargo `PROFILE=debug`, it enables `--development`: stale notices do not block debug builds, runs, or tests, but Cargo emits a warning and the copyright page displays `DEVELOPMENT LICENSE REVIEW PENDING` instead of a stale inventory. Python 3.11+ remains required. `--development` cannot be combined with `--check`; release builds, packaging, and `--check` remain strict and require reviewed current inputs.
 
 Cargo tracks the generator, frozen inputs, and repository-origin files. Generated notices are untracked; do not commit a root copy or duplicate the renderer in Rust. AppImage and Flatpak packaging use the same renderer for their installed copies. AppImage installs `LICENSE-MIT`, `LICENSE-APACHE`, and `THIRD_PARTY_NOTICES.txt` under `usr/share/licenses/slimenrf-helper` inside the AppDir. Flatpak installs the same files under `/app/share/licenses/slimenrf-helper`.
 
@@ -223,7 +225,7 @@ The [workflow](../.github/workflows/ci.yml) is the authoritative full CI depende
 
 Pass extra Cargo arguments with `--cargo-arguments`, for example `bash ./build.sh test --cargo-arguments -p slimenrf-recording`. `package.sh` defaults to ELF. It selects `SLIMENRF_PYTHON` or `python3`, checks Python 3.11+ and `tomllib`, and exports the selected executable so Cargo and packaging agree. Python package helpers invoke the notice generator with `sys.executable`. Packaging selects the actual Release application ELF from Cargo JSON and names it by version and ELF architecture, with a suffix for no-firmware builds. Same-name conflicts require an explicit `--force`. An ELF is not a universal static package. Build on the oldest glibc baseline you plan to support, then validate on target distributions.
 
-The native cache defaults to target. Relative `CARGO_TARGET_DIR` paths resolve from the application root. An explicit `--target-dir` takes precedence. Do not share compiled caches between Windows, Linux, and the SDK. Under WSL, you can keep a single Linux cache at `$HOME/.cache/slimenrf-helper/target` and share it between the editor and scripts.
+The native cache defaults to target. Relative `CARGO_TARGET_DIR` paths resolve from the repository root. An explicit `--target-dir` takes precedence. Do not share compiled caches between Windows, Linux, and the SDK. Under WSL, you can keep a single Linux cache at `$HOME/.cache/slimenrf-helper/target` and share it between the editor and scripts.
 
 ### Optional Linux mold linker
 
@@ -281,7 +283,7 @@ The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatp
 
 Windows uploads one UPX-compressed executable under the normal filename. Linux uploads an AppImage. Both omit firmware, use the Cargo version in their filenames, and remain available as Actions artifacts for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets.
 
-A `v<version>` tag push also runs the prerelease job after all three prerequisite jobs succeed. The tag must match the root application's Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md). Release notes use that entry and link to the Chinese changelog at the same commit.
+A `v<version>` tag push also runs the prerelease job after all three prerequisite jobs succeed. The tag must match the application's Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md). Release notes use that entry and link to the Chinese changelog at the same commit.
 
 The publisher downloads the exact artifacts from that run without rebuilding them. It checks the remote tag's commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files with overwrites disabled. The final step verifies the exact set of both uploaded names and sizes before publishing a prerelease that is not marked latest. A failed upload or verification can leave a draft. Review that draft manually before retrying. The workflow does not overwrite or delete it.
 
