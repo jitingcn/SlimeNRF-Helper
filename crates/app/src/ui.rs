@@ -6,6 +6,8 @@ mod date_label;
 mod device_registry;
 mod devices;
 mod flash;
+#[cfg(debug_assertions)]
+pub(crate) mod gallery;
 mod hid_log;
 mod home;
 mod lifecycle;

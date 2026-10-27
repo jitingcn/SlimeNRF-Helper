@@ -2,6 +2,8 @@
 
 Scope: this standalone repository's Rust application and internal workspace members. No parent Python repository or configuration is required. The application originated as a Python rewrite; that migration history does not authorize changes to external applications, firmware payloads or user state. [README.md](README.md) is the public overview; [docs/USER_GUIDE.md](docs/USER_GUIDE.md) owns current procedures, [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) owns engineering commands, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) owns the module map. The tracked bilingual changelogs and public release notes describe notable user-facing changes. Planning documents and historical change/acceptance records remain ignored local-only maintenance material, not required checkout inputs or substitutes for release notes.
 
+Maintainer procedures: [device diagnosis](docs/DEVELOPMENT.md#device-diagnosis) · [developer gallery](docs/DEVELOPMENT.md#developer-gallery) · [native UI smoke](docs/DEVELOPMENT.md#native-ui-smoke) · [quality checks](docs/DEVELOPMENT.md#checks-and-editor). User-facing operation remains in the user guide.
+
 ## Architecture
 
 - One product and one desktop executable. The root is a virtual workspace containing `crates/app` (`slimenrf-helper`) and `crates/recording` (`slimenrf-recording`); use internal modules by default. Add another package only for a demonstrated dependency boundary or independent consumer, not a file-length target. No dynamic DLL plugin system, service locator, generic transport framework or legacy-path re-export layer.
@@ -32,38 +34,13 @@ Application compilation, checks, tests, editor analysis, and packaging require b
 
 Generate notices with the existing `scripts/generate_notices.py` from tracked `scripts/notices-inputs.json` and reviewed source materials. Do not track generated `THIRD_PARTY_NOTICES.txt`, duplicate the renderer or input inventory in Rust, or bypass frozen hashes and provenance checks. Application compilation writes to `OUT_DIR`; package staging uses the same renderer. Review input changes instead of blindly refreshing hashes.
 
-From this directory on Windows:
+Use the platform quality entry points and portable equivalents in [checks and editor setup](docs/DEVELOPMENT.md#checks-and-editor); do not substitute a narrower package selection for workspace coverage. Linux uses its native toolchain, not the Windows MSVC environment.
 
-```powershell
-./quality.ps1                 # fmt check, strict workspace Clippy, workspace tests
-./quality.ps1 -NoFirmware     # same gates without embedded firmware
-./quality.ps1 -FormatOnly     # format check only; no Visual Studio setup
-./build.ps1 -Action fmt       # explicitly apply stable formatting
-./build.ps1 -Debug            # native executable for smoke verification
-./build.ps1 -Action run       # development build and launch
-```
-
-From this directory on Linux, after installing the native dependencies in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#linux):
-
-```bash
-bash quality.sh               # fmt check, strict workspace Clippy, workspace tests
-bash quality.sh --no-firmware # same gates without embedded firmware
-bash quality.sh --format-only
-bash build.sh fmt            # explicitly apply stable formatting
-bash build.sh --debug        # native executable for smoke verification
-bash build.sh run            # development build and launch
-bash package.sh --no-firmware # Release ELF; requires Python 3.11+
-bash package.sh --format appimage
-bash package.sh --format flatpak --no-firmware # source-built SDK bundle; prerequisites in docs/DEVELOPMENT.md
-```
-
-- `quality.ps1` (Windows) and `quality.sh` (Linux) are the platform quality entry points. They reuse native build setup, the existing target directory and locked dependencies. Stop on errors; do not substitute an easier package selection and claim workspace coverage. Linux uses its native toolchain, not the Windows MSVC target/static-CRT environment.
-- Portable equivalents: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo nextest run --workspace --all-targets --locked`, and `cargo test --workspace --doc --locked`. Add `--no-default-features` to Clippy, nextest and doctests for the no-firmware variant. Install cargo-nextest and configure native dependencies first; Windows also needs the explicit MSVC target/static-CRT environment described in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#windows).
 - Do not use `--all-features` to test `-NoFirmware`: it would re-enable `embed-firmware`. Run both variants for feature, configuration/resource, workspace, build-script or shared application-boundary changes. Core-only work can be checked with `-p slimenrf-recording`; it still needs a C compiler, but not GPUI or firmware payloads.
 - New build/lint warnings are defects. Fix their cause; no crate-wide allowances, disabled checks or weakened assertions to make a gate green. Any necessary exception must be narrowly scoped and explained. Shared manifest lints forbid `dbg!` and implicit unsafe operations inside unsafe functions.
 - Follow rustfmt, not manual alignment. Do not mix broad cosmetic rewrites into behavioral fixes. A deliberate formatting-baseline change is separate from behavior and must be called out.
 - Keep tests with the behavior's owner. Prefer state transitions, identity boundaries, cancellation, partial failure and file/protocol compatibility. Test-only helpers must not expose production internals. Do not add source-text/wiring assertions or mock-echo tests.
-- For significant changes, also run the affected application path. GUI claims need actual native observation, not just compilation. On Windows, use Windows.Graphics.Capture with the application's own HWND when available; on Linux, observe the real X11/Wayland desktop and renderer. Never terminate unrelated instances. Report tests, native smoke, WSL/WSLg smoke and unverified platforms/hardware separately: WSL builds or GUI rendering do not prove USB forwarding, HID/serial permissions, UF2 mounts, BLE or physical flashing. macOS requires separate validation.
+- For significant changes, observe the affected application path natively; compilation alone is not GUI evidence. Follow [native UI smoke](docs/DEVELOPMENT.md#native-ui-smoke), use only owned processes/windows, and report tests, native and WSL/WSLg smoke, unverified platforms, and hardware separately. WSL rendering does not prove device access or physical flashing; macOS requires separate validation.
 
 ## Tooling and maintenance
 

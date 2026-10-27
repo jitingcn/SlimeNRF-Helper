@@ -77,6 +77,48 @@ Keep the pinned stable toolchain, normal rust-analyzer `check`, and existing nat
 
 The optional `./scripts/install-hooks.ps1` installs a non-mutating formatting hook only when the application itself is an independent Git root. It rejects parent repositories, preserves other hooks, and does not overwrite a different pre-commit hook. A previously installed copy from before the virtual-workspace migration has an older sentinel and is not upgraded automatically; review it and replace it manually before installing the current hook. It never stages or commits automatically. The hook does not replace the quality entry points or native GUI validation. For partial staging, ensure that the checked working tree matches the staged content yourself.
 
+<a id="device-diagnosis"></a>
+## Device diagnosis
+
+Start with the observed symptom and current inventory; distinguish a missing device from an inaccessible, occupied, ambiguous, or failed enumeration. Follow [connection help and device operation](USER_GUIDE.md#first-use), [Linux device requirements](USER_GUIDE.md#linux-devices), and the [architecture](ARCHITECTURE.md) and [protocol sources](PROTOCOLS.md) for interpretation. Never infer identity from a port number or tracker slot alone; preserve the existing reader, reservation, identity, lease, cancellation and join boundaries.
+
+Normal application startup enumerates devices and listens to the main HID interface read-only. Home and its connection guide can be browsed without sending commands, but opening the ESB update page starts read-only firmware queries. The HID page's browsing and filtering do not start raw capture; explicitly subscribing sends capability and subscription requests, and recording writes a file. Its `.hidlog` contains this application's HID traffic, not system-wide USB or serial traffic. See [HID operation](USER_GUIDE.md#inspect-hid-data-and-events).
+
+Obtain explicit, appropriately scoped authorization before commands, subscriptions, recording, calibration, OTA, or flashing. Do not perform them merely for a UI smoke. Collect only necessary evidence privately; sanitize identifiers, private paths, credentials and recordings before sharing. A UI observation is not hardware acceptance.
+
+<a id="developer-gallery"></a>
+## Developer gallery
+
+The debug-only gallery exercises production presentation with synthetic, in-memory state, independently of the normal workbench:
+
+```powershell
+./build.ps1 -Debug -NoFirmware
+./target/x86_64-pc-windows-msvc/debug/slimenrf-helper.exe --gallery
+```
+
+```bash
+bash build.sh --debug --no-firmware
+./target/debug/slimenrf-helper --gallery
+```
+
+These paths use the default target directory; adjust them if `CARGO_TARGET_DIR` is set. Remove the no-firmware option when the intended firmware inputs are available. Release builds reject `--gallery`; ordinary startup is unchanged.
+
+The Controls scene offers selectable synthetic cards and short/long content with dynamic detail. The Terminal scene uses a bounded synthetic terminal buffer and transcript with append, clear, follow and wrap controls. Switch scenes, English/Chinese, light/dark and normal/1.25× text, and inspect selected states and layout as the window is resized (default 1100×760, minimum 760×600 logical pixels).
+
+The gallery branches before `AppRuntime` and never constructs `Workbench`, loads or saves preferences, starts catalog, discovery, serial, HID, BLE or firmware jobs, or sends device commands. It is not a device simulator or proof of the normal workbench, native chooser, or hardware behavior. Headless GUI regression tests, native gallery observation, normal-app smoke and authorized hardware acceptance are separate evidence.
+
+<a id="native-ui-smoke"></a>
+## Native UI smoke
+
+Build the actual application using the platform instructions above (and the [Linux prerequisites](#linux)); choose the intended firmware mode and record the binary identity, platform, window size, actions, and observed results. Exercise the affected path at narrow sizes, enlarged text and in both languages where relevant. Inspect the rendered result and interaction, not just process startup. Keep tests, native desktop, private virtual-display/WSL, and physical hardware evidence separate; report what was not exercised. Use only owned processes and windows, exit them normally, and never terminate an unrelated instance.
+
+- **Windows:** launch your own process and identify its PID and actual main HWND; verify the HWND belongs to that PID before capture or window-local input. Use a window-local capture such as Windows.Graphics.Capture and inspect the image. Do not select a window by title alone or send global input. Changing `APPDATA` alone does not guarantee isolation of Windows KnownFolder preferences. Preserve real preferences; do not overwrite them with a stale backup.
+- **Linux:** use a private display and private XDG configuration/state directories for an isolated run, with a working Vulkan ICD, fonts and a user D-Bus. Own and clean up only the display, bus and application processes you started. Observe the actual renderer and window. For a native file chooser, run a real portal and compatible backend on the same private bus and display and exercise the actual chooser. A private Xvfb result is distinct from WSLg and native desktop acceptance; none proves USB, BLE or flashing.
+
+For a private Linux run, install Xvfb, `xvfb-run`, `dbus-run-session`, a Vulkan ICD and fonts in addition to build prerequisites. Create fresh private directories for `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` and a mode-0700 `XDG_RUNTIME_DIR`; export them and launch the application under a new `dbus-run-session` and `xvfb-run`. For chooser coverage, install `xdg-desktop-portal` and a compatible desktop backend, and ensure their services use that same session bus and display. Inspect the actual dialog before closing the owned session. A mock is not native chooser evidence.
+
+For drawing or scrolling diagnosis, see the single-launch [Fast switches](#clean-and-troubleshoot). Do not assume a cached wheel, machine-specific helper, display number, or private artifact path exists. Store evidence privately and sanitize it before sharing.
+
 ## Update dependencies
 
 1. Review upstream release notes and the manifest's MSRV before changing version requirements. Keep the normal and test `gpui-kit` requirements identical.
@@ -308,6 +350,7 @@ Wait for the tag's workflow to finish. Check the prerelease notes and all three 
 
 Successful CI confirms only the configured checks and uploaded artifacts. Local builds, WSLg rendering, native GUI behavior, USB permissions, and real device updates are separate evidence. Target distributions, macOS, signing, performance, and physical hardware still require independent acceptance. The application-owned MIT OR Apache-2.0 license does not replace the separate third-party, source-availability, firmware, and artifact reviews described [above](#license-notices). Successful packaging does not resolve them.
 
+<a id="clean-and-troubleshoot"></a>
 ## Clean and troubleshoot
 
 `./build.ps1 -Action clean` and `bash ./build.sh clean` remove all profiles and nested caches in the selected target. Debug and Release options do not narrow the scope. Preview with `-CargoArguments '--dry-run'` or `--cargo-arguments --dry-run`, respectively, or specify `--target-dir` explicitly. These commands do not delete dist, configuration, firmware, global Cargo downloads, or Rust toolchains. First, exit your own programs launched from target. Do not clean routinely.

@@ -77,6 +77,48 @@ cargo test --workspace --doc --locked
 
 可选 `./scripts/install-hooks.ps1` 仅在应用本身已是独立 Git 根目录时安装非修改式格式 hook，拒绝父仓库、保留其他 hooks、不覆盖不同的 pre-commit。虚拟 workspace 迁移前已安装的副本使用旧标记，不会自动升级；安装当前 hook 前须自行审查并手动替换旧副本。脚本不自动暂存或提交。hook 不替代质量入口或原生 GUI 验证；部分暂存需自行确保已检工作树与暂存内容一致。
 
+<a id="device-diagnosis"></a>
+## 设备诊断
+
+从实际症状和当前设备列表入手，区分设备缺失、无权限、被占用、身份不明确和枚举失败。操作参见[连接帮助与设备使用](USER_GUIDE.zh-CN.md#first-use)、[Linux 设备要求](USER_GUIDE.zh-CN.md#linux-devices)，解释参见[架构](ARCHITECTURE.zh-CN.md)和[协议来源](PROTOCOLS.zh-CN.md)。不要仅凭端口号或追踪器槽位推断身份；保留现有读取器、预留、身份、租约、取消与 join 的边界。
+
+应用正常启动会枚举设备并以只读方式监听主 HID 接口。可以浏览首页和连接指南而不发送命令，但打开 ESB 更新页面会自动发起只读固件查询。HID 页面的浏览和筛选不会启动原始采集；显式订阅会发送能力查询与订阅请求，录制会写入文件。`.hidlog` 只包含本应用的 HID 流量，并非系统级 USB 或串口日志，详见[用户指南](USER_GUIDE.zh-CN.md)。
+
+发送命令、订阅、录制、校准、OTA 或刷写前须获得明确且范围适当的授权；不要仅为 UI smoke 执行这些操作。仅私下收集必要证据，分享前脱敏设备标识、私有路径、凭据和录制内容。UI 观察不能代替硬件验收。
+
+<a id="developer-gallery"></a>
+## 开发者画廊
+
+仅 debug 构建提供画廊：以合成的内存状态独立于正常工作台使用生产展示组件。
+
+```powershell
+./build.ps1 -Debug -NoFirmware
+./target/x86_64-pc-windows-msvc/debug/slimenrf-helper.exe --gallery
+```
+
+```bash
+bash build.sh --debug --no-firmware
+./target/debug/slimenrf-helper --gallery
+```
+
+路径使用默认 target 目录；设置 `CARGO_TARGET_DIR` 时相应调整。有预期固件输入时可去掉无固件选项。Release 构建拒绝 `--gallery`，普通启动不变。
+
+Controls 场景提供可选择的合成卡片、短/长内容和动态详情；Terminal 场景使用有界合成终端缓冲与文本，提供追加、清空、跟随和换行控制。切换场景、中英文、浅色/深色和正常/1.25 倍文字，调整窗口时检查选中状态与布局（默认 1100×760、最小 760×600 逻辑像素）。
+
+画廊在 `AppRuntime` 前分支，不创建 `Workbench`，不读取或保存偏好，不启动目录、发现、串口、HID、BLE 或固件任务，也不发送设备命令。它不是设备模拟器，不能证明正常工作台、原生文件选择器或硬件行为。无头 GUI 回归测试、原生画廊观察、正常应用 smoke 和经授权的硬件验收是不同证据。
+
+<a id="native-ui-smoke"></a>
+## 原生 UI smoke
+
+按上述平台说明（以及 [Linux 前置条件](#linux)）构建实际应用，选择预期的固件模式，记录二进制身份、平台、窗口大小、操作和观察结果。根据变更覆盖窄窗口、放大文字及中英文；检查实际渲染和交互，而不只是进程启动。分别报告测试、原生桌面、私有虚拟显示/WSL 和实体硬件证据，以及未覆盖的部分。只操作自己启动的进程和窗口，正常退出，不终止其他实例。
+
+- **Windows：**启动自己的进程，取得 PID 和实际主窗口 HWND；采集或窗口内输入前确认 HWND 属于该 PID。使用 Windows.Graphics.Capture 等窗口级采集并检查图像。不要仅凭标题选窗或发送全局输入。仅修改 `APPDATA` 不能保证 Windows KnownFolder 偏好隔离；保护真实偏好，不要用旧备份覆盖。
+- **Linux：**隔离运行使用私有显示及私有 XDG 配置/状态目录，并准备可用的 Vulkan ICD、字体和用户 D-Bus。只清理自己启动的显示、总线和应用进程，观察实际渲染器和窗口。测试原生文件选择器时，在同一私有总线与显示上运行真实 portal 和兼容后端，并操作实际选择流程。私有 Xvfb、WSLg 和原生桌面验收应分别报告；它们都不能证明 USB、BLE 或刷写功能。
+
+私有 Linux 运行除构建依赖外还需安装 Xvfb、`xvfb-run`、`dbus-run-session`、Vulkan ICD 和字体。为 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_STATE_HOME` 和权限为 0700 的 `XDG_RUNTIME_DIR` 创建新的私有目录并导出变量，在新的 `dbus-run-session` 和 `xvfb-run` 下启动应用。覆盖文件选择器时还须安装 `xdg-desktop-portal` 与兼容桌面后端，确保服务使用同一会话总线和显示；结束自己启动的会话前检查真实对话框。模拟实现不能充当原生选择器证据。
+
+绘制或滚动诊断参见单次启动的 [Fast 开关](#clean-and-troubleshoot)。不要假设缓存的 wheel、特定机器脚本、显示编号或私有产物路径存在。证据私下保存，分享前脱敏。
+
 ## 更新依赖
 
 1. 修改版本要求前，检查上游发布说明和清单中的 MSRV。保持普通依赖与测试依赖的 `gpui-kit` 版本要求一致。
@@ -308,6 +350,7 @@ Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage
 
 CI 成功只证明配置的检查与产物上传已完成。本地构建、WSLg 渲染、原生 GUI、USB 权限和真实设备更新是不同证据；目标发行版、macOS、签名、性能及物理硬件仍须独立验收。应用自有材料的 MIT OR Apache-2.0 许可不能替代[上文](#license-notices)所述第三方材料、源码提供、固件和产物的独立审查，不由打包成功解决。
 
+<a id="clean-and-troubleshoot"></a>
 ## 清理与排查
 
 `./build.ps1 -Action clean` 和 `bash ./build.sh clean` 清理所选 target 的全部 profile 与嵌套缓存；Debug/Release 不缩小范围。可分别传 `-CargoArguments '--dry-run'` 或 `--cargo-arguments --dry-run` 预览，或显式 `--target-dir`。不删除 dist、配置、固件、全局 Cargo 下载或 Rust 工具链；先退出自己从 target 启动的程序，不例行 clean。
