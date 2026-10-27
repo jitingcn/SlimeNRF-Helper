@@ -38,5 +38,18 @@
 - 切换深浅主题后，终端已有文本的默认颜色与基础 ANSI 颜色随主题更新。扩展索引色和 RGB 颜色保持原有值。
 - Windows UPX 打包不再传入不受支持的 `--exact` 选项，保留最高压缩设置。
 
+## [0.1.0]
+
+首个独立应用版本，根据仓库初始源码快照补充记录。
+
+### 新增
+
+- 接收器与追踪器发现、独立串口会话、多标签终端、命令历史、日志导出，以及危险设备命令的确认流程。
+- UF2、OpenDFU、经接收器执行的 ESB OTA 和高级选项中的旧式 BLE DFU 更新，支持本地、随包及受支持的远程固件来源。
+- HID 诊断、原始传感器数据采集、离线 VQF 分析、同步曲线和姿态预览。
+- 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
+- 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
+
 [未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.1.1
+[0.1.0]: https://github.com/jitingcn/SlimeNRF-Helper/tree/c1534d42a08b71e2bf9acdf0c33892766493080e

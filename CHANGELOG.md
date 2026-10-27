@@ -38,5 +38,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Existing terminal text now follows dark and light theme changes for default and basic ANSI colors. Extended indexed colors and RGB colors retain their specified values.
 - Windows UPX packaging no longer passes the unsupported `--exact` option. Maximum compression remains enabled.
 
+## [0.1.0]
+
+Initial standalone application version, documented from the repository's initial source snapshot.
+
+### Added
+
+- Receiver and tracker discovery, independent serial sessions, tabbed terminals, command history, log export, and confirmation for destructive device commands.
+- UF2, OpenDFU, receiver-based ESB OTA, and advanced legacy BLE DFU updates, with local, bundled, and supported remote firmware sources.
+- HID diagnostics, raw sensor capture, offline VQF analysis, synchronized plots, and an orientation preview.
+- Gyroscope calibration guides, temperature calibration analysis with SVG export, and RSSI channel analysis.
+- English and Simplified Chinese interfaces, light and dark themes, and Windows and Linux packaging with full-firmware and no-firmware build modes.
+
 [Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.1.1
+[0.1.0]: https://github.com/jitingcn/SlimeNRF-Helper/tree/c1534d42a08b71e2bf9acdf0c33892766493080e
