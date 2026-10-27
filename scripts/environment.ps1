@@ -13,6 +13,21 @@ function Initialize-SlimeNRFCargoEnvironment {
     }
 }
 
+function Assert-SlimeNRFNextest {
+    if (-not (Get-Command cargo-nextest -CommandType Application -ErrorAction SilentlyContinue)) {
+        throw 'cargo-nextest is required. Install it with: cargo install --locked cargo-nextest --version 0.9.150'
+    }
+}
+
+function Test-SlimeNRFDocOnly {
+    param([string[]]$Arguments = @())
+    foreach ($argument in $Arguments) {
+        if ($argument -eq '--') { break }
+        if ($argument -eq '--doc') { return $true }
+    }
+    return $false
+}
+
 function Remove-SlimeNRFDevShellPathDuplicates {
     param([string]$Previous, [string]$Current)
     $previousCounts = @{}
@@ -106,13 +121,19 @@ function Initialize-SlimeNRFBuildEnvironment {
 
 function Invoke-SlimeNRFCargo {
     param([string]$Action = 'build', [switch]$DebugBuild, [switch]$NoFirmware, [string[]]$ExtraArguments = @())
+    # --doc uses Cargo directly; every other test argument uses nextest's CLI.
+    $docOnly = $Action -eq 'test' -and (Test-SlimeNRFDocOnly -Arguments $ExtraArguments)
+    if ($Action -eq 'test' -and -not $docOnly) { Assert-SlimeNRFNextest }
     $arguments = @($Action, '--manifest-path', (Join-Path $script:ProjectDirectory 'Cargo.toml'))
+    if ($Action -eq 'test' -and -not $docOnly) {
+        $arguments = @('nextest', 'run', '--manifest-path', (Join-Path $script:ProjectDirectory 'Cargo.toml'))
+    }
     # Do not add a competing selection when the caller chooses packages.
     # Arguments after -- belong to the invoked program or test harness.
     $hasPackageSelection = $false
     foreach ($argument in $ExtraArguments) {
         if ($argument -eq '--') { break }
-        if ($argument -match '^(?:--(?:package|exclude)(?:=|$)|--(?:workspace|all)$|-p)') {
+        if ($argument -cmatch '^(?:--(?:package|exclude)(?:=|$)|--(?:workspace|all)$|-p)') {
             $hasPackageSelection = $true
             break
         }

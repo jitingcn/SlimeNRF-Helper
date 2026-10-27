@@ -18,10 +18,14 @@
         shift
     done
     slimenrf_initialize_cargo
+    if (( ! format_only )); then
+        slimenrf_require_nextest
+    fi
     slimenrf_cargo fmt dev 0 -- --check
     if (( format_only )); then
         exit 0
     fi
     slimenrf_cargo clippy dev "$no_firmware" --all-targets -- -D warnings
     slimenrf_cargo test dev "$no_firmware" --all-targets
+    slimenrf_cargo test dev "$no_firmware" --doc
 )

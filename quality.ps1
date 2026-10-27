@@ -9,6 +9,7 @@ $originalDirectory = (Get-Location).Path
 try {
     . (Join-Path $PSScriptRoot 'scripts\environment.ps1')
     Initialize-SlimeNRFCargoEnvironment
+    if (-not $FormatOnly) { Assert-SlimeNRFNextest }
     Invoke-SlimeNRFCargo -Action fmt -ExtraArguments @('--', '--check')
     if ($script:CargoExitCode -ne 0 -or $FormatOnly) { exit $script:CargoExitCode }
 
@@ -17,6 +18,8 @@ try {
     if ($script:CargoExitCode -ne 0) { exit $script:CargoExitCode }
 
     Invoke-SlimeNRFCargo -Action test -DebugBuild -NoFirmware:$NoFirmware -ExtraArguments @('--all-targets')
+    if ($script:CargoExitCode -ne 0) { exit $script:CargoExitCode }
+    Invoke-SlimeNRFCargo -Action test -DebugBuild -NoFirmware:$NoFirmware -ExtraArguments @('--doc')
     exit $script:CargoExitCode
 } catch {
     Write-Error -ErrorRecord $_ -ErrorAction Continue

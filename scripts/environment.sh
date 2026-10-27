@@ -12,11 +12,32 @@ slimenrf_initialize_cargo() {
     cd -- "$SLIMENRF_PROJECT_ROOT" || return
 }
 
+slimenrf_require_nextest() {
+    if ! command -v cargo-nextest >/dev/null 2>&1; then
+        printf '%s\n' 'cargo-nextest is required. Install it with: cargo install --locked cargo-nextest --version 0.9.150' >&2
+        return 1
+    fi
+}
+
+slimenrf_test_doc_only() {
+    local argument
+    for argument in "$@"; do
+        [[ $argument != -- ]] || break
+        [[ $argument != --doc ]] || return 0
+    done
+    return 1
+}
+
 slimenrf_cargo() {
     local action=$1 profile=$2 no_firmware=$3
     shift 3
     local argument has_selection=0
     local -a arguments=("$action" --manifest-path "$SLIMENRF_PROJECT_ROOT/Cargo.toml")
+    # --doc uses Cargo directly; every other test argument uses nextest's CLI.
+    if [[ $action == test ]] && ! slimenrf_test_doc_only "$@"; then
+        slimenrf_require_nextest
+        arguments=(nextest run --manifest-path "$SLIMENRF_PROJECT_ROOT/Cargo.toml")
+    fi
     # Cargo's own -- belongs to the program, test harness, rustfmt or Clippy.
     for argument in "$@"; do
         [[ $argument != -- ]] || break

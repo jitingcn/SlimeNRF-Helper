@@ -12,18 +12,22 @@ When commands, behavior, or links change, update both the default English docume
 
 For native development, use the stable Rust toolchain pinned in [rust-toolchain.toml](../rust-toolchain.toml), including rustfmt, Clippy, rust-analyzer, and rust-src. rustup selects this toolchain automatically in this directory. Do not change your global default. The manifest's MSRV declares a compatibility floor, not a verified minimum version. [Cargo.lock](../Cargo.lock) fixes dependency versions. The GUI uses the official Fast feature through exports from the same `gpui_kit` source.
 
+Install cargo-nextest for script test actions and non-format-only quality checks: `cargo install --locked cargo-nextest --version 0.9.150`. It is not installed automatically; build, check, format-only, and explicit doctest-only actions do not require it.
+
 Application builds require Python 3.11+ with standard-library `tomllib` to generate license notices. This build-only prerequisite applies to scripts, direct Cargo, tests, checks, and editor analysis in both full and no-firmware modes. Running the packaged application and building only `slimenrf-recording` do not require Python.
 
 Optionally set `SLIMENRF_PYTHON` to one interpreter executable name or path, not a shell command with arguments. An invalid or empty explicit selection fails without fallback. Without it, application builds probe `py -3` on Windows, then `python3` and `python`; Linux packaging probes `python3` and `python`. If those candidates fail, either entry point can ask `uv` on `PATH` for an already installed Python 3.11+ interpreter. The lookup ignores projects and virtual environments, configuration and network access; it never downloads Python. Every selected interpreter must pass a version and `tomllib` probe. Make it available in the editor's environment too.
 
 CLI builds keep the default `embed-firmware` feature enabled. If a standalone checkout has no firmware payloads, explicitly add `-NoFirmware` or `--no-firmware` to every CLI build, run, check, and packaging command. For direct Cargo commands, use `--no-default-features`. Full builds require the intended firmware inputs. A no-firmware package does not satisfy full-package acceptance.
 
-The scripts support build, run, test, check, clippy, fmt, and clean. Build defaults to Release. Run, test, check, and clippy default to the development profile. Explicit Debug and Release options are mutually exclusive. By default, build and run select the desktop application, test, check, and clippy cover the workspace, and fmt covers every member. Explicit Cargo package selection takes precedence. Development and release optimizations are separate. Packaging uses the actual Release artifact, never a development build.
+The scripts support build, run, test, check, clippy, fmt, and clean. Build defaults to Release. Run, test, check, and clippy default to the development profile. Explicit Debug and Release options are mutually exclusive. By default, build and run select the desktop application, test, check, and clippy cover the workspace, and fmt covers every member. Explicit Cargo package selection takes precedence. The development profile optimizes the application at level 0 and recording and other dependencies at level 1; Cargo's default build override remains unoptimized. Release uses optimization level 2, fat LTO, one codegen unit, and symbol stripping. See [Cargo.toml](../Cargo.toml) for the authoritative settings. Packaging uses the actual Release artifact, never a development build.
+
+Cargo automatically chooses build parallelism from the available CPUs; set `CARGO_BUILD_JOBS` to override it. For test actions, nextest's `--build-jobs` controls build parallelism, whereas `-j` / `--jobs` controls concurrent test execution.
 
 <a id="windows"></a>
 ## Windows
 
-Install Visual Studio 2022 with the "Desktop development with C++" workload, the Windows SDK, and CMake. Install LLVM if a dependency needs libclang. The PowerShell entry points initialize and restore the caller's environment and working directory. They use VS CMake, an explicit `x86_64-pc-windows-msvc` target, and the static MSVC CRT, while preserving existing Rust flags. For direct Cargo commands, configure these conditions yourself. Do not add crt-static only to the host configuration, where it can affect procedural macros.
+Install Visual Studio 2022 with the "Desktop development with C++" workload, the Windows SDK, CMake, and libclang (for example from LLVM). The Windows MSVC target uses the Rust toolchain's bundled `rust-lld`; no separate LLVM linker installation is needed, but libclang is still required. The PowerShell entry points initialize and restore the caller's environment and working directory. They use VS CMake, an explicit `x86_64-pc-windows-msvc` target, and the static MSVC CRT, while preserving existing Rust flags. For direct Cargo commands, configure these conditions yourself. Do not add crt-static only to the host configuration, where it can affect procedural macros.
 
 Repeated setup from the editor's developer terminal preserves the effective static-CRT flags and tool search path instead of accumulating duplicate entries that invalidate Cargo caches. Reuse the same firmware mode and target directory for edit/run cycles; tests enable additional GUI support and can require a different dependency build. Cargo's “waiting for file lock” time is contention with another build, not compiler work.
 
@@ -39,24 +43,27 @@ Repeated setup from the editor's developer terminal preserves the effective stat
 ./build.ps1 -Action fmt                      # Explicitly apply formatting
 ```
 
-If you need execution-policy isolation, use `powershell -NoProfile -ExecutionPolicy Bypass -File ./build.ps1 ...`. The same applies to the other scripts. Remove `-NoFirmware` when firmware inputs are available. Pass extra Cargo arguments with `-CargoArguments`, for example `./build.ps1 -Action test -CargoArguments @('-p', 'slimenrf-recording')`.
+If you need execution-policy isolation, use `powershell -NoProfile -ExecutionPolicy Bypass -File ./build.ps1 ...`. The same applies to the other scripts. Remove `-NoFirmware` when firmware inputs are available. Pass extra arguments with `-CargoArguments`, for example `./build.ps1 -Action test -CargoArguments @('-p', 'slimenrf-recording')`. Test arguments use nextest semantics: `-P` / `--profile` selects the nextest profile, while `--cargo-profile` selects the Cargo profile.
+
+Nextest supports only its emulated libtest arguments after `--`: `--ignored`, `--include-ignored`, `--skip`, `--exact`, and `--nocapture`. In particular, do not pass libtest `--test-threads` after `--`; use nextest `-j` / `--test-threads` before it. With `--doc`, use Cargo and libtest arguments instead, without nextest-only options.
 
 A running EXE can lock the output. First, exit your own instance normally. If you must keep it running, set `$env:CARGO_TARGET_DIR='target/verified'`. Relative paths resolve from the application directory. Outputs are in its `x86_64-pc-windows-msvc/{debug,release}/` subdirectories. Do not create a separate editor cache.
 
 <a id="checks-and-editor"></a>
 ## Checks and editor setup
 
-`quality.ps1` and `quality.sh` use locked dependencies, stable rustfmt, strict Clippy across the workspace and all targets with `-D warnings`, and tests. They stop on failure. Cover both full and no-firmware modes for changes to shared boundaries, builds, configuration, or resources. Do not add `--all-features`, which re-enables embedded firmware.
+`quality.ps1` and `quality.sh` use locked dependencies, stable rustfmt, strict Clippy across the workspace and all targets with `-D warnings`, nextest, and a separate Cargo doctest run. They stop on failure. Cover both full and no-firmware modes for changes to shared boundaries, builds, configuration, or resources. Do not add `--all-features`, which re-enables embedded firmware.
 
-After configuring native dependencies, use these equivalent Cargo commands:
+After configuring native dependencies, use these equivalent commands:
 
 ```text
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --all-targets --locked
+cargo nextest run --workspace --all-targets --locked
+cargo test --workspace --doc --locked
 ```
 
-For no-firmware mode, add `--no-default-features` to the last two commands. To check only the core, use `cargo test --locked -p slimenrf-recording`. The core still needs a C compiler, but not Python, GPUI, hardware interfaces, application YAML, or firmware. External updater fixtures and the full firmware oracle are separate checks that require real additional inputs. Do not count ignored tests as passed.
+For no-firmware mode, add `--no-default-features` to Clippy, nextest, and doctests. Script test actions run nextest only; use `./build.ps1 -Action test -CargoArguments @('--doc')` or `bash ./build.sh test --cargo-arguments --doc` to run doctests separately with Cargo. The doctest-only action uses Cargo argument semantics. To check only the core, use `cargo nextest run --locked -p slimenrf-recording` and `cargo test --locked --doc -p slimenrf-recording`. The core still needs a C compiler, but not Python, GPUI, hardware interfaces, application YAML, or firmware. External updater fixtures and the full firmware oracle are separate checks that require real additional inputs. Do not count ignored tests as passed.
 
 Before creating a `Workbench` GUI fixture, acquire one `ui::test_support::UiTestSession` at the outer test scope. Reuse that session for all fixtures in the same `TestAppContext`. Keep it alive through callbacks and assertions to isolate the process-wide locale.
 
@@ -217,6 +224,18 @@ The [workflow](../.github/workflows/ci.yml) is the authoritative full CI depende
 Pass extra Cargo arguments with `--cargo-arguments`, for example `bash ./build.sh test --cargo-arguments -p slimenrf-recording`. `package.sh` defaults to ELF. It selects `SLIMENRF_PYTHON` or `python3`, checks Python 3.11+ and `tomllib`, and exports the selected executable so Cargo and packaging agree. Python package helpers invoke the notice generator with `sys.executable`. Packaging selects the actual Release application ELF from Cargo JSON and names it by version and ELF architecture, with a suffix for no-firmware builds. Same-name conflicts require an explicit `--force`. An ELF is not a universal static package. Build on the oldest glibc baseline you plan to support, then validate on target distributions.
 
 The native cache defaults to target. Relative `CARGO_TARGET_DIR` paths resolve from the application root. An explicit `--target-dir` takes precedence. Do not share compiled caches between Windows, Linux, and the SDK. Under WSL, you can keep a single Linux cache at `$HOME/.cache/slimenrf-helper/target` and share it between the editor and scripts.
+
+### Optional Linux mold linker
+
+Linux x86-64 GNU builds normally use Rust's bundled LLD. To opt in to [mold configuration](../.cargo/mold.toml), install `clang` and `mold` with `ld.mold` available on `PATH`, then pass the configuration explicitly:
+
+```bash
+bash ./build.sh --debug --no-firmware --cargo-arguments --config .cargo/mold.toml
+# Or with direct Cargo:
+cargo --config .cargo/mold.toml build --no-default-features
+```
+
+This selects Clang with `-fuse-ld=mold`; it does not change CI or Flatpak defaults. Cargo gives `CARGO_ENCODED_RUSTFLAGS` and then `RUSTFLAGS` precedence over configured target rustflags: either environment variable can suppress the mold flag even when Clang remains selected. A target-triple linker setting can also override the Linux cfg linker. Changing linker settings can rebuild cached artifacts.
 
 ### AppImage
 

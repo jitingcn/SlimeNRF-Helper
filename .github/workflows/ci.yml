@@ -70,6 +70,20 @@ jobs:
             throw 'The Windows runner must provide LLVM/libclang.'
           }
 
+      - name: Install checksum-pinned cargo-nextest
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'cargo-nextest-0.9.150.zip'
+          $tools = Join-Path $env:RUNNER_TEMP 'cargo-nextest-0.9.150'
+          Invoke-WebRequest -Uri 'https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.150/cargo-nextest-0.9.150-x86_64-pc-windows-msvc.zip' -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne '6fd8f9ba48c946a79a5bcdd35bf4f922447b149f7ca6c3ff7f39e12f32ef78db') {
+            throw 'cargo-nextest archive SHA-256 mismatch.'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $tools
+          if (-not (Test-Path -LiteralPath (Join-Path $tools 'cargo-nextest.exe') -PathType Leaf)) {
+            throw 'cargo-nextest executable is missing from the archive.'
+          }
+          $tools >> $env:GITHUB_PATH
+
       - name: Test isolated Python discovery on Windows
         run: |
           . ./scripts/environment.ps1
@@ -84,7 +98,7 @@ jobs:
           key: windows-2022-x64-no-firmware
           cache-bin: false
 
-      - name: Check formatting, strict workspace Clippy and all-target tests
+      - name: Check formatting, strict workspace Clippy, tests and doctests
         run: powershell -NoProfile -ExecutionPolicy Bypass -File ./quality.ps1 -NoFirmware
 
       - name: Package compressed Release executable
@@ -150,6 +164,20 @@ jobs:
           rustc --version --verbose
           cargo --version
 
+      - name: Install checksum-pinned cargo-nextest
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/cargo-nextest-0.9.150.tar.gz"
+          tools="$RUNNER_TEMP/cargo-nextest-0.9.150"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.150/cargo-nextest-0.9.150-x86_64-unknown-linux-gnu.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' 'b0959bc64232974224cf9fb22c915845398c0e8668fa7831eb5b43fb1eef781f' "$archive" | sha256sum --check -
+          mkdir -p "$tools"
+          tar -xzf "$archive" -C "$tools" cargo-nextest
+          test -x "$tools/cargo-nextest"
+          printf '%s\n' "$tools" >> "$GITHUB_PATH"
+
       - name: Test isolated Python discovery and packaging on Linux
         run: '"$SLIMENRF_PYTHON" -B -m unittest discover -s scripts -p ''test_python_discovery.py'''
 
@@ -160,7 +188,7 @@ jobs:
           key: ubuntu-22.04-x64-no-firmware
           cache-bin: false
 
-      - name: Check formatting, strict workspace Clippy and all-target tests
+      - name: Check formatting, strict workspace Clippy, tests and doctests
         run: bash ./quality.sh --no-firmware
 
       - name: Download checksum-pinned AppImage tools

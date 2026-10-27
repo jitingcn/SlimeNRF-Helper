@@ -14,6 +14,9 @@ try {
     . (Join-Path $PSScriptRoot 'scripts\environment.ps1')
     if ($Debug -and $Release) { throw 'Specify either -Debug or -Release, not both.' }
     $debugBuild = $Debug -or (-not $Release -and $Action -in @('run', 'test', 'check', 'clippy'))
+    if ($Action -eq 'test' -and -not (Test-SlimeNRFDocOnly -Arguments $CargoArguments)) {
+        Assert-SlimeNRFNextest
+    }
     if ($Action -in @('clean', 'fmt')) {
         Initialize-SlimeNRFCargoEnvironment
     } else {

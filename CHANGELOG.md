@@ -11,6 +11,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- Developer test scripts use cargo-nextest, with doctests available as a separate action; quality scripts run both. Windows MSVC builds use the Rust toolchain's bundled LLD linker, and Linux builds can opt into mold.
+- Release builds use optimization level 2, fat LTO, one codegen unit, and symbol stripping.
 - Main, license notices, RSSI analysis, and temperature calibration analysis windows now use theme-aware GPUI Kit title bars instead of system title-bar styling, while preserving window controls and shutdown cleanup.
 - Builds and Linux packaging can use an already installed Python 3.11+ interpreter discovered through `uv` when ordinary Python commands are unavailable, without downloading Python or creating an environment.
 - Repeated Windows build-environment setup no longer accumulates static-CRT flags or Visual Studio tool and compiler search paths, avoiding unnecessary Cargo cache invalidation from nested developer terminals.

@@ -2,7 +2,7 @@
   "schema": 1,
   "input_sha256": {
     "Cargo.lock": "cf39043a837b809195ebf7c6d02bb9f20f6230c3895ce6a2f01aee9c0f72b0d6",
-    "Cargo.toml": "769a95c192416aec5d73ca21af3f19078793df64a0a56743a7975f9366bc4208",
+    "Cargo.toml": "f51a6d7d732a8fe399525d0190152a408f905b48d56db54177003f66daf746b0",
     "crates/recording/Cargo.toml": "b97713b3affd1a84902192a86bf200055526fde9e93d848e9a7a21eef1c95b68",
     "crates/recording/vendor/vqf/cmsis/include/arm_math.h": "86b5daafdeeedecd7977f00c8001620003b46bd121d4942f04b72746d2634a97",
     "crates/recording/vendor/vqf/cmsis/include/sqrt_f32.h": "cd1cd5e3dbe322a738abd344b4de3ff872f7d4e20c21d87814720783a82be20e",

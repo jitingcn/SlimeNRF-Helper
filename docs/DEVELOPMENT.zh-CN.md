@@ -12,18 +12,22 @@
 
 原生开发使用 [rust-toolchain.toml](../rust-toolchain.toml) 固定的 stable Rust（含 rustfmt、Clippy、rust-analyzer、rust-src），rustup 在本目录自动选择，不需改变全局默认。清单 MSRV 是兼容下限声明，不代表当前已验证最低版本。依赖版本以 [Cargo.lock](../Cargo.lock) 为准，GUI 通过同源 `gpui_kit` 导出使用官方 Fast feature。
 
+脚本 test 操作和非纯格式质量检查需要安装 cargo-nextest：`cargo install --locked cargo-nextest --version 0.9.150`。脚本不会自动安装；build、check、纯格式和显式的纯 doctest 操作不需要它。
+
 应用构建需要 Python 3.11+ 及标准库 `tomllib`，用于生成版权材料。这是仅构建时需要的工具，适用于完整和无固件模式下的脚本、直接 Cargo、测试、检查与编辑器分析。运行打包后的应用或只构建 `slimenrf-recording` 不需要 Python。
 
 可选的 `SLIMENRF_PYTHON` 只接受一个解释器可执行文件名或路径，不接受带参数的 shell 命令。显式选择无效或为空时直接失败，不回退。未设置时，应用构建在 Windows 上先探测 `py -3`，再探测 `python3` 和 `python`；Linux 打包探测 `python3` 和 `python`。这些候选均失败时，两种入口都可通过 `PATH` 上的 `uv` 查找已安装的 Python 3.11+。查找忽略项目、虚拟环境、配置和网络，绝不下载 Python。每个选中的解释器都须通过版本及 `tomllib` 探测；编辑器环境也必须能使用该解释器。
 
 CLI 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷时，所有 CLI 构建、运行、检查、打包命令明确加 `-NoFirmware` 或 `--no-firmware`，直接 Cargo 用 `--no-default-features`。完整构建必须提供预期固件，不能用无固件包代替完整包验收。
 
-脚本支持 build/run/test/check/clippy/fmt/clean：build 默认 Release，run/test/check/clippy 默认开发配置；显式 Debug/Release 互斥。默认 build/run 选择桌面应用，test/check/clippy 覆盖 workspace，fmt 覆盖全部成员；显式 Cargo 包选择优先。开发与发布优化分离，package 只取实际 Release 产物，不用开发版替代。
+脚本支持 build/run/test/check/clippy/fmt/clean：build 默认 Release，run/test/check/clippy 默认开发配置；显式 Debug/Release 互斥。默认 build/run 选择桌面应用，test/check/clippy 覆盖 workspace，fmt 覆盖全部成员；显式 Cargo 包选择优先。开发 profile 中应用使用优化级别 0，recording 和其他依赖使用级别 1；Cargo 默认的 build override 仍不优化。Release 使用优化级别 2、fat LTO、单个 codegen unit，并剥离符号。权威配置见 [Cargo.toml](../Cargo.toml)；package 只取实际 Release 产物，不用开发版替代。
+
+Cargo 默认根据可用 CPU 自动选择构建并发数，可用 `CARGO_BUILD_JOBS` 覆盖。测试操作中 nextest 的 `--build-jobs` 控制构建并发，而 `-j` / `--jobs` 控制测试执行并发。
 
 <a id="windows"></a>
 ## Windows
 
-安装 Visual Studio 2022“使用 C++ 的桌面开发”、Windows SDK、CMake；依赖需要 libclang 时安装 LLVM。PowerShell 入口初始化并恢复调用者环境和工作目录，使用 VS CMake、显式 `x86_64-pc-windows-msvc` target 与静态 MSVC CRT，保留已有 Rust flags；直接 Cargo 要自行配置这些条件，不能只对 host 添加 crt-static 而影响过程宏。
+安装 Visual Studio 2022“使用 C++ 的桌面开发”、Windows SDK、CMake 和 libclang（例如来自 LLVM）。Windows MSVC target 使用 Rust 工具链自带的 `rust-lld`，无需另装 LLVM 链接器，但仍需要 libclang。PowerShell 入口初始化并恢复调用者环境和工作目录，使用 VS CMake、显式 `x86_64-pc-windows-msvc` target 与静态 MSVC CRT，保留已有 Rust flags；直接 Cargo 要自行配置这些条件，不能只对 host 添加 crt-static 而影响过程宏。
 
 在编辑器的开发终端中重复初始化时，脚本保持静态 CRT 参数和工具搜索路径稳定，不再因累积重复条目使 Cargo 缓存失效。日常编辑与运行应复用相同的固件模式和 target 目录；测试会启用额外的 GUI 支持，可能需要另一组依赖构建。Cargo 的“等待文件锁”耗时来自其他构建占用，不是编译器耗时。
 
@@ -39,24 +43,27 @@ CLI 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷�
 ./build.ps1 -Action fmt                      # 明确应用格式
 ```
 
-需要策略隔离时用 `powershell -NoProfile -ExecutionPolicy Bypass -File ./build.ps1 ...`（其他脚本同理）。有固件输入时去掉 `-NoFirmware`。附加 Cargo 参数用 `-CargoArguments`，例如 `./build.ps1 -Action test -CargoArguments @('-p', 'slimenrf-recording')`。
+需要策略隔离时用 `powershell -NoProfile -ExecutionPolicy Bypass -File ./build.ps1 ...`（其他脚本同理）。有固件输入时去掉 `-NoFirmware`。附加参数用 `-CargoArguments`，例如 `./build.ps1 -Action test -CargoArguments @('-p', 'slimenrf-recording')`。测试参数采用 nextest 语义：`-P` / `--profile` 选择 nextest profile，`--cargo-profile` 选择 Cargo profile。
+
+Nextest 在 `--` 之后只支持其模拟的 libtest 参数：`--ignored`、`--include-ignored`、`--skip`、`--exact` 和 `--nocapture`。尤其不要在 `--` 后传 libtest `--test-threads`；应在其之前使用 nextest 的 `-j` / `--test-threads`。使用 `--doc` 时改用 Cargo 和 libtest 参数，不要混入 nextest 专用选项。
 
 正在运行的 EXE 可能锁住输出；先正常退出自己的实例。确需保留时可设置 `$env:CARGO_TARGET_DIR='target/verified'`，相对路径以应用目录解析；输出在其 `x86_64-pc-windows-msvc/{debug,release}/`，不要为编辑器另建缓存。
 
 <a id="checks-and-editor"></a>
 ## 检查与编辑器
 
-`quality.ps1` 和 `quality.sh` 使用锁定依赖、stable rustfmt、整个 workspace/all-target 严格 Clippy `-D warnings` 和测试，失败即停止。共享边界、构建、配置或资源变更应覆盖完整和无固件两种模式；不要加 `--all-features` 重新开启内置固件。
+`quality.ps1` 和 `quality.sh` 使用锁定依赖、stable rustfmt、整个 workspace/all-target 严格 Clippy `-D warnings`、nextest 和单独的 Cargo doctest，失败即停止。共享边界、构建、配置或资源变更应覆盖完整和无固件两种模式；不要加 `--all-features` 重新开启内置固件。
 
-配置好原生依赖后，等价 Cargo 命令：
+配置好原生依赖后，等价命令：
 
 ```text
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo test --workspace --all-targets --locked
+cargo nextest run --workspace --all-targets --locked
+cargo test --workspace --doc --locked
 ```
 
-无固件模式为后两条添加 `--no-default-features`。只查内核可用 `cargo test --locked -p slimenrf-recording`，仍需 C 编译器，但不需 Python、GPUI、硬件接口、应用 YAML 或固件。外部 updater fixture 与完整固件 oracle 为有真实额外输入的独立检查，不把 ignored 当通过。
+无固件模式为 Clippy、nextest 和 doctest 添加 `--no-default-features`。脚本 test 操作只运行 nextest；使用 `./build.ps1 -Action test -CargoArguments @('--doc')` 或 `bash ./build.sh test --cargo-arguments --doc` 单独通过 Cargo 运行 doctest。纯 doctest 操作使用 Cargo 参数语义。只查内核可用 `cargo nextest run --locked -p slimenrf-recording` 和 `cargo test --locked --doc -p slimenrf-recording`，仍需 C 编译器，但不需 Python、GPUI、硬件接口、应用 YAML 或固件。外部 updater fixture 与完整固件 oracle 为有真实额外输入的独立检查，不把 ignored 当通过。
 
 创建 `Workbench` GUI 测试 fixture 前，在测试函数的最外层创建一个 `ui::test_support::UiTestSession`。同一 `TestAppContext` 的所有 fixture 共用这个会话。让会话保持到回调和断言结束，以隔离进程级语言状态。
 
@@ -217,6 +224,18 @@ bash ./package.sh --no-firmware
 附加 Cargo 参数用 `--cargo-arguments`，例如 `bash ./build.sh test --cargo-arguments -p slimenrf-recording`。`package.sh` 默认 ELF。它选择 `SLIMENRF_PYTHON` 或 `python3`，检查 Python 3.11+ 及 `tomllib`，并导出选定的可执行文件，让 Cargo 与打包使用同一解释器。Python 打包工具通过 `sys.executable` 调用版权材料生成器。打包根据 Cargo JSON 选择实际 Release 应用 ELF，按版本与 ELF 架构命名，无固件加后缀。同名冲突须明确 `--force`。ELF 并非静态通用包，应在计划支持的最旧 glibc 基线构建，再到目标发行版验收。
 
 原生缓存默认 target；`CARGO_TARGET_DIR` 相对应用根，显式 `--target-dir` 优先。不要混用 Windows/Linux/SDK 编译缓存；WSL 可将唯一 Linux 缓存放在 `$HOME/.cache/slimenrf-helper/target`，编辑器与脚本共用。
+
+### 可选 Linux mold 链接器
+
+Linux x86-64 GNU 构建通常使用 Rust 自带的 LLD。若要启用 [mold 配置](../.cargo/mold.toml)，安装 `clang` 和 `mold`，确保 `PATH` 中有 `ld.mold`，然后显式传入配置：
+
+```bash
+bash ./build.sh --debug --no-firmware --cargo-arguments --config .cargo/mold.toml
+# 或直接使用 Cargo：
+cargo --config .cargo/mold.toml build --no-default-features
+```
+
+该配置使用 Clang 和 `-fuse-ld=mold`，不改变 CI 或 Flatpak 默认值。Cargo 优先采用 `CARGO_ENCODED_RUSTFLAGS`，其次是 `RUSTFLAGS`，再使用配置的 target rustflags；设置任一环境变量都可能使 mold 参数失效，即使仍选择了 Clang。显式 target triple 的 linker 设置也可能覆盖 Linux cfg linker。切换链接器设置可能导致缓存产物重新构建。
 
 ### AppImage
 

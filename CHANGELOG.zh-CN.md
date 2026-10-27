@@ -11,6 +11,8 @@
 
 ### 变更
 
+- 开发测试脚本使用 cargo-nextest，文档测试作为单独操作运行；质量检查脚本运行两者。Windows MSVC 构建使用 Rust 工具链自带的 LLD 链接器，Linux 构建可选择启用 mold。
+- Release 构建使用优化级别 2、fat LTO、单个 codegen unit，并剥离符号。
 - 主窗口、版权说明、RSSI 分析和温度校准分析窗口改用随主题变化的 GPUI Kit 标题栏，不再使用系统标题栏样式，并保留窗口控制与退出清理流程。
 - 常规 Python 命令不可用时，构建与 Linux 打包可通过 `uv` 查找已安装的 Python 3.11+，不会自动下载 Python 或创建环境。
 - Windows 构建环境重复初始化时不再累积静态 CRT 参数或 Visual Studio 工具与编译器搜索路径，避免嵌套开发终端造成不必要的 Cargo 缓存失效。

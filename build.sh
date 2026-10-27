@@ -9,7 +9,10 @@
             '                     [--debug|--release] [--no-firmware]' \
             '                     [--cargo-arguments <Cargo arguments...>]' \
             'Defaults: build uses Release; run/test/check/clippy use development.' \
-            'Everything after --cargo-arguments is passed unchanged, including Cargo --.'
+            'Test runs nextest only; use --doc for Cargo doctests only.' \
+            'Nextest -j/--jobs controls test threads; --build-jobs controls build jobs.' \
+            'Nextest --profile is its runner profile; --cargo-profile is the Cargo profile.' \
+            'Arguments after --cargo-arguments are passed to the selected action.'
     }
     action=build
     action_set=0
@@ -49,5 +52,8 @@
         profile=release
     fi
     slimenrf_initialize_cargo
+    if [[ $action == test ]] && ! slimenrf_test_doc_only "${cargo_arguments[@]}"; then
+        slimenrf_require_nextest
+    fi
     slimenrf_cargo "$action" "$profile" "$no_firmware" "${cargo_arguments[@]}"
 )

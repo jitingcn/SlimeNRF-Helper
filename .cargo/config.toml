@@ -1,0 +1,3 @@
+[target.x86_64-pc-windows-msvc]
+# rustc resolves its bundled LLD; MSVC/Windows SDK still provide native libraries.
+linker = "rust-lld"

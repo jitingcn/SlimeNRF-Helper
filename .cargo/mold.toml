@@ -1,0 +1,5 @@
+# Opt in with `cargo --config .cargo/mold.toml ...` on Linux.
+# clang and ld.mold must be available on PATH.
+[target.'cfg(target_os = "linux")']
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
