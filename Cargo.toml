@@ -85,7 +85,7 @@ codegen-units = 256
 lto = "off"
 
 # These dependencies rarely change, but dominate native layout, text and painting.
-[profile.dev.package]
+[profile.release.package]
 gpui-fast = { opt-level = 3 }
 gpui-fast-windows = { opt-level = 3 }
 gpui-fast-platform = { opt-level = 3 }
@@ -98,6 +98,7 @@ taffy = { opt-level = 3 }
 smol = { opt-level = 3 }
 
 [profile.release]
-lto = "thin"
+opt-level = 3
+lto = "fat"
 codegen-units = 1
 strip = "debuginfo"

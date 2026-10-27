@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "input_sha256": {
-    "Cargo.lock": "79d26f8c3ad25c9e8396a748679bcc7effcefd164dc60beb36e61a2297b9a935",
-    "Cargo.toml": "4cde81a8bd20e4edbb89a534f763e3b65452488ccbab1f551d174b3e44042115",
+    "Cargo.lock": "cf39043a837b809195ebf7c6d02bb9f20f6230c3895ce6a2f01aee9c0f72b0d6",
+    "Cargo.toml": "769a95c192416aec5d73ca21af3f19078793df64a0a56743a7975f9366bc4208",
     "crates/recording/Cargo.toml": "b97713b3affd1a84902192a86bf200055526fde9e93d848e9a7a21eef1c95b68",
     "crates/recording/vendor/vqf/cmsis/include/arm_math.h": "86b5daafdeeedecd7977f00c8001620003b46bd121d4942f04b72746d2634a97",
     "crates/recording/vendor/vqf/cmsis/include/sqrt_f32.h": "cd1cd5e3dbe322a738abd344b4de3ff872f7d4e20c21d87814720783a82be20e",
@@ -18,6 +18,10 @@
     "crates/recording/vendor/vqf/LICENSE-SlimeVR": "8e5be2a5a0e9b0f946af998db00a0820d2ff41cc00702362fc19a1082f13a731",
     "LICENSE-APACHE": "c6f55eb03478861bf9293baf2b7e77322e8a7205b8acb9b529c1c202adb24de6",
     "LICENSE-MIT": "984757f3c9a84f012b07ae89dc82cf9f9a711bdd61bca51c1e7c24c2173a0778"
+  },
+  "manifest_semantic_sha256": {
+    "Cargo.toml": "6f50f15250173dc8fe909d2492dfd942d9fc758cc4c25eb35177447c7190a178",
+    "crates/recording/Cargo.toml": "cd7867af705526b66357d2cc21f1551d4ab22758cdea105526124fdbc7c21f6d"
   },
   "capture": {
     "targets": [
@@ -99,7 +103,7 @@
         "avif-serialize@0.8.9",
         "aws-lc-rs@1.18.2",
         "aws-lc-sys@0.46.0",
-        "backtrace@0.3.76",
+        "backtrace@0.3.77",
         "base62@2.2.6",
         "base64@0.22.1",
         "base64@0.23.1",
@@ -405,7 +409,7 @@
         "rustc-demangle@0.1.28",
         "rustc-hash@2.1.3",
         "rustc_version@0.4.1",
-        "rustix@1.1.5",
+        "rustix@1.1.6",
         "rustls-native-certs@0.8.5",
         "rustls-pki-types@1.15.1",
         "rustls-platform-verifier@0.7.1",
@@ -602,7 +606,7 @@
         "zerotrie@0.2.5",
         "zerovec-derive@0.11.7",
         "zerovec@0.11.9",
-        "zip@9.1.1",
+        "zip@9.1.2",
         "zlib-rs@0.6.8",
         "zmij@1.0.23",
         "zopfli@0.8.4",
@@ -620,7 +624,7 @@
         "accesskit_atspi_common@0.19.1",
         "accesskit_consumer@0.38.0",
         "accesskit_unix@0.22.1",
-        "addr2line@0.25.1",
+        "addr2line@0.27.1",
         "adler2@2.0.1",
         "aes@0.8.4",
         "ahash@0.8.12",
@@ -663,7 +667,7 @@
         "avif-serialize@0.8.9",
         "aws-lc-rs@1.18.2",
         "aws-lc-sys@0.46.0",
-        "backtrace@0.3.76",
+        "backtrace@0.3.77",
         "base62@2.2.6",
         "base64@0.22.1",
         "base64@0.23.1",
@@ -803,7 +807,7 @@
         "getrandom@0.3.4",
         "getrandom@0.4.3",
         "gif@0.14.2",
-        "gimli@0.32.3",
+        "gimli@0.34.0",
         "glam@0.34.1",
         "glob@0.3.4",
         "globset@0.4.20",
@@ -953,11 +957,11 @@
         "num-traits@0.2.19",
         "num@0.4.3",
         "num_cpus@1.17.0",
-        "object@0.37.3",
+        "object@0.40.0",
         "once_cell@1.21.4",
         "oo7@0.6.0",
         "open@5.4.5",
-        "openssl-probe@0.2.1",
+        "openssl-probe@0.2.2",
         "option-ext@0.2.0",
         "ordered-float@5.5.1",
         "ordered-stream@0.2.0",
@@ -1055,7 +1059,7 @@
         "rustc-hash@1.1.0",
         "rustc-hash@2.1.3",
         "rustc_version@0.4.1",
-        "rustix@1.1.5",
+        "rustix@1.1.6",
         "rustls-native-certs@0.8.5",
         "rustls-pki-types@1.15.1",
         "rustls-platform-verifier@0.7.1",
@@ -1256,7 +1260,7 @@
         "zerotrie@0.2.5",
         "zerovec-derive@0.11.7",
         "zerovec@0.11.9",
-        "zip@9.1.1",
+        "zip@9.1.2",
         "zlib-rs@0.6.8",
         "zmij@1.0.23",
         "zopfli@0.8.4",
@@ -1402,12 +1406,12 @@
     },
     {
       "name": "addr2line",
-      "version": "0.25.1",
+      "version": "0.27.1",
       "license": "Apache-2.0 OR MIT",
-      "checksum": "1b5d307320b3181d6d7954e663bd7c774a838b8220fe0593c86d9fb09f498b4b",
-      "source_archive": "https://static.crates.io/crates/addr2line/addr2line-0.25.1.crate",
+      "checksum": "e567177890eb1617b1f774005b66b26b2377afd138a2ca37aae7d8f0c81429d4",
+      "source_archive": "https://static.crates.io/crates/addr2line/addr2line-0.27.1.crate",
       "repository": "https://github.com/gimli-rs/addr2line",
-      "source_commit": "f02db009deb9b441818afa49cb1b17453c1e4243",
+      "source_commit": "61b28a49f14eb4d14ba631ba5e8e4ab3cbedf932",
       "target_roles": {
         "x86_64-unknown-linux-gnu": [
           "code_candidate"
@@ -2579,12 +2583,12 @@
     },
     {
       "name": "backtrace",
-      "version": "0.3.76",
+      "version": "0.3.77",
       "license": "MIT OR Apache-2.0",
-      "checksum": "bb531853791a215d7c62a30daf0dde835f381ab5de4589cfe7c649d2cbe92bd6",
-      "source_archive": "https://static.crates.io/crates/backtrace/backtrace-0.3.76.crate",
+      "checksum": "42f4220217f3288537b83684130f42fad43320b1c3b805f1910d683d52ded24f",
+      "source_archive": "https://static.crates.io/crates/backtrace/backtrace-0.3.77.crate",
       "repository": "https://github.com/rust-lang/backtrace-rs",
-      "source_commit": "775f6a1ba62e7d35a1fac76e64c61d9d4687b5f2",
+      "source_commit": "38d40cfc8611e875f77920e85ba974d10766e421",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
           "code_candidate"
@@ -6579,12 +6583,12 @@
     },
     {
       "name": "gimli",
-      "version": "0.32.3",
+      "version": "0.34.0",
       "license": "MIT OR Apache-2.0",
-      "checksum": "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7",
-      "source_archive": "https://static.crates.io/crates/gimli/gimli-0.32.3.crate",
+      "checksum": "1033caf0b349c518623b5396bfb2cf0bddf44f0306d543a250e5743297aafd10",
+      "source_archive": "https://static.crates.io/crates/gimli/gimli-0.34.0.crate",
       "repository": "https://github.com/gimli-rs/gimli",
-      "source_commit": "8bc8e622fcb9be20fc9f03c96bc6335d936b869d",
+      "source_commit": "86df12a630d43bc97b37eea4d2c7b218fa3ea2e3",
       "target_roles": {
         "x86_64-unknown-linux-gnu": [
           "code_candidate"
@@ -6598,8 +6602,11 @@
       },
       "notices": [
         "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
-        "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
-      ]
+        "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0",
+        "ea5b0aeaa89edecc06d73f2e26579a6e784fc5b510db589838025ad321f6ff09",
+        "fe5c62b543e287981db198f2acfa0ca732d12591a1024536dc8fd85dacd77104"
+      ],
+      "policy": "Includes case-folding data generated from Unicode 17.0.0 CaseFolding.txt in src/case_fold_data.rs. Preserve its Unicode copyright and Unicode License V3 alongside the crate license alternatives."
     },
     {
       "name": "glam",
@@ -11093,12 +11100,12 @@
     },
     {
       "name": "object",
-      "version": "0.37.3",
+      "version": "0.40.0",
       "license": "Apache-2.0 OR MIT",
-      "checksum": "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe",
-      "source_archive": "https://static.crates.io/crates/object/object-0.37.3.crate",
+      "checksum": "dd229a0361b9d0d4396176e02d65897f487eebeab7caa6d443855ee152ca0b9c",
+      "source_archive": "https://static.crates.io/crates/object/object-0.40.0.crate",
       "repository": "https://github.com/gimli-rs/object",
-      "source_commit": "916c47b90e5c0bea139ca4bdfc53811f7d2c3383",
+      "source_commit": "400e64fbcb03fddb4b1ae8aef1868976ab999acc",
       "target_roles": {
         "x86_64-unknown-linux-gnu": [
           "code_candidate"
@@ -11203,12 +11210,12 @@
     },
     {
       "name": "openssl-probe",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "license": "MIT OR Apache-2.0",
-      "checksum": "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe",
-      "source_archive": "https://static.crates.io/crates/openssl-probe/openssl-probe-0.2.1.crate",
+      "checksum": "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1",
+      "source_archive": "https://static.crates.io/crates/openssl-probe/openssl-probe-0.2.2.crate",
       "repository": "https://github.com/rustls/openssl-probe",
-      "source_commit": "9181752ff5eab32339111dbdcc6cdc9f5a5eb06e",
+      "source_commit": "f5964f9e8994251dea150d3e82fcabca8433731c",
       "target_roles": {
         "x86_64-unknown-linux-gnu": [
           "code_candidate"
@@ -14114,12 +14121,12 @@
     },
     {
       "name": "rustix",
-      "version": "1.1.5",
+      "version": "1.1.6",
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "checksum": "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d",
-      "source_archive": "https://static.crates.io/crates/rustix/rustix-1.1.5.crate",
+      "checksum": "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa",
+      "source_archive": "https://static.crates.io/crates/rustix/rustix-1.1.6.crate",
       "repository": "https://github.com/bytecodealliance/rustix",
-      "source_commit": "287214b889865d8e1406a0ee71cc409b6f6191c8",
+      "source_commit": "4a563ad698b2c20ff848515821023d2265a788d0",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
           "code_candidate"
@@ -14160,8 +14167,11 @@
         "377c2e7c53250cc5905c0b0532d35973392af16ffb9596a41d99d202cf3617c9",
         "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
         "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5",
-        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-      ]
+        "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+        "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+        "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e"
+      ],
+      "policy": "src/types.rs incorporates code copied from rust-lang/libc at commit 008f905256d27eb5dd416d0976678ee6c2855554. Retain the upstream Rust Project Developers MIT and Apache notices alongside the rustix alternatives."
     },
     {
       "name": "rustls-native-certs",
@@ -21269,12 +21279,12 @@
     },
     {
       "name": "zip",
-      "version": "9.1.1",
+      "version": "9.1.2",
       "license": "MIT",
-      "checksum": "518b847fd864440c379748ad684c449f293af68978a485a4ff16f7c901c1f7c4",
-      "source_archive": "https://static.crates.io/crates/zip/zip-9.1.1.crate",
+      "checksum": "ec2e3161de27091f18a831d9494e9c53378a34833af5c1dda35ad85849da18d6",
+      "source_archive": "https://static.crates.io/crates/zip/zip-9.1.2.crate",
       "repository": "https://github.com/zip-rs/zip2",
-      "source_commit": "b7201cee0682127127c6a0973d029ab0d0af3b9f",
+      "source_commit": "662ae138dbcec989ee99e6bc4668501add70e209",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
           "code_candidate",
@@ -22310,6 +22320,12 @@
           "url": "https://static.crates.io/crates/object/object-0.37.3.crate#LICENSE-MIT",
           "archive_sha256": "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe",
           "path": "LICENSE-MIT"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/object/object-0.40.0.crate#LICENSE-MIT",
+          "archive_sha256": "dd229a0361b9d0d4396176e02d65897f487eebeab7caa6d443855ee152ca0b9c",
+          "path": "LICENSE-MIT"
         }
       ],
       "base64": "Q29weXJpZ2h0IChjKSAyMDE1IFRoZSBHaW1saSBEZXZlbG9wZXJzCgpQZXJtaXNzaW9uIGlzIGhlcmVieSBncmFudGVkLCBmcmVlIG9mIGNoYXJnZSwgdG8gYW55CnBlcnNvbiBvYnRhaW5pbmcgYSBjb3B5IG9mIHRoaXMgc29mdHdhcmUgYW5kIGFzc29jaWF0ZWQKZG9jdW1lbnRhdGlvbiBmaWxlcyAodGhlICJTb2Z0d2FyZSIpLCB0byBkZWFsIGluIHRoZQpTb2Z0d2FyZSB3aXRob3V0IHJlc3RyaWN0aW9uLCBpbmNsdWRpbmcgd2l0aG91dApsaW1pdGF0aW9uIHRoZSByaWdodHMgdG8gdXNlLCBjb3B5LCBtb2RpZnksIG1lcmdlLApwdWJsaXNoLCBkaXN0cmlidXRlLCBzdWJsaWNlbnNlLCBhbmQvb3Igc2VsbCBjb3BpZXMgb2YKdGhlIFNvZnR3YXJlLCBhbmQgdG8gcGVybWl0IHBlcnNvbnMgdG8gd2hvbSB0aGUgU29mdHdhcmUKaXMgZnVybmlzaGVkIHRvIGRvIHNvLCBzdWJqZWN0IHRvIHRoZSBmb2xsb3dpbmcKY29uZGl0aW9uczoKClRoZSBhYm92ZSBjb3B5cmlnaHQgbm90aWNlIGFuZCB0aGlzIHBlcm1pc3Npb24gbm90aWNlCnNoYWxsIGJlIGluY2x1ZGVkIGluIGFsbCBjb3BpZXMgb3Igc3Vic3RhbnRpYWwgcG9ydGlvbnMKb2YgdGhlIFNvZnR3YXJlLgoKVEhFIFNPRlRXQVJFIElTIFBST1ZJREVEICJBUyBJUyIsIFdJVEhPVVQgV0FSUkFOVFkgT0YKQU5ZIEtJTkQsIEVYUFJFU1MgT1IgSU1QTElFRCwgSU5DTFVESU5HIEJVVCBOT1QgTElNSVRFRApUTyBUSEUgV0FSUkFOVElFUyBPRiBNRVJDSEFOVEFCSUxJVFksIEZJVE5FU1MgRk9SIEEKUEFSVElDVUxBUiBQVVJQT1NFIEFORCBOT05JTkZSSU5HRU1FTlQuIElOIE5PIEVWRU5UClNIQUxMIFRIRSBBVVRIT1JTIE9SIENPUFlSSUdIVCBIT0xERVJTIEJFIExJQUJMRSBGT1IgQU5ZCkNMQUlNLCBEQU1BR0VTIE9SIE9USEVSIExJQUJJTElUWSwgV0hFVEhFUiBJTiBBTiBBQ1RJT04KT0YgQ09OVFJBQ1QsIFRPUlQgT1IgT1RIRVJXSVNFLCBBUklTSU5HIEZST00sIE9VVCBPRiBPUgpJTiBDT05ORUNUSU9OIFdJVEggVEhFIFNPRlRXQVJFIE9SIFRIRSBVU0UgT1IgT1RIRVIKREVBTElOR1MgSU4gVEhFIFNPRlRXQVJFLgo="
@@ -22636,6 +22652,13 @@
       "encoding": "utf-8",
       "utf8_sha256": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e",
       "origins": [
+        {
+          "kind": "pinned_upstream",
+          "url": "https://raw.githubusercontent.com/rust-lang/libc/008f905256d27eb5dd416d0976678ee6c2855554/LICENSE-MIT",
+          "path": "LICENSE-MIT",
+          "git_blob_sha1": "f4095b2fa2d9b6b96341d85c5e8d4943edf7a079",
+          "git_blob_verified": true
+        },
         {
           "kind": "published_crate",
           "url": "https://static.crates.io/crates/libc/libc-0.2.191.crate#LICENSE-MIT",
@@ -23829,6 +23852,12 @@
           "url": "https://static.crates.io/crates/typed-path/typed-path-0.13.0.crate#LICENSE-MIT",
           "archive_sha256": "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e",
           "path": "LICENSE-MIT"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/rustix/rustix-1.1.6.crate#LICENSE-MIT",
+          "archive_sha256": "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa",
+          "path": "LICENSE-MIT"
         }
       ],
       "base64": "UGVybWlzc2lvbiBpcyBoZXJlYnkgZ3JhbnRlZCwgZnJlZSBvZiBjaGFyZ2UsIHRvIGFueQpwZXJzb24gb2J0YWluaW5nIGEgY29weSBvZiB0aGlzIHNvZnR3YXJlIGFuZCBhc3NvY2lhdGVkCmRvY3VtZW50YXRpb24gZmlsZXMgKHRoZSAiU29mdHdhcmUiKSwgdG8gZGVhbCBpbiB0aGUKU29mdHdhcmUgd2l0aG91dCByZXN0cmljdGlvbiwgaW5jbHVkaW5nIHdpdGhvdXQKbGltaXRhdGlvbiB0aGUgcmlnaHRzIHRvIHVzZSwgY29weSwgbW9kaWZ5LCBtZXJnZSwKcHVibGlzaCwgZGlzdHJpYnV0ZSwgc3VibGljZW5zZSwgYW5kL29yIHNlbGwgY29waWVzIG9mCnRoZSBTb2Z0d2FyZSwgYW5kIHRvIHBlcm1pdCBwZXJzb25zIHRvIHdob20gdGhlIFNvZnR3YXJlCmlzIGZ1cm5pc2hlZCB0byBkbyBzbywgc3ViamVjdCB0byB0aGUgZm9sbG93aW5nCmNvbmRpdGlvbnM6CgpUaGUgYWJvdmUgY29weXJpZ2h0IG5vdGljZSBhbmQgdGhpcyBwZXJtaXNzaW9uIG5vdGljZQpzaGFsbCBiZSBpbmNsdWRlZCBpbiBhbGwgY29waWVzIG9yIHN1YnN0YW50aWFsIHBvcnRpb25zCm9mIHRoZSBTb2Z0d2FyZS4KClRIRSBTT0ZUV0FSRSBJUyBQUk9WSURFRCAiQVMgSVMiLCBXSVRIT1VUIFdBUlJBTlRZIE9GCkFOWSBLSU5ELCBFWFBSRVNTIE9SIElNUExJRUQsIElOQ0xVRElORyBCVVQgTk9UIExJTUlURUQKVE8gVEhFIFdBUlJBTlRJRVMgT0YgTUVSQ0hBTlRBQklMSVRZLCBGSVRORVNTIEZPUiBBClBBUlRJQ1VMQVIgUFVSUE9TRSBBTkQgTk9OSU5GUklOR0VNRU5ULiBJTiBOTyBFVkVOVApTSEFMTCBUSEUgQVVUSE9SUyBPUiBDT1BZUklHSFQgSE9MREVSUyBCRSBMSUFCTEUgRk9SIEFOWQpDTEFJTSwgREFNQUdFUyBPUiBPVEhFUiBMSUFCSUxJVFksIFdIRVRIRVIgSU4gQU4gQUNUSU9OCk9GIENPTlRSQUNULCBUT1JUIE9SIE9USEVSV0lTRSwgQVJJU0lORyBGUk9NLCBPVVQgT0YgT1IKSU4gQ09OTkVDVElPTiBXSVRIIFRIRSBTT0ZUV0FSRSBPUiBUSEUgVVNFIE9SIE9USEVSCkRFQUxJTkdTIElOIFRIRSBTT0ZUV0FSRS4K"
@@ -24071,6 +24100,12 @@
           "kind": "published_crate",
           "url": "https://static.crates.io/crates/rustix/rustix-1.1.5.crate#LICENSE-Apache-2.0_WITH_LLVM-exception",
           "archive_sha256": "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d",
+          "path": "LICENSE-Apache-2.0_WITH_LLVM-exception"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/rustix/rustix-1.1.6.crate#LICENSE-Apache-2.0_WITH_LLVM-exception",
+          "archive_sha256": "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa",
           "path": "LICENSE-Apache-2.0_WITH_LLVM-exception"
         }
       ],
@@ -24675,6 +24710,12 @@
           "url": "https://static.crates.io/crates/rustix/rustix-1.1.5.crate#COPYRIGHT",
           "archive_sha256": "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d",
           "path": "COPYRIGHT"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/rustix/rustix-1.1.6.crate#COPYRIGHT",
+          "archive_sha256": "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa",
+          "path": "COPYRIGHT"
         }
       ],
       "base64": "U2hvcnQgdmVyc2lvbiBmb3Igbm9uLWxhd3llcnM6CgpgcnVzdGl4YCBpcyB0cmlwbGUtbGljZW5zZWQgdW5kZXIgQXBhY2hlIDIuMCB3aXRoIHRoZSBMTFZNIEV4Y2VwdGlvbiwKQXBhY2hlIDIuMCwgYW5kIE1JVCB0ZXJtcy4KCgpMb25nZXIgdmVyc2lvbjoKCkNvcHlyaWdodHMgaW4gdGhlIGBydXN0aXhgIHByb2plY3QgYXJlIHJldGFpbmVkIGJ5IHRoZWlyIGNvbnRyaWJ1dG9ycy4KTm8gY29weXJpZ2h0IGFzc2lnbm1lbnQgaXMgcmVxdWlyZWQgdG8gY29udHJpYnV0ZSB0byB0aGUgYHJ1c3RpeGAKcHJvamVjdC4KClNvbWUgZmlsZXMgaW5jbHVkZSBjb2RlIGRlcml2ZWQgZnJvbSBSdXN0J3MgYGxpYnN0ZGA7IHNlZSB0aGUgY29tbWVudHMgaW4KdGhlIGNvZGUgZm9yIGRldGFpbHMuCgpFeGNlcHQgYXMgb3RoZXJ3aXNlIG5vdGVkIChiZWxvdyBhbmQvb3IgaW4gaW5kaXZpZHVhbCBmaWxlcyksIGBydXN0aXhgCmlzIGxpY2Vuc2VkIHVuZGVyOgoKIC0gdGhlIEFwYWNoZSBMaWNlbnNlLCBWZXJzaW9uIDIuMCwgd2l0aCB0aGUgTExWTSBFeGNlcHRpb24KICAgPExJQ0VOU0UtQXBhY2hlLTIuMF9XSVRIX0xMVk0tZXhjZXB0aW9uPiBvcgogICA8aHR0cDovL2xsdm0ub3JnL2ZvdW5kYXRpb24vcmVsaWNlbnNpbmcvTElDRU5TRS50eHQ+CiAtIHRoZSBBcGFjaGUgTGljZW5zZSwgVmVyc2lvbiAyLjAKICAgPExJQ0VOU0UtQVBBQ0hFPiBvcgogICA8aHR0cDovL3d3dy5hcGFjaGUub3JnL2xpY2Vuc2VzL0xJQ0VOU0UtMi4wPiwKIC0gb3IgdGhlIE1JVCBsaWNlbnNlCiAgIDxMSUNFTlNFLU1JVD4gb3IKICAgPGh0dHA6Ly9vcGVuc291cmNlLm9yZy9saWNlbnNlcy9NSVQ+LAoKYXQgeW91ciBvcHRpb24uCg=="
@@ -24791,6 +24832,18 @@
           "kind": "published_crate",
           "url": "https://static.crates.io/crates/find-msvc-tools/find-msvc-tools-0.1.15.crate#LICENSE-MIT",
           "archive_sha256": "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48",
+          "path": "LICENSE-MIT"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/backtrace/backtrace-0.3.77.crate#LICENSE-MIT",
+          "archive_sha256": "42f4220217f3288537b83684130f42fad43320b1c3b805f1910d683d52ded24f",
+          "path": "LICENSE-MIT"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/openssl-probe/openssl-probe-0.2.2.crate#LICENSE-MIT",
+          "archive_sha256": "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1",
           "path": "LICENSE-MIT"
         }
       ],
@@ -25725,6 +25778,12 @@
           "url": "https://static.crates.io/crates/zip/zip-9.1.1.crate#LICENSE",
           "archive_sha256": "518b847fd864440c379748ad684c449f293af68978a485a4ff16f7c901c1f7c4",
           "path": "LICENSE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/zip/zip-9.1.2.crate#LICENSE",
+          "archive_sha256": "ec2e3161de27091f18a831d9494e9c53378a34833af5c1dda35ad85849da18d6",
+          "path": "LICENSE"
         }
       ],
       "base64": "VGhlIE1JVCBMaWNlbnNlIChNSVQpCgpDb3B5cmlnaHQgKGMpIDIwMTQgTWF0aGlqcyB2YW4gZGUgTmVzCgpQZXJtaXNzaW9uIGlzIGhlcmVieSBncmFudGVkLCBmcmVlIG9mIGNoYXJnZSwgdG8gYW55IHBlcnNvbiBvYnRhaW5pbmcgYSBjb3B5Cm9mIHRoaXMgc29mdHdhcmUgYW5kIGFzc29jaWF0ZWQgZG9jdW1lbnRhdGlvbiBmaWxlcyAodGhlICJTb2Z0d2FyZSIpLCB0byBkZWFsCmluIHRoZSBTb2Z0d2FyZSB3aXRob3V0IHJlc3RyaWN0aW9uLCBpbmNsdWRpbmcgd2l0aG91dCBsaW1pdGF0aW9uIHRoZSByaWdodHMKdG8gdXNlLCBjb3B5LCBtb2RpZnksIG1lcmdlLCBwdWJsaXNoLCBkaXN0cmlidXRlLCBzdWJsaWNlbnNlLCBhbmQvb3Igc2VsbApjb3BpZXMgb2YgdGhlIFNvZnR3YXJlLCBhbmQgdG8gcGVybWl0IHBlcnNvbnMgdG8gd2hvbSB0aGUgU29mdHdhcmUgaXMKZnVybmlzaGVkIHRvIGRvIHNvLCBzdWJqZWN0IHRvIHRoZSBmb2xsb3dpbmcgY29uZGl0aW9uczoKClRoZSBhYm92ZSBjb3B5cmlnaHQgbm90aWNlIGFuZCB0aGlzIHBlcm1pc3Npb24gbm90aWNlIHNoYWxsIGJlIGluY2x1ZGVkIGluIGFsbApjb3BpZXMgb3Igc3Vic3RhbnRpYWwgcG9ydGlvbnMgb2YgdGhlIFNvZnR3YXJlLgoKVEhFIFNPRlRXQVJFIElTIFBST1ZJREVEICJBUyBJUyIsIFdJVEhPVVQgV0FSUkFOVFkgT0YgQU5ZIEtJTkQsIEVYUFJFU1MgT1IKSU1QTElFRCwgSU5DTFVESU5HIEJVVCBOT1QgTElNSVRFRCBUTyBUSEUgV0FSUkFOVElFUyBPRiBNRVJDSEFOVEFCSUxJVFksCkZJVE5FU1MgRk9SIEEgUEFSVElDVUxBUiBQVVJQT1NFIEFORCBOT05JTkZSSU5HRU1FTlQuIElOIE5PIEVWRU5UIFNIQUxMIFRIRQpBVVRIT1JTIE9SIENPUFlSSUdIVCBIT0xERVJTIEJFIExJQUJMRSBGT1IgQU5ZIENMQUlNLCBEQU1BR0VTIE9SIE9USEVSCkxJQUJJTElUWSwgV0hFVEhFUiBJTiBBTiBBQ1RJT04gT0YgQ09OVFJBQ1QsIFRPUlQgT1IgT1RIRVJXSVNFLCBBUklTSU5HIEZST00sCk9VVCBPRiBPUiBJTiBDT05ORUNUSU9OIFdJVEggVEhFIFNPRlRXQVJFIE9SIFRIRSBVU0UgT1IgT1RIRVIgREVBTElOR1MgSU4gVEhFClNPRlRXQVJFLgo="
@@ -26156,6 +26215,13 @@
       "encoding": "utf-8",
       "utf8_sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
       "origins": [
+        {
+          "kind": "pinned_upstream",
+          "url": "https://raw.githubusercontent.com/rust-lang/libc/008f905256d27eb5dd416d0976678ee6c2855554/LICENSE-APACHE",
+          "path": "LICENSE-APACHE",
+          "git_blob_sha1": "1b5ec8b78e237b5c3b3d812a7c0a6589d0f7161d",
+          "git_blob_verified": true
+        },
         {
           "kind": "pinned_upstream",
           "url": "https://raw.githubusercontent.com/AccessKit/accesskit/c88605b96d04431f9c3c792464a0f2f253480e94/LICENSE-APACHE",
@@ -27697,6 +27763,12 @@
           "kind": "published_crate",
           "url": "https://static.crates.io/crates/unicode-width/unicode-width-0.2.2.crate#LICENSE-MIT",
           "archive_sha256": "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254",
+          "path": "LICENSE-MIT"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gimli/gimli-0.34.0.crate#LICENSE-MIT",
+          "archive_sha256": "1033caf0b349c518623b5396bfb2cf0bddf44f0306d543a250e5743297aafd10",
           "path": "LICENSE-MIT"
         }
       ],
@@ -30197,6 +30269,42 @@
           "kind": "published_crate",
           "url": "https://static.crates.io/crates/uuid/uuid-1.29.0.crate#LICENSE-APACHE",
           "archive_sha256": "4a0e2d11620c50695fe12bbbfde96b3477fe606e7284c22d505c12ce51214514",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/addr2line/addr2line-0.27.1.crate#LICENSE-APACHE",
+          "archive_sha256": "e567177890eb1617b1f774005b66b26b2377afd138a2ca37aae7d8f0c81429d4",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/backtrace/backtrace-0.3.77.crate#LICENSE-APACHE",
+          "archive_sha256": "42f4220217f3288537b83684130f42fad43320b1c3b805f1910d683d52ded24f",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gimli/gimli-0.34.0.crate#LICENSE-APACHE",
+          "archive_sha256": "1033caf0b349c518623b5396bfb2cf0bddf44f0306d543a250e5743297aafd10",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/object/object-0.40.0.crate#LICENSE-APACHE",
+          "archive_sha256": "dd229a0361b9d0d4396176e02d65897f487eebeab7caa6d443855ee152ca0b9c",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/openssl-probe/openssl-probe-0.2.2.crate#LICENSE-APACHE",
+          "archive_sha256": "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/rustix/rustix-1.1.6.crate#LICENSE-APACHE",
+          "archive_sha256": "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa",
           "path": "LICENSE-APACHE"
         }
       ],
@@ -33651,6 +33759,12 @@
           "url": "https://static.crates.io/crates/addr2line/addr2line-0.25.1.crate#LICENSE-MIT",
           "archive_sha256": "1b5d307320b3181d6d7954e663bd7c774a838b8220fe0593c86d9fb09f498b4b",
           "path": "LICENSE-MIT"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/addr2line/addr2line-0.27.1.crate#LICENSE-MIT",
+          "archive_sha256": "e567177890eb1617b1f774005b66b26b2377afd138a2ca37aae7d8f0c81429d4",
+          "path": "LICENSE-MIT"
         }
       ],
       "base64": "Q29weXJpZ2h0IChjKSAyMDE2LTIwMTggVGhlIGdpbWxpIERldmVsb3BlcnMKClBlcm1pc3Npb24gaXMgaGVyZWJ5IGdyYW50ZWQsIGZyZWUgb2YgY2hhcmdlLCB0byBhbnkKcGVyc29uIG9idGFpbmluZyBhIGNvcHkgb2YgdGhpcyBzb2Z0d2FyZSBhbmQgYXNzb2NpYXRlZApkb2N1bWVudGF0aW9uIGZpbGVzICh0aGUgIlNvZnR3YXJlIiksIHRvIGRlYWwgaW4gdGhlClNvZnR3YXJlIHdpdGhvdXQgcmVzdHJpY3Rpb24sIGluY2x1ZGluZyB3aXRob3V0CmxpbWl0YXRpb24gdGhlIHJpZ2h0cyB0byB1c2UsIGNvcHksIG1vZGlmeSwgbWVyZ2UsCnB1Ymxpc2gsIGRpc3RyaWJ1dGUsIHN1YmxpY2Vuc2UsIGFuZC9vciBzZWxsIGNvcGllcyBvZgp0aGUgU29mdHdhcmUsIGFuZCB0byBwZXJtaXQgcGVyc29ucyB0byB3aG9tIHRoZSBTb2Z0d2FyZQppcyBmdXJuaXNoZWQgdG8gZG8gc28sIHN1YmplY3QgdG8gdGhlIGZvbGxvd2luZwpjb25kaXRpb25zOgoKVGhlIGFib3ZlIGNvcHlyaWdodCBub3RpY2UgYW5kIHRoaXMgcGVybWlzc2lvbiBub3RpY2UKc2hhbGwgYmUgaW5jbHVkZWQgaW4gYWxsIGNvcGllcyBvciBzdWJzdGFudGlhbCBwb3J0aW9ucwpvZiB0aGUgU29mdHdhcmUuCgpUSEUgU09GVFdBUkUgSVMgUFJPVklERUQgIkFTIElTIiwgV0lUSE9VVCBXQVJSQU5UWSBPRgpBTlkgS0lORCwgRVhQUkVTUyBPUiBJTVBMSUVELCBJTkNMVURJTkcgQlVUIE5PVCBMSU1JVEVEClRPIFRIRSBXQVJSQU5USUVTIE9GIE1FUkNIQU5UQUJJTElUWSwgRklUTkVTUyBGT1IgQQpQQVJUSUNVTEFSIFBVUlBPU0UgQU5EIE5PTklORlJJTkdFTUVOVC4gSU4gTk8gRVZFTlQKU0hBTEwgVEhFIEFVVEhPUlMgT1IgQ09QWVJJR0hUIEhPTERFUlMgQkUgTElBQkxFIEZPUiBBTlkKQ0xBSU0sIERBTUFHRVMgT1IgT1RIRVIgTElBQklMSVRZLCBXSEVUSEVSIElOIEFOIEFDVElPTgpPRiBDT05UUkFDVCwgVE9SVCBPUiBPVEhFUldJU0UsIEFSSVNJTkcgRlJPTSwgT1VUIE9GIE9SCklOIENPTk5FQ1RJT04gV0lUSCBUSEUgU09GVFdBUkUgT1IgVEhFIFVTRSBPUiBPVEhFUgpERUFMSU5HUyBJTiBUSEUgU09GVFdBUkUuCg=="
@@ -33684,6 +33798,26 @@
         }
       ],
       "base64": "TUlUIExpY2Vuc2UKCkNvcHlyaWdodCAoYykgMjAxNyBOaWtvbGFpIFZhenF1ZXoKClBlcm1pc3Npb24gaXMgaGVyZWJ5IGdyYW50ZWQsIGZyZWUgb2YgY2hhcmdlLCB0byBhbnkgcGVyc29uIG9idGFpbmluZyBhIGNvcHkKb2YgdGhpcyBzb2Z0d2FyZSBhbmQgYXNzb2NpYXRlZCBkb2N1bWVudGF0aW9uIGZpbGVzICh0aGUgIlNvZnR3YXJlIiksIHRvIGRlYWwKaW4gdGhlIFNvZnR3YXJlIHdpdGhvdXQgcmVzdHJpY3Rpb24sIGluY2x1ZGluZyB3aXRob3V0IGxpbWl0YXRpb24gdGhlIHJpZ2h0cwp0byB1c2UsIGNvcHksIG1vZGlmeSwgbWVyZ2UsIHB1Ymxpc2gsIGRpc3RyaWJ1dGUsIHN1YmxpY2Vuc2UsIGFuZC9vciBzZWxsCmNvcGllcyBvZiB0aGUgU29mdHdhcmUsIGFuZCB0byBwZXJtaXQgcGVyc29ucyB0byB3aG9tIHRoZSBTb2Z0d2FyZSBpcwpmdXJuaXNoZWQgdG8gZG8gc28sIHN1YmplY3QgdG8gdGhlIGZvbGxvd2luZyBjb25kaXRpb25zOgoKVGhlIGFib3ZlIGNvcHlyaWdodCBub3RpY2UgYW5kIHRoaXMgcGVybWlzc2lvbiBub3RpY2Ugc2hhbGwgYmUgaW5jbHVkZWQgaW4gYWxsCmNvcGllcyBvciBzdWJzdGFudGlhbCBwb3J0aW9ucyBvZiB0aGUgU29mdHdhcmUuCgpUSEUgU09GVFdBUkUgSVMgUFJPVklERUQgIkFTIElTIiwgV0lUSE9VVCBXQVJSQU5UWSBPRiBBTlkgS0lORCwgRVhQUkVTUyBPUgpJTVBMSUVELCBJTkNMVURJTkcgQlVUIE5PVCBMSU1JVEVEIFRPIFRIRSBXQVJSQU5USUVTIE9GIE1FUkNIQU5UQUJJTElUWSwKRklUTkVTUyBGT1IgQSBQQVJUSUNVTEFSIFBVUlBPU0UgQU5EIE5PTklORlJJTkdFTUVOVC4gSU4gTk8gRVZFTlQgU0hBTEwgVEhFCkFVVEhPUlMgT1IgQ09QWVJJR0hUIEhPTERFUlMgQkUgTElBQkxFIEZPUiBBTlkgQ0xBSU0sIERBTUFHRVMgT1IgT1RIRVIKTElBQklMSVRZLCBXSEVUSEVSIElOIEFOIEFDVElPTiBPRiBDT05UUkFDVCwgVE9SVCBPUiBPVEhFUldJU0UsIEFSSVNJTkcgRlJPTSwKT1VUIE9GIE9SIElOIENPTk5FQ1RJT04gV0lUSCBUSEUgU09GVFdBUkUgT1IgVEhFIFVTRSBPUiBPVEhFUiBERUFMSU5HUyBJTiBUSEUKU09GVFdBUkUuCg=="
+    },
+    "ea5b0aeaa89edecc06d73f2e26579a6e784fc5b510db589838025ad321f6ff09": {
+      "sha256": "ea5b0aeaa89edecc06d73f2e26579a6e784fc5b510db589838025ad321f6ff09",
+      "bytes": 269,
+      "encoding": "utf-8",
+      "utf8_sha256": "ea5b0aeaa89edecc06d73f2e26579a6e784fc5b510db589838025ad321f6ff09",
+      "origins": [
+        {
+          "kind": "pinned_upstream",
+          "url": "https://raw.githubusercontent.com/unicode-org/unicodetools/ecd26be2e82be37609090942c14e518e57e905d8/unicodetools/data/ucd/dev/CaseFolding.txt",
+          "path": "unicodetools/data/ucd/dev/CaseFolding.txt",
+          "lines": [
+            1,
+            5
+          ],
+          "git_blob_sha1": "a0b0f07fd64598e698fc7da3e55ca72077dd6071",
+          "git_blob_verified": true
+        }
+      ],
+      "base64": "IyBDYXNlRm9sZGluZy0xNy4wLjAudHh0CiMgRGF0ZTogMjAyNS0wNy0zMCwgMjM6NTQ6MzYgR01UCiMgwqkgMjAyNSBVbmljb2Rlwq4sIEluYy4KIyBVbmljb2RlIGFuZCB0aGUgVW5pY29kZSBMb2dvIGFyZSByZWdpc3RlcmVkIHRyYWRlbWFya3Mgb2YgVW5pY29kZSwgSW5jLiBpbiB0aGUgVS5TLiBhbmQgb3RoZXIgY291bnRyaWVzLgojIEZvciB0ZXJtcyBvZiB1c2UgYW5kIGxpY2Vuc2UsIHNlZSBodHRwczovL3d3dy51bmljb2RlLm9yZy90ZXJtc19vZl91c2UuaHRtbAo="
     },
     "eaf40297c75da471f7cda1f3458e8d91b4b2ec866e609527a13acfa93b638652": {
       "sha256": "eaf40297c75da471f7cda1f3458e8d91b4b2ec866e609527a13acfa93b638652",
@@ -34592,6 +34726,22 @@
         }
       ],
       "base64": "UGVybWlzc2lvbiBpcyBoZXJlYnkgZ3JhbnRlZCwgZnJlZSBvZiBjaGFyZ2UsIHRvIGFueSBwZXJzb24gb2J0YWluaW5nIGEgY29weSBvZiB0aGlzIHNvZnR3YXJlIGFuZCBhc3NvY2lhdGVkIGRvY3VtZW50YXRpb24gZmlsZXMgKHRoZSAiU29mdHdhcmUiKSwgdG8gZGVhbCBpbiB0aGUgU29mdHdhcmUgd2l0aG91dCByZXN0cmljdGlvbiwgaW5jbHVkaW5nIHdpdGhvdXQgbGltaXRhdGlvbiB0aGUgcmlnaHRzIHRvIHVzZSwgY29weSwgbW9kaWZ5LCBtZXJnZSwgcHVibGlzaCwgZGlzdHJpYnV0ZSwgc3VibGljZW5zZSwgYW5kL29yIHNlbGwgY29waWVzIG9mIHRoZSBTb2Z0d2FyZSwgYW5kIHRvIHBlcm1pdCBwZXJzb25zIHRvIHdob20gdGhlIFNvZnR3YXJlIGlzIGZ1cm5pc2hlZCB0byBkbyBzbywgc3ViamVjdCB0byB0aGUgZm9sbG93aW5nIGNvbmRpdGlvbnM6CgpUaGUgYWJvdmUgY29weXJpZ2h0IG5vdGljZSBhbmQgdGhpcyBwZXJtaXNzaW9uIG5vdGljZSBzaGFsbCBiZSBpbmNsdWRlZCBpbiBhbGwgY29waWVzIG9yIHN1YnN0YW50aWFsIHBvcnRpb25zIG9mIHRoZSBTb2Z0d2FyZS4KClRIRSBTT0ZUV0FSRSBJUyBQUk9WSURFRCAiQVMgSVMiLCBXSVRIT1VUIFdBUlJBTlRZIE9GIEFOWSBLSU5ELCBFWFBSRVNTIE9SIElNUExJRUQsIElOQ0xVRElORyBCVVQgTk9UIExJTUlURUQgVE8gVEhFIFdBUlJBTlRJRVMgT0YgTUVSQ0hBTlRBQklMSVRZLCBGSVRORVNTIEZPUiBBIFBBUlRJQ1VMQVIgUFVSUE9TRSBBTkQgTk9OSU5GUklOR0VNRU5ULiBJTiBOTyBFVkVOVCBTSEFMTCBUSEUgQVVUSE9SUyBPUiBDT1BZUklHSFQgSE9MREVSUyBCRSBMSUFCTEUgRk9SIEFOWSBDTEFJTSwgREFNQUdFUyBPUiBPVEhFUiBMSUFCSUxJVFksIFdIRVRIRVIgSU4gQU4gQUNUSU9OIE9GIENPTlRSQUNULCBUT1JUIE9SIE9USEVSV0lTRSwgQVJJU0lORyBGUk9NLCBPVVQgT0YgT1IgSU4gQ09OTkVDVElPTiBXSVRIIFRIRSBTT0ZUV0FSRSBPUiBUSEUgVVNFIE9SIE9USEVSIERFQUxJTkdTIElOIFRIRSBTT0ZUV0FSRS4K"
+    },
+    "fe5c62b543e287981db198f2acfa0ca732d12591a1024536dc8fd85dacd77104": {
+      "sha256": "fe5c62b543e287981db198f2acfa0ca732d12591a1024536dc8fd85dacd77104",
+      "bytes": 2033,
+      "encoding": "utf-8",
+      "utf8_sha256": "fe5c62b543e287981db198f2acfa0ca732d12591a1024536dc8fd85dacd77104",
+      "origins": [
+        {
+          "kind": "pinned_upstream",
+          "url": "https://raw.githubusercontent.com/unicode-org/unicodetools/ecd26be2e82be37609090942c14e518e57e905d8/LICENSE",
+          "path": "LICENSE",
+          "git_blob_sha1": "d7e7973c2fd6f2586a8999a69dc21e39af26be0f",
+          "git_blob_verified": true
+        }
+      ],
+      "base64": "VU5JQ09ERSBMSUNFTlNFIFYzCgpDT1BZUklHSFQgQU5EIFBFUk1JU1NJT04gTk9USUNFCgpDb3B5cmlnaHQgwqkgMjAwMS0yMDI0IFVuaWNvZGUsIEluYy4KCk5PVElDRSBUTyBVU0VSOiBDYXJlZnVsbHkgcmVhZCB0aGUgZm9sbG93aW5nIGxlZ2FsIGFncmVlbWVudC4gQlkKRE9XTkxPQURJTkcsIElOU1RBTExJTkcsIENPUFlJTkcgT1IgT1RIRVJXSVNFIFVTSU5HIERBVEEgRklMRVMsIEFORC9PUgpTT0ZUV0FSRSwgWU9VIFVORVFVSVZPQ0FMTFkgQUNDRVBULCBBTkQgQUdSRUUgVE8gQkUgQk9VTkQgQlksIEFMTCBPRiBUSEUKVEVSTVMgQU5EIENPTkRJVElPTlMgT0YgVEhJUyBBR1JFRU1FTlQuIElGIFlPVSBETyBOT1QgQUdSRUUsIERPIE5PVApET1dOTE9BRCwgSU5TVEFMTCwgQ09QWSwgRElTVFJJQlVURSBPUiBVU0UgVEhFIERBVEEgRklMRVMgT1IgU09GVFdBUkUuCgpQZXJtaXNzaW9uIGlzIGhlcmVieSBncmFudGVkLCBmcmVlIG9mIGNoYXJnZSwgdG8gYW55IHBlcnNvbiBvYnRhaW5pbmcgYQpjb3B5IG9mIGRhdGEgZmlsZXMgYW5kIGFueSBhc3NvY2lhdGVkIGRvY3VtZW50YXRpb24gKHRoZSAiRGF0YSBGaWxlcyIpIG9yCnNvZnR3YXJlIGFuZCBhbnkgYXNzb2NpYXRlZCBkb2N1bWVudGF0aW9uICh0aGUgIlNvZnR3YXJlIikgdG8gZGVhbCBpbiB0aGUKRGF0YSBGaWxlcyBvciBTb2Z0d2FyZSB3aXRob3V0IHJlc3RyaWN0aW9uLCBpbmNsdWRpbmcgd2l0aG91dCBsaW1pdGF0aW9uCnRoZSByaWdodHMgdG8gdXNlLCBjb3B5LCBtb2RpZnksIG1lcmdlLCBwdWJsaXNoLCBkaXN0cmlidXRlLCBhbmQvb3Igc2VsbApjb3BpZXMgb2YgdGhlIERhdGEgRmlsZXMgb3IgU29mdHdhcmUsIGFuZCB0byBwZXJtaXQgcGVyc29ucyB0byB3aG9tIHRoZQpEYXRhIEZpbGVzIG9yIFNvZnR3YXJlIGFyZSBmdXJuaXNoZWQgdG8gZG8gc28sIHByb3ZpZGVkIHRoYXQgZWl0aGVyIChhKQp0aGlzIGNvcHlyaWdodCBhbmQgcGVybWlzc2lvbiBub3RpY2UgYXBwZWFyIHdpdGggYWxsIGNvcGllcyBvZiB0aGUgRGF0YQpGaWxlcyBvciBTb2Z0d2FyZSwgb3IgKGIpIHRoaXMgY29weXJpZ2h0IGFuZCBwZXJtaXNzaW9uIG5vdGljZSBhcHBlYXIgaW4KYXNzb2NpYXRlZCBEb2N1bWVudGF0aW9uLgoKVEhFIERBVEEgRklMRVMgQU5EIFNPRlRXQVJFIEFSRSBQUk9WSURFRCAiQVMgSVMiLCBXSVRIT1VUIFdBUlJBTlRZIE9GIEFOWQpLSU5ELCBFWFBSRVNTIE9SIElNUExJRUQsIElOQ0xVRElORyBCVVQgTk9UIExJTUlURUQgVE8gVEhFIFdBUlJBTlRJRVMgT0YKTUVSQ0hBTlRBQklMSVRZLCBGSVRORVNTIEZPUiBBIFBBUlRJQ1VMQVIgUFVSUE9TRSBBTkQgTk9OSU5GUklOR0VNRU5UIE9GClRISVJEIFBBUlRZIFJJR0hUUy4KCklOIE5PIEVWRU5UIFNIQUxMIFRIRSBDT1BZUklHSFQgSE9MREVSIE9SIEhPTERFUlMgSU5DTFVERUQgSU4gVEhJUyBOT1RJQ0UKQkUgTElBQkxFIEZPUiBBTlkgQ0xBSU0sIE9SIEFOWSBTUEVDSUFMIElORElSRUNUIE9SIENPTlNFUVVFTlRJQUwgREFNQUdFUywKT1IgQU5ZIERBTUFHRVMgV0hBVFNPRVZFUiBSRVNVTFRJTkcgRlJPTSBMT1NTIE9GIFVTRSwgREFUQSBPUiBQUk9GSVRTLApXSEVUSEVSIElOIEFOIEFDVElPTiBPRiBDT05UUkFDVCwgTkVHTElHRU5DRSBPUiBPVEhFUiBUT1JUSU9VUyBBQ1RJT04sCkFSSVNJTkcgT1VUIE9GIE9SIElOIENPTk5FQ1RJT04gV0lUSCBUSEUgVVNFIE9SIFBFUkZPUk1BTkNFIE9GIFRIRSBEQVRBCkZJTEVTIE9SIFNPRlRXQVJFLgoKRXhjZXB0IGFzIGNvbnRhaW5lZCBpbiB0aGlzIG5vdGljZSwgdGhlIG5hbWUgb2YgYSBjb3B5cmlnaHQgaG9sZGVyIHNoYWxsCm5vdCBiZSB1c2VkIGluIGFkdmVydGlzaW5nIG9yIG90aGVyd2lzZSB0byBwcm9tb3RlIHRoZSBzYWxlLCB1c2Ugb3Igb3RoZXIKZGVhbGluZ3MgaW4gdGhlc2UgRGF0YSBGaWxlcyBvciBTb2Z0d2FyZSB3aXRob3V0IHByaW9yIHdyaXR0ZW4KYXV0aG9yaXphdGlvbiBvZiB0aGUgY29weXJpZ2h0IGhvbGRlci4KClNQRFgtTGljZW5zZS1JZGVudGlmaWVyOiBVbmljb2RlLTMuMAo="
     },
     "ff3f1cd12af8866d9bde961d6cc40df774cd131d484de31d3170c4b02b21a7b5": {
       "sha256": "ff3f1cd12af8866d9bde961d6cc40df774cd131d484de31d3170c4b02b21a7b5",
