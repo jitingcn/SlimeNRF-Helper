@@ -23,7 +23,7 @@
                     'Usage: bash package.sh [--format elf|appimage|flatpak] [--no-firmware] [--force]' \
                     'Packages a Release Linux ELF (default), AppImage, or source-built Flatpak bundle.' \
                     'Requires Cargo and Python 3.11+. Native ELF/AppImage respect Cargo target/cache configuration.' \
-                    'SLIMENRF_PYTHON selects one interpreter executable/path; otherwise python3 is used.' \
+                    'SLIMENRF_PYTHON selects one interpreter; otherwise python3, python, then installed uv Python are tried.' \
                     'AppImage also requires pinned linuxdeploy/appimagetool; setup diagnostics precede Cargo.' \
                     'Flatpak needs flatpak-builder and Freedesktop 26.08 runtime/SDK with Python 3.11+.' \
                     'Flatpak fetches the pinned official Rust toolchain and vendors locked sources, then builds offline.' \
@@ -42,11 +42,45 @@
         printf '%s\n' 'package.sh packages native Linux executables; use package.ps1 on Windows.' >&2
         exit 1
     fi
-    python=${SLIMENRF_PYTHON-python3}
-    if ! selected_python=$("$python" -c \
-        'import sys; sys.version_info >= (3, 11) or sys.exit("Python 3.11+ is required."); import tomllib; print(sys.executable)'); then
-        printf 'A working Python 3.11+ interpreter is required: %s\n' "$python" >&2
-        exit 1
+    python_probe='import sys; sys.version_info >= (3, 11) or sys.exit("Python 3.11+ is required."); import tomllib; print(sys.executable)'
+    temporary=
+    if [[ ${SLIMENRF_PYTHON+x} ]]; then
+        if ! selected_python=$("$SLIMENRF_PYTHON" -c "$python_probe"); then
+            printf 'A working Python 3.11+ interpreter with tomllib is required: %s\n' "$SLIMENRF_PYTHON" >&2
+            exit 1
+        fi
+    else
+        python_found=0
+        for python in python3 python; do
+            if selected_python=$("$python" -c "$python_probe"); then
+                python_found=1
+                break
+            fi
+        done
+        if (( ! python_found )); then
+            temporary=$(mktemp -d "${TMPDIR:-/tmp}/slimenrf-package.XXXXXXXX")
+            trap 'rm -rf -- "$temporary"' EXIT
+            if ! uv python find --no-project --system --no-python-downloads --offline --no-config '>=3.11' \
+                > "$temporary/uv-python"; then
+                printf '%s\n' 'A working Python 3.11+ interpreter with tomllib is required; uv could not find an installed interpreter. The lookup never downloads Python.' >&2
+                exit 1
+            fi
+            mapfile -t uv_paths < "$temporary/uv-python"
+            if IFS= read -r -d '' _ < "$temporary/uv-python" ||
+                [[ ! ${uv_paths[0]+set} || ${uv_paths[1]+set} ]]; then
+                printf '%s\n' 'uv must return one absolute interpreter path.' >&2
+                exit 1
+            fi
+            python=${uv_paths[0]}
+            if [[ $python != /* || $python == *$'\r'* ]]; then
+                printf '%s\n' 'uv must return one absolute interpreter path.' >&2
+                exit 1
+            fi
+            if ! selected_python=$("$python" -c "$python_probe"); then
+                printf 'The Python interpreter found by uv failed its Python 3.11+/tomllib probe: %s\n' "$python" >&2
+                exit 1
+            fi
+        fi
     fi
     export SLIMENRF_PYTHON=$selected_python
     slimenrf_initialize_cargo
@@ -57,8 +91,10 @@
         (( ! no_firmware )) || flatpak_options+=(--no-firmware)
         "$SLIMENRF_PYTHON" "$SLIMENRF_PROJECT_ROOT/scripts/package_flatpak.py" "${flatpak_options[@]}"
     fi
-    temporary=$(mktemp -d "${TMPDIR:-/tmp}/slimenrf-package.XXXXXXXX")
-    trap 'rm -rf -- "$temporary"' EXIT
+    if [[ -z $temporary ]]; then
+        temporary=$(mktemp -d "${TMPDIR:-/tmp}/slimenrf-package.XXXXXXXX")
+        trap 'rm -rf -- "$temporary"' EXIT
+    fi
     cargo metadata --locked --no-deps --format-version 1 \
         --manifest-path "$SLIMENRF_PROJECT_ROOT/Cargo.toml" > "$temporary/metadata.json"
     if [[ $format != flatpak ]]; then

@@ -1,4 +1,9 @@
-use std::{env, error::Error, path::PathBuf, process::Command};
+use std::{
+    env,
+    error::Error,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 const PYTHON_PROBE: &str = "import sys\nif sys.version_info < (3, 11):\n    sys.exit('Python 3.11 or newer is required')\nimport tomllib\n";
 
@@ -54,10 +59,52 @@ fn python_command() -> Result<Command, String> {
             Err(error) => failures.push(format!("{program} {arguments:?}: {error}")),
         }
     }
+    match uv_python_command() {
+        Ok(command) => return Ok(command),
+        Err(error) => failures.push(format!("uv python find: {error}")),
+    }
     Err(format!(
-        "Building SlimeNRF Helper requires Python 3.11+ with tomllib. Install it on PATH or set SLIMENRF_PYTHON to one interpreter executable/path. Probes failed:\n{}",
+        "Building SlimeNRF Helper requires Python 3.11+ with tomllib. Install it on PATH, make an installed interpreter available to uv, or set SLIMENRF_PYTHON to one interpreter executable/path. uv only searches installed interpreters and never downloads Python. Probes failed:\n{}",
         failures.join("\n")
     ))
+}
+
+fn uv_python_command() -> Result<Command, String> {
+    let output = Command::new("uv")
+        .args([
+            "python",
+            "find",
+            "--no-project",
+            "--system",
+            "--no-python-downloads",
+            "--offline",
+            "--no-config",
+            ">=3.11",
+        ])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(format!(
+            "{}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let output = std::str::from_utf8(&output.stdout)
+        .map_err(|error| format!("interpreter path is not UTF-8: {error}"))?;
+    let path = output
+        .strip_suffix("\r\n")
+        .or_else(|| output.strip_suffix('\n'))
+        .unwrap_or(output);
+    if path.is_empty()
+        || path.chars().any(|ch| matches!(ch, '\r' | '\n' | '\0'))
+        || !Path::new(path).is_absolute()
+    {
+        return Err("expected one absolute interpreter path from uv".to_owned());
+    }
+    let command = Command::new(path);
+    probe_python(&command).map_err(|error| format!("{path:?} failed its Python probe: {error}"))?;
+    Ok(command)
 }
 
 fn probe_python(command: &Command) -> Result<(), String> {

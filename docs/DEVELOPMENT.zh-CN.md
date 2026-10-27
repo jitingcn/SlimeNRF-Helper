@@ -14,7 +14,7 @@
 
 应用构建需要 Python 3.11+ 及标准库 `tomllib`，用于生成版权材料。这是仅构建时需要的工具，适用于完整和无固件模式下的脚本、直接 Cargo、测试、检查与编辑器分析。运行打包后的应用或只构建 `slimenrf-recording` 不需要 Python。
 
-可选的 `SLIMENRF_PYTHON` 只接受一个解释器可执行文件名或路径，不接受带参数的 shell 命令。显式选择无效时直接失败，不回退。未设置时，应用构建在 Windows 上先探测 `py -3`，再探测 `python3` 和 `python`，使用前检查版本及 `tomllib` 导入。编辑器环境也必须能使用该解释器。
+可选的 `SLIMENRF_PYTHON` 只接受一个解释器可执行文件名或路径，不接受带参数的 shell 命令。显式选择无效或为空时直接失败，不回退。未设置时，应用构建在 Windows 上先探测 `py -3`，再探测 `python3` 和 `python`；Linux 打包探测 `python3` 和 `python`。这些候选均失败时，两种入口都可通过 `PATH` 上的 `uv` 查找已安装的 Python 3.11+。查找忽略项目、虚拟环境、配置和网络，绝不下载 Python。每个选中的解释器都须通过版本及 `tomllib` 探测；编辑器环境也必须能使用该解释器。
 
 CLI 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷时，所有 CLI 构建、运行、检查、打包命令明确加 `-NoFirmware` 或 `--no-firmware`，直接 Cargo 用 `--no-default-features`。完整构建必须提供预期固件，不能用无固件包代替完整包验收。
 
@@ -127,6 +127,12 @@ python3 scripts/generate_notices.py --check
 python3 -B -m unittest discover -s scripts -p 'test_generate_notices.py'
 ```
 
+解释器发现提供隔离的子进程测试，需配置 Rust 工具链和本机链接器来编译小型 Rust 测试程序；Linux 还会测试 `package.sh`。Windows 请在 x64 Visual Studio 开发人员 shell 中运行，并将 `python3` 换成自己的 Python 可执行文件：
+
+```bash
+python3 -B -m unittest discover -s scripts -p 'test_python_discovery.py'
+```
+
 [scripts/notices-inputs.json](../scripts/notices-inputs.json)冻结经审查的可移植包元数据、目标依赖图、原始版权文本字节、来源和 SHA-256 哈希。这些输入、来源记录和仓库许可证源文件仍纳入版本控制。生成器核对输入哈希、锁定包校验和，以及包条目对冻结依赖图的覆盖情况。它离线确定性生成 `THIRD_PARTY_NOTICES.txt`，不需要 Cargo、registry 缓存或网络，也不会发现依赖或收集许可证文本。
 
 Cargo 输入、vendor 源码或许可材料变更时：
@@ -232,7 +238,7 @@ flatpak run io.github.jitingcn.SlimeNRFHelper
 
 [构建入口](../scripts/package_flatpak.py) 从同一 Rust pin 及官方发行清单产生 SHA 校验的构建专用 rustc/cargo/std 模块，在禁网 SDK 中 `--offline --locked` 编译，版本或架构缺失直接失败，不回退 SDK 编译器；导出前清理工具链。完整和无固件包使用同一应用 ID，安装相互替换。
 
-SDK 构建使用 SDK 自己的 `python3`，要求 Python 3.11+ 及 `tomllib`，不使用宿主的 `SLIMENRF_PYTHON` 路径。它从暂存的已跟踪输入离线生成内嵌及安装文档。Python 仅用于构建，不是应用运行依赖。
+SDK 构建使用 SDK 自己的 `python3`，要求 Python 3.11+ 及 `tomllib`，不使用宿主的 `SLIMENRF_PYTHON` 路径或宿主 uv 发现。它从暂存的已跟踪输入离线生成内嵌及安装文档。Python 仅用于构建，不是应用运行依赖。
 
 这是宽权限兼容包，不是严格沙箱。为 hidraw/tty/BLE/任意原生 UF2 挂载授予设备、host 文件、只读 udev、BlueZ 指定总线、网络及图形权限，仍受宿主 ACL 和块设备身份检查约束。特殊路径和热插拔传播需目标机验收，不能弱化 UF2 检查。bundle 不含运行时，首次安装可能下载，不是离线单文件；当前未申请 Flathub 上架。[权限](https://docs.flatpak.org/en/latest/sandbox-permissions.html)与 [bundle 限制](https://docs.flatpak.org/en/latest/single-file-bundles.html)以官方文档为准。
 
@@ -240,7 +246,7 @@ SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架�
 
 ## CI 与发布门槛
 
-[Native no-firmware CI](../.github/workflows/ci.yml) 在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业检查公开边界、冻结的版权输入和发布说明生成，并运行对应的 Python 测试。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。两者都先运行维护的质量入口，再打包。
+[Native no-firmware CI](../.github/workflows/ci.yml) 在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业检查公开边界、冻结的版权输入和发布说明生成，并运行对应的 Python 测试。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。两者打包前都运行隔离的解释器发现测试和维护的质量入口；Linux 发现测试还会测试 `package.sh`。
 
 Windows 分别上传普通 EXE 和最高压缩率的 UPX EXE。Linux 上传 AppImage。三个文件均不含固件，文件名包含 Cargo 版本，并作为 Actions artifact 保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。
 

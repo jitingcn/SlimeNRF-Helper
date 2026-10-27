@@ -12,6 +12,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Changed
 
 - Main, license notices, RSSI analysis, and temperature calibration analysis windows now use theme-aware GPUI Kit title bars instead of system title-bar styling, while preserving window controls and shutdown cleanup.
+- Builds and Linux packaging can use an already installed Python 3.11+ interpreter discovered through `uv` when ordinary Python commands are unavailable, without downloading Python or creating an environment.
 
 ### Fixed
 

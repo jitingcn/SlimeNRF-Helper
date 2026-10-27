@@ -70,6 +70,13 @@ jobs:
             throw 'The Windows runner must provide LLVM/libclang.'
           }
 
+      - name: Test isolated Python discovery on Windows
+        run: |
+          . ./scripts/environment.ps1
+          Initialize-SlimeNRFBuildEnvironment
+          & $env:SLIMENRF_PYTHON -B -m unittest discover -s scripts -p 'test_python_discovery.py'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Cache native Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -166,6 +173,9 @@ jobs:
           # Rustup reads rust-toolchain.toml and installs its profile/components.
           rustc --version --verbose
           cargo --version
+
+      - name: Test isolated Python discovery and packaging on Linux
+        run: '"$SLIMENRF_PYTHON" -B -m unittest discover -s scripts -p ''test_python_discovery.py'''
 
       - name: Cache native Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2

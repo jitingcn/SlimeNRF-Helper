@@ -14,7 +14,7 @@ For native development, use the stable Rust toolchain pinned in [rust-toolchain.
 
 Application builds require Python 3.11+ with standard-library `tomllib` to generate license notices. This build-only prerequisite applies to scripts, direct Cargo, tests, checks, and editor analysis in both full and no-firmware modes. Running the packaged application and building only `slimenrf-recording` do not require Python.
 
-Optionally set `SLIMENRF_PYTHON` to one interpreter executable name or path, not a shell command with arguments. An invalid explicit selection fails without fallback. Without it, the application build probes `py -3` on Windows, then `python3` and `python`, and checks the version and `tomllib` import before use. Make the interpreter available in the editor's environment too.
+Optionally set `SLIMENRF_PYTHON` to one interpreter executable name or path, not a shell command with arguments. An invalid or empty explicit selection fails without fallback. Without it, application builds probe `py -3` on Windows, then `python3` and `python`; Linux packaging probes `python3` and `python`. If those candidates fail, either entry point can ask `uv` on `PATH` for an already installed Python 3.11+ interpreter. The lookup ignores projects and virtual environments, configuration and network access; it never downloads Python. Every selected interpreter must pass a version and `tomllib` probe. Make it available in the editor's environment too.
 
 CLI builds keep the default `embed-firmware` feature enabled. If a standalone checkout has no firmware payloads, explicitly add `-NoFirmware` or `--no-firmware` to every CLI build, run, check, and packaging command. For direct Cargo commands, use `--no-default-features`. Full builds require the intended firmware inputs. A no-firmware package does not satisfy full-package acceptance.
 
@@ -127,6 +127,12 @@ python3 scripts/generate_notices.py --check
 python3 -B -m unittest discover -s scripts -p 'test_generate_notices.py'
 ```
 
+Interpreter discovery has isolated subprocess tests. They compile small native Rust fixtures and require the configured Rust toolchain and native linker; Linux also exercises `package.sh`. On Windows, run from an x64 Visual Studio developer shell and use your Python executable instead of `python3`:
+
+```bash
+python3 -B -m unittest discover -s scripts -p 'test_python_discovery.py'
+```
+
 [scripts/notices-inputs.json](../scripts/notices-inputs.json) freezes portable, reviewed package metadata, target graphs, original notice bytes, source origins, and SHA-256 hashes. These inputs, their provenance, and repository license sources remain tracked. The generator checks input hashes, locked package checksums, and package coverage against those frozen graphs. It renders `THIRD_PARTY_NOTICES.txt` deterministically offline, without Cargo, a registry cache, or a network. It does not discover dependencies or collect license texts.
 
 When Cargo inputs, vendored sources, or license materials change:
@@ -232,7 +238,7 @@ flatpak run io.github.jitingcn.SlimeNRFHelper
 
 The [build entry point](../scripts/package_flatpak.py) uses the same Rust pin and official release manifests to generate SHA-verified build-only rustc, cargo, and std modules. It compiles with `--offline --locked` inside the SDK without network access. A missing version or architecture fails instead of falling back to the SDK compiler. The toolchain is removed before export. Full and no-firmware packages use the same application ID, so installing one replaces the other.
 
-The SDK build uses its own `python3` with Python 3.11+ and `tomllib`, not the host's `SLIMENRF_PYTHON` path. It generates embedded and installed notices from the staged, tracked inputs without network access. Python is a build tool, not an application runtime dependency.
+The SDK build uses its own `python3` with Python 3.11+ and `tomllib`, not the host's `SLIMENRF_PYTHON` path or host uv discovery. It generates embedded and installed notices from the staged, tracked inputs without network access. Python is a build tool, not an application runtime dependency.
 
 This is a broad-permission compatibility package, not a strict sandbox. To support hidraw, tty, BLE, and arbitrary native UF2 mounts, it grants access to devices, host files, read-only udev, the specified BlueZ bus access, networking, and graphics. Host ACLs and block-device identity checks still apply. Validate special paths and hot-plug propagation on target machines. Do not weaken UF2 checks. The bundle excludes the runtime. First installation may download it, so this is not an offline single-file distribution. The project has not applied for Flathub listing. Refer to the official [permissions](https://docs.flatpak.org/en/latest/sandbox-permissions.html) and [bundle limitations](https://docs.flatpak.org/en/latest/single-file-bundles.html).
 
@@ -240,7 +246,7 @@ The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatp
 
 ## CI and release acceptance
 
-[Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. The `ubuntu-24.04` source job checks publication boundaries, frozen notice inputs, and release-note preparation. It also runs their Python tests. After it passes, the `windows-2022` and `ubuntu-22.04` x64 jobs run independently. Both run the maintained quality entry points before packaging.
+[Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. The `ubuntu-24.04` source job checks publication boundaries, frozen notice inputs, and release-note preparation. It also runs their Python tests. After it passes, the `windows-2022` and `ubuntu-22.04` x64 jobs run independently. Both run the isolated interpreter-discovery tests and maintained quality entry points before packaging; the Linux discovery tests also exercise `package.sh`.
 
 Windows uploads separate normal and maximum-compression UPX executables. Linux uploads an AppImage. All three omit firmware, use the Cargo version in their filenames, and remain available as Actions artifacts for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets.
 
