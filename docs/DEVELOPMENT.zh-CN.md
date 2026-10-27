@@ -135,6 +135,8 @@ python3 -B -m unittest discover -s scripts -p 'test_generate_notices.py'
 python3 -B -m unittest discover -s scripts -p 'test_python_discovery.py'
 ```
 
+Windows 上，探测测试程序必须与受控的探测可执行文件放在同一目录：可执行文件所在目录的查找优先于 `PATH`，仅修改 `PATH` 或工作目录不能隔离已安装的 Python 启动器。回归测试包含一个竞争的宿主启动器。
+
 [scripts/notices-inputs.json](../scripts/notices-inputs.json)冻结经审查的可移植包元数据、目标依赖图、原始版权文本字节、来源和 SHA-256 哈希。这些输入、来源记录和仓库许可证源文件仍纳入版本控制。生成器核对输入哈希、锁定包校验和，以及包条目对冻结依赖图的覆盖情况。它离线确定性生成 `THIRD_PARTY_NOTICES.txt`，不需要 Cargo、registry 缓存或网络，也不会发现依赖或收集许可证文本。
 
 Cargo 输入、vendor 源码或许可材料变更时：

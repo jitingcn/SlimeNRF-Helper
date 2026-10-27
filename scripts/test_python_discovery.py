@@ -22,11 +22,13 @@ use std::{env, fs::OpenOptions, io::Write, process::{self, Command}};
 fn main() {
     let executable = env::current_exe().expect("fixture executable");
     let name = executable.file_stem().expect("fixture name").to_string_lossy();
+    let host_py = env::var_os("SLIMENRF_TEST_HOST_PY")
+        .is_some_and(|path| executable == std::path::Path::new(&path));
     let arguments: Vec<String> = env::args().skip(1).collect();
     let mut log = OpenOptions::new().create(true).append(true)
         .open(env::var_os("SLIMENRF_TEST_LOG").expect("fixture log"))
         .expect("open fixture log");
-    writeln!(log, "{name}").expect("write fixture log");
+    writeln!(log, "{}", if host_py { "host-py" } else { name.as_ref() }).expect("write fixture log");
 
     if name == "uv" {
         let expected = ["python", "find", "--no-project", "--system", "--no-python-downloads", "--offline", "--no-config", ">=3.11"];
@@ -59,7 +61,7 @@ fn main() {
         }
         return;
     }
-    if env::var("SLIMENRF_TEST_PASS").as_deref() != Ok(name.as_ref()) {
+    if !host_py && env::var("SLIMENRF_TEST_PASS").as_deref() != Ok(name.as_ref()) {
         eprintln!("fixture {name} unavailable");
         process::exit(19);
     }
@@ -69,7 +71,7 @@ fn main() {
         &arguments[..]
     };
     let mut python = Command::new(env::var_os("SLIMENRF_TEST_REAL_PYTHON").expect("real Python"));
-    let mode = env::var("SLIMENRF_TEST_PYTHON_MODE").unwrap_or_default();
+    let mode = if host_py { String::new() } else { env::var("SLIMENRF_TEST_PYTHON_MODE").unwrap_or_default() };
     if arguments.first().map(String::as_str) == Some("-c") && mode == "old" {
         python.args(["-c", "import sys; sys.version_info = (3, 10, 0); exec(sys.argv[1])", &arguments[1]]);
     } else if arguments.first().map(String::as_str) == Some("-c") && mode == "no_tomllib" {
@@ -90,8 +92,7 @@ import sys
 parser = argparse.ArgumentParser()
 parser.add_argument("--root", required=True)
 parser.add_argument("--output", required=True)
-parser.add_argument("--cargo-rerun", action="store_true", required=True)
-args = parser.parse_args()
+args, _ = parser.parse_known_args()
 Path(args.output).write_text(json.dumps({"python": sys.executable, "root": args.root}), encoding="utf-8")
 '''
 
@@ -143,6 +144,9 @@ class PythonDiscoveryTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix="slimenrf discovery case ")
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
+        if os.name == "nt":
+            self.harness = self.root / self.harness.name
+            shutil.copy2(type(self).harness, self.harness)
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.output = self.root / "output"
@@ -156,7 +160,8 @@ class PythonDiscoveryTests(unittest.TestCase):
         for name in ("py", "python3", "python", "uv", "cargo"):
             shutil.copy2(self.fixture, self.bin / (name + EXE))
             if os.name == "nt":
-                # Windows searches the child's working directory before system paths.
+                # Rust searches the harness executable's directory before Windows
+                # system directories and the inherited PATH, not the working directory.
                 shutil.copy2(self.fixture, self.root / (name + EXE))
         self.resolved = self.root / "installed Python" / ("resolved-python" + EXE)
         self.resolved.parent.mkdir()
@@ -183,6 +188,12 @@ class PythonDiscoveryTests(unittest.TestCase):
             "SLIMENRF_TEST_REAL_PYTHON": str(Path(sys.executable).resolve()),
             "SLIMENRF_TEST_PASS": "resolved-python",
         })
+        if os.name == "nt":
+            self.host_py = self.root / "host Python" / "py.exe"
+            self.host_py.parent.mkdir()
+            shutil.copy2(self.fixture, self.host_py)
+            self.env["SLIMENRF_TEST_HOST_PY"] = str(self.host_py)
+            self.env["PATH"] = os.pathsep.join((str(self.host_py.parent), str(self.bin)))
 
     def entries(self):
         return ("notices", "package") if sys.platform.startswith("linux") else ("notices",)
@@ -198,6 +209,7 @@ class PythonDiscoveryTests(unittest.TestCase):
         result = subprocess.run(command, cwd=self.root, env=env, capture_output=True,
                                 text=True, errors="replace")
         events = self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
+        self.assertNotIn("host-py", events, "discovery escaped to the host Python launcher")
         self.assertFalse(self.download.exists(), "discovery attempted an unrestricted uv lookup")
         return result, events, result_file
 
@@ -255,6 +267,22 @@ class PythonDiscoveryTests(unittest.TestCase):
                     self.assertIn(candidate, events)
                     self.assertNotIn("uv", events)
 
+    @unittest.skipUnless(os.name == "nt", "Windows executable search")
+    def test_windows_host_launcher_cannot_override_isolated_candidates(self):
+        host_harness = self.host_py.parent / self.harness.name
+        shutil.copy2(self.harness, host_harness)
+        result = subprocess.run([str(host_harness)], cwd=self.root, env=self.env,
+                                capture_output=True, text=True, errors="replace")
+        output = self.output / "THIRD_PARTY_NOTICES.txt"
+        self.assert_success(result, output)
+        self.assertEqual(self.log.read_text(encoding="utf-8").splitlines(),
+                         ["host-py", "host-py"])
+
+        result, events, output = self.run_entry("notices")
+        self.assert_success(result, output)
+        self.assertEqual(events, ["py", "python3", "python", "uv",
+                                  "resolved-python", "resolved-python"])
+
     def test_uv_uses_an_installed_interpreter_with_spaces(self):
         for entry in self.entries():
             with self.subTest(entry=entry):
@@ -263,6 +291,8 @@ class PythonDiscoveryTests(unittest.TestCase):
                 self.assertIn("uv", events)
                 self.assertIn("resolved-python", events)
                 self.assertLess(events.index("python3"), events.index("uv"))
+                if os.name == "nt":
+                    self.assertLess(events.index("py"), events.index("python3"))
                 self.assertLess(events.index("python"), events.index("uv"))
                 self.assertLess(events.index("uv"), events.index("resolved-python"))
 

@@ -135,6 +135,8 @@ Interpreter discovery has isolated subprocess tests. They compile small native R
 python3 -B -m unittest discover -s scripts -p 'test_python_discovery.py'
 ```
 
+On Windows, the discovery harness and controlled probe executables must share a directory: executable-directory lookup precedes `PATH`, so changing only `PATH` or the working directory does not isolate an installed Python launcher. The regression suite includes a competing host launcher.
+
 [scripts/notices-inputs.json](../scripts/notices-inputs.json) freezes portable, reviewed package metadata, target graphs, original notice bytes, source origins, and SHA-256 hashes. These inputs, their provenance, and repository license sources remain tracked. The generator checks input hashes, locked package checksums, and package coverage against those frozen graphs. It renders `THIRD_PARTY_NOTICES.txt` deterministically offline, without Cargo, a registry cache, or a network. It does not discover dependencies or collect license texts.
 
 When Cargo inputs, vendored sources, or license materials change:
