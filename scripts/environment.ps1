@@ -13,6 +13,41 @@ function Initialize-SlimeNRFCargoEnvironment {
     }
 }
 
+function Remove-SlimeNRFDevShellPathDuplicates {
+    param([string]$Previous, [string]$Current)
+    $previousCounts = @{}
+    foreach ($entry in @($Previous -split ';')) {
+        if ($entry) {
+            $key = $entry.TrimEnd('\', '/')
+            if (-not $previousCounts.ContainsKey($key)) { $previousCounts[$key] = 0 }
+            $previousCounts[$key]++
+        }
+    }
+    $currentPath = @($Current -split ';')
+    $extraCounts = @{}
+    foreach ($entry in $currentPath) {
+        if ($entry) {
+            $key = $entry.TrimEnd('\', '/')
+            if ($previousCounts.ContainsKey($key)) {
+                if (-not $extraCounts.ContainsKey($key)) { $extraCounts[$key] = -$previousCounts[$key] }
+                $extraCounts[$key]++
+            }
+        }
+    }
+    $keep = [bool[]]::new($currentPath.Count)
+    for ($index = $currentPath.Count - 1; $index -ge 0; $index--) {
+        $key = $currentPath[$index].TrimEnd('\', '/')
+        if ($key -and $extraCounts.ContainsKey($key) -and $extraCounts[$key] -gt 0) {
+            $extraCounts[$key]--
+        } else {
+            $keep[$index] = $true
+        }
+    }
+    return (@(for ($index = 0; $index -lt $currentPath.Count; $index++) {
+        if ($keep[$index]) { $currentPath[$index] }
+    })) -join ';'
+}
+
 function Initialize-SlimeNRFBuildEnvironment {
     if ($env:OS -ne 'Windows_NT') { throw 'These scripts package native Windows x64 builds. Use Cargo directly on other platforms.' }
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -20,26 +55,51 @@ function Initialize-SlimeNRFBuildEnvironment {
     $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
     if ($LASTEXITCODE -ne 0 -or -not $vs) { throw 'Visual Studio C++ build tools were not found.' }
     Import-Module (Join-Path $vs 'Common7\Tools\Microsoft.VisualStudio.DevShell.dll')
+    $pathVariables = @('PATH', 'INCLUDE', 'EXTERNAL_INCLUDE', 'LIB', 'LIBPATH')
+    $previousValues = @{}
+    foreach ($name in $pathVariables) {
+        $previousValues[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+    }
     Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+    # DevShell adds its paths again on reentry. Keep its precedence while
+    # removing only added copies of entries already present in each variable.
+    foreach ($name in $pathVariables) {
+        $currentValue = [Environment]::GetEnvironmentVariable($name, 'Process')
+        if (-not $currentValue) { continue }
+        $value = Remove-SlimeNRFDevShellPathDuplicates -Previous $previousValues[$name] -Current $currentValue
+        [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+    }
     $cmake = Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin'
-    if (Test-Path -LiteralPath (Join-Path $cmake 'cmake.exe')) { $env:PATH = "$cmake;$env:PATH" }
-    if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) { throw 'CMake is required on PATH.' }
+    $managedPaths = @()
+    if (Test-Path -LiteralPath (Join-Path $cmake 'cmake.exe')) { $managedPaths += $cmake }
+    if (-not (Test-Path -LiteralPath (Join-Path $cmake 'cmake.exe')) -and
+        -not (Get-Command cmake -ErrorAction SilentlyContinue)) { throw 'CMake is required on PATH.' }
     $llvm = Join-Path $env:ProgramFiles 'LLVM\bin'
     if (Test-Path -LiteralPath (Join-Path $llvm 'libclang.dll')) {
         $env:LIBCLANG_PATH = $llvm
-        $env:PATH = "$llvm;$env:PATH"
+        $managedPaths = @($llvm) + $managedPaths
+    }
+    if ($managedPaths.Count -gt 0) {
+        # Keep our tools first without accumulating another copy on nested setup.
+        $remainingPaths = @($env:PATH -split ';' | Where-Object {
+            $entry = $_.TrimEnd('\', '/')
+            -not ($managedPaths | Where-Object { $_.TrimEnd('\', '/') -ieq $entry })
+        })
+        $env:PATH = (@($managedPaths) + $remainingPaths) -join ';'
     }
     Initialize-SlimeNRFCargoEnvironment
     # An explicit target keeps proc macros/build scripts on the normal host CRT.
     if (Test-Path Env:CARGO_ENCODED_RUSTFLAGS) {
         $separator = [char]0x1f
         $extra = "-C${separator}target-feature=+crt-static"
-        if ($env:CARGO_ENCODED_RUSTFLAGS) {
-            $env:CARGO_ENCODED_RUSTFLAGS += "${separator}${extra}"
-        } else {
-            $env:CARGO_ENCODED_RUSTFLAGS = $extra
+        if ($env:CARGO_ENCODED_RUSTFLAGS -cnotmatch "(?:^|$separator)(?:-C${separator}|-C)target-feature=\+crt-static$") {
+            if ($env:CARGO_ENCODED_RUSTFLAGS) {
+                $env:CARGO_ENCODED_RUSTFLAGS += "${separator}${extra}"
+            } else {
+                $env:CARGO_ENCODED_RUSTFLAGS = $extra
+            }
         }
-    } else {
+    } elseif ($env:RUSTFLAGS -cnotmatch '(?:^|\s)-C\s*target-feature=\+crt-static\s*$') {
         $env:RUSTFLAGS = "$env:RUSTFLAGS -C target-feature=+crt-static".Trim()
     }
 }

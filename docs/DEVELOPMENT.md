@@ -25,6 +25,8 @@ The scripts support build, run, test, check, clippy, fmt, and clean. Build defau
 
 Install Visual Studio 2022 with the "Desktop development with C++" workload, the Windows SDK, and CMake. Install LLVM if a dependency needs libclang. The PowerShell entry points initialize and restore the caller's environment and working directory. They use VS CMake, an explicit `x86_64-pc-windows-msvc` target, and the static MSVC CRT, while preserving existing Rust flags. For direct Cargo commands, configure these conditions yourself. Do not add crt-static only to the host configuration, where it can affect procedural macros.
 
+Repeated setup from the editor's developer terminal preserves the effective static-CRT flags and tool search path instead of accumulating duplicate entries that invalidate Cargo caches. Reuse the same firmware mode and target directory for edit/run cycles; tests enable additional GUI support and can require a different dependency build. Cargo's “waiting for file lock” time is contention with another build, not compiler work.
+
 ```powershell
 ./build.ps1 -Action run -NoFirmware           # Build and launch the development version
 ./build.ps1 -Debug -NoFirmware                # Build the development version without launching

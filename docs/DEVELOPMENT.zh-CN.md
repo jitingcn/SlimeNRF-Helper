@@ -25,6 +25,8 @@ CLI 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷�
 
 安装 Visual Studio 2022“使用 C++ 的桌面开发”、Windows SDK、CMake；依赖需要 libclang 时安装 LLVM。PowerShell 入口初始化并恢复调用者环境和工作目录，使用 VS CMake、显式 `x86_64-pc-windows-msvc` target 与静态 MSVC CRT，保留已有 Rust flags；直接 Cargo 要自行配置这些条件，不能只对 host 添加 crt-static 而影响过程宏。
 
+在编辑器的开发终端中重复初始化时，脚本保持静态 CRT 参数和工具搜索路径稳定，不再因累积重复条目使 Cargo 缓存失效。日常编辑与运行应复用相同的固件模式和 target 目录；测试会启用额外的 GUI 支持，可能需要另一组依赖构建。Cargo 的“等待文件锁”耗时来自其他构建占用，不是编译器耗时。
+
 ```powershell
 ./build.ps1 -Action run -NoFirmware           # 开发编译并启动
 ./build.ps1 -Debug -NoFirmware                # 开发编译，不启动
