@@ -32,16 +32,11 @@ dbg_macro = "deny"
 
 [profile.dev]
 # Keep edit/run builds incremental; reserve whole-program optimization for release.
-opt-level = 1
+opt-level = 0
 debug = 0
 incremental = true
 codegen-units = 256
 lto = "off"
-
-# Keep the frequently edited application cheap to compile while dependencies
-# and recording/replay retain the dev profile's runtime optimization.
-[profile.dev.package.slimenrf-helper]
-opt-level = 0
 
 [profile.release]
 opt-level = 2
