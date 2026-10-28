@@ -636,13 +636,17 @@ impl Workbench {
                     .disabled(self.flash.busy())
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
-                        if !this.flash.open_ota_wired_update(&key) {
+                        let Some(mode) = this.flash.ota_wired_update_mode(&key) else {
+                            return;
+                        };
+                        if !this.set_feature_page(FeaturePage::Uf2, cx) {
                             return;
                         }
+                        // Navigation only: preserve explicit selections and never enqueue work.
+                        this.flash.transition_mode(mode);
                         this.cancel_terminal_intents();
                         this.sidebar.pending = None;
                         this.command_error = None;
-                        this.set_feature_page(FeaturePage::Uf2);
                         this.ensure_flash_catalog();
                         cx.notify();
                     })),

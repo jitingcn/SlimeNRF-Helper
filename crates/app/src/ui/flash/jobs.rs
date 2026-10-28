@@ -159,6 +159,9 @@ impl Workbench {
     ) where
         F: Future<Output = Result<Payload, String>> + Send + 'static,
     {
+        if self.shutting_down {
+            return;
+        }
         self.start_flash_async_for(self.flash_mode(), ActivityKind::Preparation, work);
     }
 

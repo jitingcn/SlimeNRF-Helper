@@ -657,7 +657,10 @@ impl Workbench {
     }
 
     pub(super) fn open_device_registry(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.set_feature_page(FeaturePage::Settings);
+        if self.app_update_navigation_locked() || !self.set_feature_page(FeaturePage::Settings, cx)
+        {
+            return;
+        }
         self.registry.open = true;
         let focus = self
             .registry
@@ -665,6 +668,12 @@ impl Workbench {
             .get_or_insert_with(|| cx.focus_handle().tab_stop(false));
         focus.focus(window, cx);
         cx.notify();
+    }
+
+    pub(super) fn close_device_registry(&mut self) {
+        self.registry.open = false;
+        self.registry.editor = None;
+        self.registry.forget = None;
     }
 
     pub(super) fn current_nickname_key(&self, focus: &CommandFocus) -> Option<DeviceKey> {
@@ -1011,9 +1020,7 @@ impl Workbench {
                     Button::new("registry-back")
                         .label(tr("common.action.back"))
                         .on_click(cx.listener(|this, _, window, cx| {
-                            this.registry.open = false;
-                            this.registry.editor = None;
-                            this.registry.forget = None;
+                            this.close_device_registry();
                             this.page_focus.focus(window, cx);
                             cx.notify();
                         })),
@@ -1793,7 +1800,7 @@ mod tests {
                         let endpoint = receiver("0011223344556677");
                         this.command_focus = Some(CommandFocus::Receiver(endpoint.key.clone()));
                         this.inventory.receivers = vec![endpoint];
-                        this.set_feature_page(crate::ui::FeaturePage::DeviceSetup);
+                        assert!(this.set_feature_page(crate::ui::FeaturePage::DeviceSetup, cx));
                     }
                     cx.notify();
                 });
@@ -1960,6 +1967,76 @@ mod tests {
     ) {
         let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
         canceled_invalid_nickname(cx, Some("synthetic earlier atomic replacement denied"));
+    }
+
+    #[gpui_kit::test]
+    fn registry_saves_keep_busy_and_shutdown_admission(cx: &mut TestAppContext) {
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let target = key();
+        let other = DeviceKey::tracker_address("AABBCCDDEEFF").unwrap();
+        let observations: Vec<_> = [target, other]
+            .into_iter()
+            .map(|key| DeviceObservation {
+                key,
+                reported: ReportedMetadata::default(),
+                last_receiver: None,
+            })
+            .collect();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("registry.json");
+        let mut store = RegistryStore::load(path.clone()).unwrap();
+        for observation in &observations {
+            store
+                .apply(RegistryEdit::Remember(observation.clone()))
+                .unwrap();
+        }
+        let (handle, workbench, _runtime) =
+            registry_fixture(cx, vec![record(target), record(other)], observations);
+        cx.update_window(handle, |_, window, cx| {
+            workbench.update(cx, |this, _| this.registry.store = Some(store));
+            window.render_frame(cx);
+            window
+                .within(format!("registry-device-{target}"))
+                .click("registry-edit", cx);
+            window.input("Independent nickname", cx);
+            workbench.update(cx, |this, cx| {
+                let editor_id = this.registry.editor.as_ref().unwrap().session.id;
+                this.shutting_down = true;
+                this.save_device_nickname(editor_id, false, cx);
+                this.registry.pending_observe = true;
+                this.flush_registry_observations(cx);
+                assert!(this.registry.io_join.is_none());
+                assert!(this.registry.store.is_some());
+                assert!(this.registry.pending_observe);
+
+                this.shutting_down = false;
+                this.save_device_nickname(editor_id, false, cx);
+                assert!(this.registry.io_join.is_some());
+                assert_eq!(this.registry.saving, Some(editor_id));
+                this.registry_edit(RegistryEdit::Forget(other), cx);
+                this.flush_registry_observations(cx);
+                assert!(this.registry.pending_observe);
+            });
+        })
+        .unwrap();
+        settle_registry(cx, handle);
+        cx.update_window(handle, |_, window, cx| {
+            let registry = &workbench.read(cx).registry;
+            assert!(registry.io_join.is_none());
+            assert!(!registry.pending_observe);
+            assert!(registry.editor.is_none());
+            assert!(window.try_find("registry-nickname").is_none());
+        })
+        .unwrap();
+        let snapshot = RegistryStore::load(path).unwrap().snapshot();
+        assert_eq!(
+            snapshot.get(&target).unwrap().nickname.as_deref(),
+            Some("Independent nickname")
+        );
+        assert!(
+            snapshot.get(&other).is_some(),
+            "a competing edit must not replace an in-flight save"
+        );
     }
 
     #[gpui_kit::test]

@@ -12,6 +12,33 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[test]
+fn recording_admission_respects_chooser_finalization_and_file_worker() {
+    let mut state = HidLogUiState::default();
+    assert!(state.can_start_recording());
+    state.chooser = Some(gpui_kit::Task::ready(()));
+    assert!(!state.can_start_recording());
+    state.chooser = None;
+    state.stopping = true;
+    assert!(!state.can_start_recording());
+    state.stopping = false;
+    let (release, wait) = mpsc::channel();
+    state.file_worker = Some(thread::spawn(move || {
+        wait.recv().unwrap();
+        Err("fixture complete".into())
+    }));
+    assert!(!state.can_start_recording());
+    release.send(()).unwrap();
+    state
+        .file_worker
+        .take()
+        .unwrap()
+        .join()
+        .unwrap()
+        .unwrap_err();
+    assert!(state.can_start_recording());
+}
+
 fn source(key: &str) -> Arc<Source> {
     Arc::new(Source::main(&ReceiverEndpoint {
         key: key.into(),

@@ -144,6 +144,9 @@ impl Workbench {
     }
 
     pub(super) fn hid_subscribe_events(&mut self, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         let Some(key) = &self.hid_log.watch_receiver else {
             return;
         };

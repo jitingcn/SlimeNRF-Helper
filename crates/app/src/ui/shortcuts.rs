@@ -386,10 +386,10 @@ impl Workbench {
         invocation: Invocation,
         receiver_keys: BTreeSet<String>,
     ) -> Result<(), String> {
-        self.custom_commands.pending = None;
         if self.shutting_down {
             return Err(tr("firmware.status.closing"));
         }
+        self.custom_commands.pending = None;
         self.poll_sessions();
         self.monitor.poll();
         if invocation.mode != TargetMode::ConnectedTerminals && receiver_keys.len() > TARGET_LIMIT {
@@ -619,6 +619,9 @@ impl Workbench {
     }
 
     fn submit_custom_review(&mut self) -> Result<RunId, String> {
+        if self.shutting_down {
+            return Err(tr("firmware.status.closing"));
+        }
         let Some(pending) = self.custom_commands.pending.take() else {
             return Err(tr("shortcuts.error.review_changed"));
         };
@@ -626,9 +629,6 @@ impl Workbench {
             self.custom_commands.pending = Some(pending);
             return Err(tr("shortcuts.error.review_changed"));
         };
-        if self.shutting_down {
-            return Err(tr("firmware.status.closing"));
-        }
         if review.targets.is_empty() {
             return Err(tr("shortcuts.error.no_targets"));
         }

@@ -88,6 +88,7 @@ pub(super) fn offline_workbench(
         preferences: Default::default(),
         settings: super::settings_page::SettingsUiState::new(window, cx),
         registry: Default::default(),
+        app_update: super::app_update::AppUpdateState::offline(),
         preferences_io: Default::default(),
         sidebar: Default::default(),
         command_focus: None,

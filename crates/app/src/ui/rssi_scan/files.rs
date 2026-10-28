@@ -31,7 +31,8 @@ impl RssiWindow {
         let executor = cx.background_executor().clone();
         let generation = self.document.begin_import();
         self.chooser = Some(cx.spawn(async move |this, cx| {
-            let result = match dialog.await {
+            let chosen = dialog.await;
+            let result = match chosen {
                 Ok(Ok(Some(paths))) => {
                     if let Some(path) = paths.into_iter().next() {
                         Some(

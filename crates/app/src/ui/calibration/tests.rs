@@ -12,6 +12,38 @@ use crate::domain::{
 };
 use crate::sessions::test_support;
 
+#[gpui_kit::test]
+fn shutdown_rejects_calibration_admission_without_starting_a_worker(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use gpui_kit::VisualContext as _;
+
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        crate::ui::test_support::offline_workbench(
+            window,
+            cx,
+            crate::sessions::SessionManager::new(),
+            executor,
+        )
+    });
+    workbench.update(cx, |this, cx| {
+        this.shutting_down = true;
+        this.inspect_calibration(cx);
+        this.review_calibration(cx);
+        this.start_calibration(cx);
+        this.recover_calibration(cx);
+        assert!(!this.calibration.session.busy());
+        assert!(this.calibration.error.is_none());
+        this.shutting_down = false;
+        this.inspect_calibration(cx);
+        assert!(this.calibration.error.is_some(), "normal admission resumes");
+    });
+}
+
 fn engine(task: CalibrationTask) -> Engine {
     Engine::new(RunRequest {
         id: 7,

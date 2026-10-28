@@ -310,6 +310,10 @@ impl Workbench {
             let chosen = dialog.await;
             let _ = this.update(cx, |this, cx| {
                 this.flash.chooser = None;
+                if this.shutting_down {
+                    cx.notify();
+                    return;
+                }
                 match chosen {
                     Ok(Ok(Some(paths))) => this.load_local_firmware(request, paths.into_iter()),
                     Ok(Err(error)) => this.flash.set_error(mode, error.to_string()),

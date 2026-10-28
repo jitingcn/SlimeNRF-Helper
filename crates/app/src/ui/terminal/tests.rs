@@ -699,6 +699,36 @@ fn terminal_chooser_rejects_generation_change_and_shutdown_but_exports_a_frozen_
     assert!(!after_shutdown.exists());
 }
 
+#[gpui_kit::test]
+fn shutdown_rejects_terminal_connect_and_send_without_losing_draft(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let (workbench, cx, _runtime, _listener) = terminal_fixture(cx);
+    cx.update(|window, cx| {
+        workbench.update(cx, |this, cx| {
+            this.terminals["A"].input.update(cx, |input, cx| {
+                input.set_value("unsent fixture", window, cx);
+            });
+            this.shutting_down = true;
+            this.toggle_connection("A", cx);
+            this.send("A", window, cx);
+            this.send_terminal_all("A", window, cx);
+            assert!(!this.queue_write("A", "must not be submitted"));
+            assert_eq!(
+                this.manager.session("A").unwrap().state,
+                ConnectionState::Disconnected
+            );
+            assert!(this.pending_writes.is_empty());
+            assert!(this.terminals["A"].pending.is_none());
+            assert_eq!(
+                this.terminals["A"].input.read(cx).value().as_ref(),
+                "unsent fixture"
+            );
+        });
+    });
+}
+
 struct TerminalWorkspace(gpui_kit::Entity<super::Workbench>);
 
 impl gpui_kit::Render for TerminalWorkspace {
@@ -1224,8 +1254,8 @@ fn terminal_log_filter_is_per_tab_and_changes_only_the_visible_transcript(
         );
     });
     workbench.update(cx, |this, cx| {
-        this.set_feature_page(super::FeaturePage::Settings);
-        this.set_feature_page(super::FeaturePage::DeviceSetup);
+        assert!(this.set_feature_page(super::FeaturePage::Settings, cx));
+        assert!(this.set_feature_page(super::FeaturePage::DeviceSetup, cx));
         cx.notify();
     });
 

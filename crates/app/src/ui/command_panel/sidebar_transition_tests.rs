@@ -60,6 +60,43 @@ fn connecting(scope: CommandScope) -> CommandSidebar {
     }
 }
 
+#[gpui_kit::test]
+fn shutdown_preserves_command_reviews_and_connecting_intents(cx: &mut gpui_kit::TestAppContext) {
+    use gpui_kit::VisualContext as _;
+
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        crate::ui::test_support::offline_workbench(
+            window,
+            cx,
+            crate::sessions::SessionManager::new(),
+            executor,
+        )
+    });
+    workbench.update(cx, |this, cx| {
+        this.shutting_down = true;
+        this.sidebar = reviewing(CommandScope::Current);
+        this.confirm_sidebar_command(cx);
+        assert!(matches!(
+            this.sidebar.pending,
+            Some(PendingCommand::Serial(_))
+        ));
+        assert!(this.batch_history.is_empty());
+        this.sidebar = connecting(CommandScope::Current);
+        this.retry_preparation(cx);
+        this.resume_preparation();
+        assert!(matches!(
+            this.sidebar.pending,
+            Some(PendingCommand::Connecting(_))
+        ));
+        assert_eq!(this.manager.sessions().count(), 0);
+        this.shutting_down = false;
+    });
+}
+
 fn card_tracker(slot: u8, online: bool) -> TrackerLink {
     TrackerLink {
         receiver_key: "receiver-a".into(),

@@ -55,11 +55,19 @@ pub(super) struct HomeState {
 }
 
 impl Workbench {
-    fn show_home_view(&mut self, view: HomeView, window: &mut Window, cx: &mut Context<Self>) {
+    fn show_home_view(
+        &mut self,
+        view: HomeView,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.set_feature_page(FeaturePage::Home, cx) {
+            return false;
+        }
         self.home.view = view;
-        self.set_feature_page(FeaturePage::Home);
         self.home_page_focus.focus(window, cx);
         cx.notify();
+        true
     }
 
     pub(super) fn home_page(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -126,9 +134,10 @@ impl Workbench {
                             .icon(IconName::Settings2)
                             .label(tr("home.action.settings"))
                             .on_click(cx.listener(|this, _, window, cx| {
-                                this.set_feature_page(FeaturePage::Settings);
-                                this.focus_settings(window, cx);
-                                cx.notify();
+                                if this.set_feature_page(FeaturePage::Settings, cx) {
+                                    this.focus_settings(window, cx);
+                                    cx.notify();
+                                }
                             })),
                     ),
             )
@@ -205,9 +214,10 @@ impl Workbench {
                     cx,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
-                    this.set_feature_page(FeaturePage::DeviceSetup);
-                    this.page_focus.focus(window, cx);
-                    cx.notify();
+                    if this.set_feature_page(FeaturePage::DeviceSetup, cx) {
+                        this.page_focus.focus(window, cx);
+                        cx.notify();
+                    }
                 })),
             )
             .child(
@@ -292,9 +302,10 @@ impl Workbench {
         Button::new(id)
             .label(tr("home.action.open_devices"))
             .on_click(cx.listener(|this, _, window, cx| {
-                this.set_feature_page(FeaturePage::DeviceSetup);
-                this.page_focus.focus(window, cx);
-                cx.notify();
+                if this.set_feature_page(FeaturePage::DeviceSetup, cx) {
+                    this.page_focus.focus(window, cx);
+                    cx.notify();
+                }
             }))
     }
 
@@ -315,8 +326,9 @@ impl Workbench {
                     cx,
                 )
                 .on_click(cx.listener(move |this, _, window, cx| {
-                    this.home.step = step;
-                    this.show_home_view(HomeView::Guide, window, cx);
+                    if this.show_home_view(HomeView::Guide, window, cx) {
+                        this.home.step = step;
+                    }
                 })),
             );
         }
@@ -377,11 +389,12 @@ impl Workbench {
             Button::new("home-guide-next")
                 .label(tr("home.action.next"))
                 .on_click(cx.listener(|this, _, window, cx| {
-                    this.home.step = match this.home.step {
-                        GuideStep::Prepare => GuideStep::Receiver,
-                        GuideStep::Receiver | GuideStep::Trackers => GuideStep::Trackers,
-                    };
-                    this.show_home_view(HomeView::Guide, window, cx);
+                    if this.show_home_view(HomeView::Guide, window, cx) {
+                        this.home.step = match this.home.step {
+                            GuideStep::Prepare => GuideStep::Receiver,
+                            GuideStep::Receiver | GuideStep::Trackers => GuideStep::Trackers,
+                        };
+                    }
                 }))
         };
         div()
@@ -406,13 +419,14 @@ impl Workbench {
                             .icon(IconName::ArrowLeft)
                             .label(tr("common.action.back"))
                             .on_click(cx.listener(|this, _, window, cx| {
-                                match this.home.step {
-                                    GuideStep::Prepare => this.home.view = HomeView::Tasks,
-                                    GuideStep::Receiver => this.home.step = GuideStep::Prepare,
-                                    GuideStep::Trackers => this.home.step = GuideStep::Receiver,
+                                let (view, step) = match this.home.step {
+                                    GuideStep::Prepare => (HomeView::Tasks, GuideStep::Prepare),
+                                    GuideStep::Receiver => (HomeView::Guide, GuideStep::Prepare),
+                                    GuideStep::Trackers => (HomeView::Guide, GuideStep::Receiver),
+                                };
+                                if this.show_home_view(view, window, cx) {
+                                    this.home.step = step;
                                 }
-                                this.home_page_focus.focus(window, cx);
-                                cx.notify();
                             })),
                     )
                     .child(
@@ -469,10 +483,11 @@ impl Workbench {
                     cx,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
-                    this.set_feature_page(FeaturePage::Uf2);
-                    this.page_focus.focus(window, cx);
-                    this.ensure_flash_catalog();
-                    cx.notify();
+                    if this.set_feature_page(FeaturePage::Uf2, cx) {
+                        this.page_focus.focus(window, cx);
+                        this.ensure_flash_catalog();
+                        cx.notify();
+                    }
                 })),
             )
             .child(
@@ -485,10 +500,11 @@ impl Workbench {
                     cx,
                 )
                 .on_click(cx.listener(|this, _, window, cx| {
-                    this.set_feature_page(FeaturePage::Ota);
-                    this.page_focus.focus(window, cx);
-                    this.ensure_flash_catalog();
-                    cx.notify();
+                    if this.set_feature_page(FeaturePage::Ota, cx) {
+                        this.page_focus.focus(window, cx);
+                        this.ensure_flash_catalog();
+                        cx.notify();
+                    }
                 })),
             )
             .child(

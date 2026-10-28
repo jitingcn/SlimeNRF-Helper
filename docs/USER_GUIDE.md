@@ -380,6 +380,23 @@ Use the right scrollbar to move through the document. For long lines, use the bo
 
 Compilation generates the embedded `THIRD_PARTY_NOTICES.txt`; Python is not needed to run the application. AppImage also carries this file under `usr/share/licenses/slimenrf-helper` inside its AppDir, and Flatpak installs it under `/app/share/licenses/slimenrf-helper`. To generate a separate copy from the tracked sources, see the [notice-maintenance procedure](DEVELOPMENT.md#license-notices).
 
+<a id="app-updates"></a>
+## Check for application updates
+
+**Settings → About** can check GitHub releases on all platforms. Only eligible official Windows portable builds can install updates. Other platforms and Windows development, custom, or unmarked builds open the release page for manual installation.
+
+1. Choose **Check for updates**. Stable releases are selected by default; enable **Include prereleases** to include previews. If the repository has only prereleases, the stable channel reports that no stable release is available.
+2. Review the version and release notes. On check-only builds, choose **View release on GitHub** to open that release in your browser. The application does not download or replace its executable. A newer release does not necessarily contain an installation package for your platform.
+3. On eligible Windows portable builds, choose **Download update**. The asset must exactly match the Windows architecture and bundled/no-firmware variant; missing assets do not cause a variant switch.
+4. Downloading and a ready update keep navigation on the update settings. **Cancel** discards the update and restores navigation, including when you need to return to an active device task. Checks alone do not restrict navigation. Closing the application normally discards the download without installing it.
+5. Finish or cancel active firmware, capture, and calibration work, then choose **Restart and install** and confirm. The application enters its normal shutdown flow, stops background activity, and waits for retained work before preparing the installer. A separate helper waits for the application to exit, replaces the executable, and reopens it with the original arguments and working directory. Renamed executables are supported. Configuration and preferences are not replaced.
+
+**Check for updates automatically** is enabled by default for eligible official Windows builds, with at least 24 hours between recorded attempts. Automatic checks wait for the attempt timestamp to be saved; if saving fails, use a manual check. Automatic checks do not download or install anything. Development builds and other platforms do not check automatically.
+
+Checks use HTTPS from the fixed project GitHub repository. Windows in-app downloads must also match GitHub's declared size and SHA-256; this is integrity verification, not an independent publisher signature. Installation requires a writable location and never requests elevation. Preparation errors leave the installed executable unchanged, but shutdown has already begun; after dismissing the error, start the application again manually. Replacement or process-launch failure attempts to restore the old executable and reports any recovery failure. A new process that launches successfully but later fails during application startup is not automatically rolled back. If it does not acknowledge the cleanup handoff, it is not forcibly terminated: recovery files are retained and their location is reported.
+
+Install the first release containing this feature manually; older releases cannot gain an updater without being replaced. You can always download a release and replace the executable manually after closing the application.
+
 <a id="linux-devices"></a>
 ## Linux device and runtime requirements
 

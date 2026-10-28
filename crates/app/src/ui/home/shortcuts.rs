@@ -38,6 +38,8 @@ pub(super) struct SavedCommandUiState {
     error: Option<String>,
     delete: Option<SavedCommandId>,
     expanded_runs: BTreeSet<RunId>,
+    #[cfg(test)]
+    store_path: Option<std::path::PathBuf>,
 }
 
 #[derive(Default)]
@@ -80,8 +82,16 @@ impl Workbench {
             return;
         }
         self.home.shortcuts.attempted = true;
+        #[cfg(test)]
+        let store_path = self.home.shortcuts.store_path.clone();
         self.start_saved_store_job(
-            || StoreJobResult::Loaded(storage::default_path().and_then(ShortcutStore::load)),
+            move || {
+                #[cfg(test)]
+                let path = store_path.map_or_else(storage::default_path, Ok);
+                #[cfg(not(test))]
+                let path = storage::default_path();
+                StoreJobResult::Loaded(path.and_then(ShortcutStore::load))
+            },
             cx,
         );
     }
@@ -189,12 +199,14 @@ impl Workbench {
     }
 
     pub(super) fn open_saved_commands(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.show_home_view(HomeView::Commands, window, cx) {
+            return;
+        }
         self.cancel_custom_review();
         if matches!(self.home.shortcuts.view, SavedCommandView::Review) {
             self.home.shortcuts.view = SavedCommandView::Library;
         }
         self.home.shortcuts.delete = None;
-        self.show_home_view(HomeView::Commands, window, cx);
     }
 
     fn edit_saved_command(
@@ -314,7 +326,7 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.saved_commands_busy() {
+        if self.saved_commands_busy() || !self.show_home_view(HomeView::Commands, window, cx) {
             return;
         }
         self.cancel_custom_review();
@@ -322,7 +334,6 @@ impl Workbench {
             id,
             receivers: BTreeSet::new(),
         });
-        self.show_home_view(HomeView::Commands, window, cx);
     }
 
     fn review_selected_saved_command(&mut self, cx: &mut Context<Self>) {
@@ -431,8 +442,9 @@ impl Workbench {
                         .label(tr("shortcuts.action.back_home"))
                         .disabled(busy)
                         .on_click(cx.listener(|this, _, window, cx| {
-                            this.cancel_custom_review();
-                            this.show_home_view(HomeView::Tasks, window, cx);
+                            if this.show_home_view(HomeView::Tasks, window, cx) {
+                                this.cancel_custom_review();
+                            }
                         })),
                 )
                 .child(
@@ -458,6 +470,9 @@ impl Workbench {
                     Button::new("saved-reload")
                         .label(tr("shortcuts.action.reload"))
                         .on_click(cx.listener(|this, _, _, cx| {
+                            if this.shutting_down {
+                                return;
+                            }
                             this.home.shortcuts.attempted = false;
                             this.initialize_saved_commands(cx);
                         })),
@@ -942,10 +957,11 @@ impl Workbench {
                         Button::new("saved-targets-devices")
                             .label(tr("shortcuts.action.open_devices"))
                             .on_click(cx.listener(|this, _, window, cx| {
-                                this.cancel_custom_review();
-                                this.set_feature_page(crate::ui::FeaturePage::DeviceSetup);
-                                this.page_focus.focus(window, cx);
-                                cx.notify();
+                                if this.set_feature_page(crate::ui::FeaturePage::DeviceSetup, cx) {
+                                    this.cancel_custom_review();
+                                    this.page_focus.focus(window, cx);
+                                    cx.notify();
+                                }
                             })),
                     ),
             )
@@ -1245,3 +1261,6 @@ fn validation_message(error: &SaveError) -> String {
         DraftField::Commands | DraftField::Library => message,
     }
 }
+
+#[cfg(test)]
+mod tests;

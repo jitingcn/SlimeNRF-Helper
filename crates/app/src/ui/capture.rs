@@ -34,9 +34,10 @@ pub(super) struct CaptureUiState {
 }
 
 impl CaptureUiState {
-    fn busy(&self) -> bool {
+    pub(super) fn busy(&self) -> bool {
         self.session.busy()
     }
+
     fn replace_sources(&mut self, sources: Vec<CaptureSource>) {
         self.source = self
             .source
@@ -217,7 +218,7 @@ impl Workbench {
     }
 
     fn choose_capture_path(&mut self, cx: &mut Context<Self>) {
-        if self.capture.busy() || self.capture.chooser.is_some() {
+        if self.shutting_down || self.capture.busy() || self.capture.chooser.is_some() {
             return;
         }
         let directory = directories::BaseDirs::new()
@@ -727,9 +728,10 @@ impl Workbench {
                         .small()
                         .label(tr("capture.action.open_replay"))
                         .on_click(cx.listener(move |this, _, _, cx| {
-                            this.set_feature_page(FeaturePage::VqfReplay);
-                            this.replay_open_path(path.clone(), cx);
-                            cx.notify();
+                            if this.set_feature_page(FeaturePage::VqfReplay, cx) {
+                                this.replay_open_path(path.clone(), cx);
+                                cx.notify();
+                            }
                         })),
                 );
         }
@@ -1026,6 +1028,41 @@ mod tests {
     use crate::sessions::test_support;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+
+    #[gpui_kit::test]
+    fn shutdown_rejects_capture_start_discovery_and_picker(cx: &mut gpui_kit::TestAppContext) {
+        use gpui_kit::VisualContext as _;
+
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+        let executor = runtime.executor();
+        let cx = cx.add_empty_window();
+        let workbench = cx.new_window_entity(move |window, cx| {
+            crate::ui::test_support::offline_workbench(
+                window,
+                cx,
+                crate::sessions::SessionManager::new(),
+                executor,
+            )
+        });
+        workbench.update(cx, |this, cx| {
+            this.shutting_down = true;
+            this.refresh_capture_sources(cx);
+            this.choose_capture_path(cx);
+            this.start_capture(cx);
+            assert!(!this.capture.busy());
+            assert!(!this.capture.discovering);
+            assert!(this.capture.chooser.is_none());
+            assert!(this.capture.error.is_none());
+            this.shutting_down = false;
+            this.start_capture(cx);
+            assert!(this.capture.error.is_some(), "normal admission resumes");
+            this.choose_capture_path(cx);
+            assert!(this.capture.chooser.is_some());
+        });
+        cx.simulate_new_path_selection(|_| None);
+        cx.run_until_parked();
+    }
 
     fn cdc_source() -> CaptureSource {
         CaptureSource {

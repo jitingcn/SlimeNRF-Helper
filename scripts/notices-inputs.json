@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "input_sha256": {
-    "Cargo.lock": "be8c79b3f5c08ebbe087c8d152bea84c318197d15f30eb21b6f901a19af689de",
+    "Cargo.lock": "865630af3b858309564efab076e917154d6778e87bda5e15c3aba6731e2b0f9a",
     "Cargo.toml": "06f448088d808826356fde7b658e282cd7eb72d9e5129a97237df22373bca6f4",
-    "crates/app/Cargo.toml": "79cfa890a082eaf2ff50eb207b4ed870c37a521027a583cf43a2b630a93a8772",
+    "crates/app/Cargo.toml": "9c63eb1e946e22e91b8dfc1097e6f6f0a99c9e603c3197b28df4b5ac62638923",
     "crates/firmware-image/Cargo.toml": "f47e5c8e0f6cd625d914a9ee3896acca87c6c3241e16666464543aa491a69031",
     "crates/recording/Cargo.toml": "b97713b3affd1a84902192a86bf200055526fde9e93d848e9a7a21eef1c95b68",
     "crates/terminal-core/Cargo.toml": "c04f89a559ce26e38c06cc87b744b38441afcac52e9f22ed9a9a7db3c7d88671",
@@ -24,7 +24,7 @@
   },
   "manifest_semantic_sha256": {
     "Cargo.toml": "08f40b254b3ccfb4eb9472a5e86f43fc5a3a12b8a53013f067d3700c57b22473",
-    "crates/app/Cargo.toml": "89c526b95c36d86662b93e9299106fc31204b8013c1b85fc154bf2580aab1064",
+    "crates/app/Cargo.toml": "2a52537d4aa943acb50ca5be7477235b39245deb22c8864ea796e7e7e69b3e69",
     "crates/firmware-image/Cargo.toml": "c67a5cdc0d0993054e44fed2bd6e059ff2ba76caab8c7f09debd27647b1df784",
     "crates/recording/Cargo.toml": "cd7867af705526b66357d2cc21f1551d4ab22758cdea105526124fdbc7c21f6d",
     "crates/terminal-core/Cargo.toml": "666dbf7fe2eaf6c469fe49304c945658d75176249b6448ce5430829d7bb62c9c"
@@ -14678,9 +14678,11 @@
       "source_commit": "7625c7aa3f0e8ba21e099d1765bcebcb72aa8816",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
+          "code_candidate",
           "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
+          "code_candidate",
           "compile_tool"
         ]
       },
@@ -19850,6 +19852,7 @@
           "Win32_UI",
           "Win32_UI_Shell",
           "Win32_UI_Shell_PropertiesSystem",
+          "Win32_UI_WindowsAndMessaging",
           "default"
         ]
       },

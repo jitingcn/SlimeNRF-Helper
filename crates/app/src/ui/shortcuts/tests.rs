@@ -714,6 +714,47 @@ fn saved_review() -> FrozenCommandReview {
     }
 }
 
+#[gpui_kit::test]
+fn shutdown_rejects_custom_commands_without_consuming_the_review(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use gpui_kit::VisualContext as _;
+
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let runtime = crate::app_runtime::AppRuntime::new().expect("start app runtime");
+    let executor = runtime.executor();
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        crate::ui::test_support::offline_workbench(window, cx, SessionManager::new(), executor)
+    });
+    workbench.update(cx, |this, cx| {
+        this.custom_commands.pending = Some(PendingCustomCommand::Review(saved_review()));
+        this.shutting_down = true;
+
+        assert_eq!(
+            this.submit_terminal_send_all(PORT_A, "info".into(), cx)
+                .err(),
+            Some(tr("firmware.status.closing"))
+        );
+        assert_eq!(
+            this.prepare_custom_invocation(saved_review().invocation, Default::default())
+                .err(),
+            Some(tr("firmware.status.closing"))
+        );
+        assert_eq!(
+            this.submit_custom_review().err(),
+            Some(tr("firmware.status.closing"))
+        );
+        assert!(matches!(
+            this.custom_commands.pending,
+            Some(PendingCustomCommand::Review(_))
+        ));
+        assert!(this.custom_commands.runs.is_empty());
+        assert_eq!(this.manager.sessions().count(), 0);
+        this.shutting_down = false;
+    });
+}
+
 #[test]
 fn connected_terminal_selection_uses_only_current_admitted_sessions_without_connecting() {
     let mut manager = display_manager();

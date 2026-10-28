@@ -754,7 +754,7 @@ fn navigation_preserves_the_join_boundary_and_global_inventory_updates_off_page(
 
     let cx = cx.add_empty_window();
     let workbench = offline(cx, runtime.executor());
-    workbench.update(cx, |this, _| {
+    workbench.update(cx, |this, cx| {
         let endpoint = receiver("synthetic-old-native-path", Some(SERIAL));
         let release = hold_operation(
             this,
@@ -768,7 +768,7 @@ fn navigation_preserves_the_join_boundary_and_global_inventory_updates_off_page(
         this.flash.dismiss_results(Mode::Uf2);
         assert_eq!(this.flash.receiver_result_joined_at, Some(joined_at));
         for page in [FeaturePage::Home, FeaturePage::Settings] {
-            this.set_feature_page(page);
+            assert!(this.set_feature_page(page, cx));
             let _ = this.poll_flash();
             assert_eq!(this.flash.receiver_result_joined_at, Some(joined_at));
             assert_eq!(this.flash.results[0].1, unconfirmed());
@@ -785,7 +785,7 @@ fn navigation_preserves_the_join_boundary_and_global_inventory_updates_off_page(
             .is_some()
         );
         assert_eq!(this.flash.results[0].1, detected());
-        this.set_feature_page(FeaturePage::DeviceSetup);
+        assert!(this.set_feature_page(FeaturePage::DeviceSetup, cx));
         assert!(this.flash.shows_results(Mode::Esb));
         assert_eq!(this.flash.ota_presentation, OtaPresentation::Finished);
         assert_eq!(this.flash.results[0].1, detected());
@@ -802,7 +802,7 @@ fn dismiss_and_new_update_disable_observation_without_erasing_retained_detection
 
     let cx = cx.add_empty_window();
     let workbench = offline(cx, runtime.executor());
-    workbench.update(cx, |this, _| {
+    workbench.update(cx, |this, cx| {
         let endpoint = receiver("synthetic-old-native-path", Some(SERIAL));
         for already_detected in [false, true] {
             for dismiss in [false, true] {
@@ -839,7 +839,7 @@ fn dismiss_and_new_update_disable_observation_without_erasing_retained_detection
                     assert_eq!(this.flash.ota_presentation, OtaPresentation::Configuring);
                 }
                 assert!(this.flash.receiver_result_joined_at.is_none());
-                this.set_feature_page(FeaturePage::Home);
+                assert!(this.set_feature_page(FeaturePage::Home, cx));
                 for receivers in [vec![], vec![endpoint.clone()]] {
                     assert!(
                         this.apply_inventory_result(
@@ -855,7 +855,7 @@ fn dismiss_and_new_update_disable_observation_without_erasing_retained_detection
                         assert!(!this.flash.shows_results(Mode::Esb));
                     }
                 }
-                this.set_feature_page(FeaturePage::DeviceSetup);
+                assert!(this.set_feature_page(FeaturePage::DeviceSetup, cx));
                 assert_eq!(this.flash.results[0].1, expected);
                 if dismiss {
                     assert!(!this.flash.shows_results(Mode::Esb));

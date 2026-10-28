@@ -7,6 +7,73 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[test]
+fn firmware_job_retains_its_serial_lease_until_join() {
+    let mut state = FlashState::default();
+    let mut manager = crate::sessions::SessionManager::new();
+    let mut monitor = crate::discovery::ReceiverMonitor::new();
+    let token = manager.reserve("synthetic-port", None).unwrap();
+    state.leases.push(crate::ui::flash::Lease::Serial {
+        token,
+        port: "synthetic-port".into(),
+    });
+
+    let (release, wait) = std::sync::mpsc::channel();
+    state.job = Some(
+        crate::update::Job::start(move |_, _| {
+            wait.recv().unwrap();
+            Ok(Payload::Volumes(Vec::new()))
+        })
+        .unwrap(),
+    );
+    assert!(state.poll_job().is_none());
+    state.release_leases(&mut manager, &mut monitor);
+    assert_eq!(state.leases.len(), 1);
+    assert!(manager.reserve("synthetic-port", None).is_err());
+
+    release.send(()).unwrap();
+    while state.poll_job().is_none() {
+        std::thread::yield_now();
+    }
+    assert!(state.job.is_none());
+    state.release_leases(&mut manager, &mut monitor);
+    assert!(state.leases.is_empty());
+    let token = manager.reserve("synthetic-port", None).unwrap();
+    manager.release(&token).unwrap();
+}
+
+#[gpui_kit::test]
+fn shutdown_rejects_firmware_jobs_reservations_and_file_picker(cx: &mut gpui_kit::TestAppContext) {
+    use gpui_kit::VisualContext as _;
+
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        crate::ui::test_support::offline_workbench(
+            window,
+            cx,
+            crate::sessions::SessionManager::new(),
+            executor,
+        )
+    });
+    workbench.update(cx, |this, cx| {
+        this.shutting_down = true;
+        this.start_flash_job(|_, _| panic!("shutdown must not start firmware work"));
+        this.reserve_flash_action(Action::Reboot(Vec::new()));
+        this.choose_firmware(cx);
+        assert!(!this.flash.busy());
+        assert!(this.flash.chooser.is_none());
+        assert!(this.flash.pending.is_none());
+        this.shutting_down = false;
+        this.choose_firmware(cx);
+        assert!(this.flash.chooser.is_some(), "normal admission resumes");
+    });
+    cx.simulate_path_prompt_response(|_| None);
+    cx.run_until_parked();
+}
+
+#[test]
 fn pending_handoff_floats_until_a_physical_operation_actually_starts() {
     use crate::ui::flash::ActivityKind;
     for action in [

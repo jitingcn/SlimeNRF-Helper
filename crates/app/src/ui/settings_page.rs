@@ -1,5 +1,5 @@
 use super::{
-    Workbench,
+    FeaturePage, Workbench,
     command_panel::{CommandPreparation, PendingCommand, PrepareAction},
     page_scroll::{ControlFocus, FocusReveal, reveal_on_focus},
     theme,
@@ -20,8 +20,8 @@ use gpui_kit::component::{
     switch::Switch,
 };
 use gpui_kit::{
-    AnyElement, App, Context, Entity, Focusable as _, FontWeight, ScrollAnchor, ScrollHandle,
-    Subscription, Window, div, prelude::*, rems,
+    AnyElement, App, Context, Entity, FocusHandle, Focusable as _, FontWeight, ScrollAnchor,
+    ScrollHandle, Subscription, Window, div, prelude::*, rems,
 };
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -68,9 +68,11 @@ pub(super) struct SettingsUiState {
     scroll: ScrollHandle,
     navigation_scroll: ScrollHandle,
     anchors: [ScrollAnchor; 4],
+    app_update_scroll_anchor: ScrollAnchor,
     layout: Entity<ResizableState>,
-    control_focus: [Option<ControlFocus>; 8],
+    control_focus: [Option<ControlFocus>; 9],
     repository_focus: [ControlFocus; 4],
+    app_update_restart_focus: FocusHandle,
     _search_subscription: Subscription,
 }
 
@@ -90,6 +92,7 @@ impl SettingsUiState {
             search,
             selected: Section::All,
             anchors: std::array::from_fn(|_| ScrollAnchor::for_handle(scroll.clone())),
+            app_update_scroll_anchor: ScrollAnchor::for_handle(scroll.clone()),
             control_focus: std::array::from_fn(|ix| {
                 (!matches!(
                     Setting::ALL[ix],
@@ -98,15 +101,25 @@ impl SettingsUiState {
                         | Setting::Accent
                         | Setting::Version
                         | Setting::Repositories
+                        | Setting::AppUpdate
                 ))
                 .then(|| ControlFocus::new(window, cx))
             }),
             repository_focus: std::array::from_fn(|_| ControlFocus::new(window, cx)),
+            app_update_restart_focus: cx.focus_handle().tab_stop(true),
             navigation_scroll: ScrollHandle::new(),
             scroll,
             layout: cx.new(|_| ResizableState::default()),
             _search_subscription: subscription,
         }
+    }
+
+    pub(super) fn app_update_restart_focus(&self) -> &FocusHandle {
+        &self.app_update_restart_focus
+    }
+
+    pub(super) fn app_update_scroll_anchor(&self) -> ScrollAnchor {
+        self.app_update_scroll_anchor.clone()
     }
 }
 
@@ -120,10 +133,11 @@ enum Setting {
     Version,
     Repositories,
     Notices,
+    AppUpdate,
 }
 
 impl Setting {
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 9] = [
         Self::Language,
         Self::Appearance,
         Self::Accent,
@@ -132,6 +146,7 @@ impl Setting {
         Self::Version,
         Self::Repositories,
         Self::Notices,
+        Self::AppUpdate,
     ];
 
     fn section(self) -> Section {
@@ -139,7 +154,7 @@ impl Setting {
             Self::Language => Section::General,
             Self::Appearance | Self::Accent => Section::Appearance,
             Self::Registry | Self::Advanced => Section::Devices,
-            Self::Version | Self::Repositories | Self::Notices => Section::About,
+            Self::Version | Self::Repositories | Self::Notices | Self::AppUpdate => Section::About,
         }
     }
 
@@ -153,6 +168,7 @@ impl Setting {
             Self::Version => "app.settings.version.title",
             Self::Repositories => "app.settings.repositories.title",
             Self::Notices => "app.settings.notices.title",
+            Self::AppUpdate => "app.settings.update.title",
         }
     }
 
@@ -167,6 +183,7 @@ impl Setting {
             Self::Version => "app.settings.version.hint",
             Self::Repositories => "app.settings.repositories.hint",
             Self::Notices => "app.settings.notices.hint",
+            Self::AppUpdate => "app.settings.update.hint",
         }
     }
 
@@ -212,6 +229,21 @@ impl Setting {
                 "third-party",
                 "许可证",
                 "声明",
+            ],
+            Self::AppUpdate => &[
+                "update",
+                "release",
+                "prerelease",
+                "preview",
+                "version",
+                "download",
+                "更新",
+                "发布",
+                "发行",
+                "预发布",
+                "预览版",
+                "版本",
+                "下载",
             ],
         }
     }
@@ -279,21 +311,23 @@ fn setting_row(
     scroll: &ScrollHandle,
     cx: &App,
 ) -> impl IntoElement {
+    let full_width = matches!(setting, Setting::AppUpdate);
     div()
         .w_full()
         .min_w_0()
         .flex()
-        .flex_wrap()
-        .items_center()
-        .justify_end()
+        .when(full_width, |row| row.flex_col().items_start())
+        .when(!full_width, |row| {
+            row.flex_wrap().items_center().justify_end()
+        })
         .gap_4()
         .when(separated, |row| {
             row.pb_4().border_b_1().border_color(cx.theme().border)
         })
         .child(
             div()
-                .flex_1()
-                .flex_basis(rems(18.))
+                .when(full_width, |label| label.w_full())
+                .when(!full_width, |label| label.flex_1().flex_basis(rems(18.)))
                 .min_w_0()
                 .flex()
                 .flex_col()
@@ -319,29 +353,32 @@ fn setting_row(
                         })
                 })
                 .when(
-                    matches!(
-                        setting,
-                        Setting::Language
-                            | Setting::Appearance
-                            | Setting::Accent
-                            | Setting::Repositories
-                    ),
+                    !full_width
+                        && matches!(
+                            setting,
+                            Setting::Language
+                                | Setting::Appearance
+                                | Setting::Accent
+                                | Setting::Repositories
+                        ),
                     |control| control.w(rems(24.)),
                 )
                 .when(
-                    !matches!(
-                        setting,
-                        Setting::Language
-                            | Setting::Appearance
-                            | Setting::Accent
-                            | Setting::Repositories
-                    ),
+                    !full_width
+                        && !matches!(
+                            setting,
+                            Setting::Language
+                                | Setting::Appearance
+                                | Setting::Accent
+                                | Setting::Repositories
+                        ),
                     |control| control.w_48(),
                 )
+                .when(full_width, |control| control.w_full().min_w_0())
                 .max_w_full()
                 .flex_shrink_0()
                 .flex()
-                .justify_end()
+                .when(!full_width, |control| control.justify_end())
                 .child(control),
         )
 }
@@ -394,7 +431,7 @@ impl Workbench {
         }
     }
 
-    fn update_preferences(
+    pub(super) fn update_preferences(
         &mut self,
         preferences: Preferences,
         window: &mut Window,
@@ -429,20 +466,63 @@ impl Workbench {
     }
 
     pub(super) fn focus_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.registry_is_open() {
+        if self.registry_is_open() && !self.app_update_navigation_locked() {
             self.open_device_registry(window, cx);
         } else {
             self.page_focus.focus(window, cx);
         }
     }
 
+    pub(super) fn show_settings_about(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if !self.set_feature_page(FeaturePage::Settings, cx) {
+            return false;
+        }
+        self.close_device_registry();
+        let query = self.settings.search.read(cx).value().trim().to_lowercase();
+        if !Setting::AppUpdate.matches(&query, self.flash.advanced_features_locked()) {
+            self.settings
+                .search
+                .update(cx, |input, cx| input.set_value("", window, cx));
+        }
+        self.settings.selected = Section::About;
+        self.page_focus.focus(window, cx);
+        let workbench = cx.weak_entity();
+        // Let the Settings frame mount the status anchor before requesting its scroll.
+        window.on_next_frame(move |window, cx| {
+            let _ = workbench.update(cx, |this, cx| {
+                if this.active_page != FeaturePage::Settings
+                    || this.registry_is_open()
+                    || this.settings.selected != Section::About
+                {
+                    return;
+                }
+                let query = this.settings.search.read(cx).value().trim().to_lowercase();
+                if this.app_update_navigation_locked()
+                    || Setting::AppUpdate.matches(&query, this.flash.advanced_features_locked())
+                {
+                    this.settings.app_update_scroll_anchor.scroll_to(window, cx);
+                }
+            });
+        });
+        cx.notify();
+        true
+    }
+
     pub(super) fn settings_page(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        if self.registry_is_open() {
+        let update_navigation_locked = self.app_update_navigation_locked();
+        if self.registry_is_open() && !update_navigation_locked {
             return self.device_registry_page(cx);
         }
         let query = self.settings.search.read(cx).value().trim().to_lowercase();
         let locked = self.flash.advanced_features_locked();
-        let matching = Setting::ALL.map(|setting| setting.matches(&query, locked));
+        let matching = Setting::ALL.map(|setting| {
+            (update_navigation_locked && matches!(setting, Setting::AppUpdate))
+                || setting.matches(&query, locked)
+        });
         let mut navigation = div().w_full().min_w_0().flex().flex_col().gap_3().child(
             Input::new(&self.settings.search)
                 .id("settings-search")
@@ -771,6 +851,7 @@ impl Workbench {
             Setting::Registry => Button::new("manage-devices")
                 .label(tr("devices.registry.action.manage"))
                 .w_full()
+                .disabled(self.app_update_navigation_locked())
                 .on_click(cx.listener(|this, _, window, cx| this.open_device_registry(window, cx)))
                 .into_any_element(),
             Setting::Advanced => Switch::new("advanced-features")
@@ -784,8 +865,11 @@ impl Workbench {
                 }))
                 .into_any_element(),
             Setting::Version => div()
+                .min_w_0()
+                .max_w_full()
                 .text_sm()
-                .child(env!("CARGO_PKG_VERSION"))
+                .whitespace_normal()
+                .child(super::app_update::installed_version())
                 .into_any_element(),
             Setting::Repositories => div()
                 .id("settings-repositories")
@@ -871,6 +955,7 @@ impl Workbench {
                 .w_full()
                 .on_click(cx.listener(|this, _, _, cx| this.open_notices_window(cx)))
                 .into_any_element(),
+            Setting::AppUpdate => self.render_app_update_controls(&self.settings.scroll, cx),
         }
     }
 

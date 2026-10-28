@@ -255,6 +255,10 @@ Cargo 跟踪生成器、冻结输入及仓库来源文件。生成文档不纳�
 
 辅助脚本使用[共用原子发布器](../scripts/publish-file.ps1)。已有输出内容相同时保留，不同内容须在 `package.ps1` 明确传入 `-Force`。发布器在目标卷暂存，再移动或替换目标，不原地覆盖字节，因此保留输入及指向旧输出的其他硬链接。发布路径中的符号链接和 reparse point 会被拒绝。文件锁允许读取但拒绝写入，输入锁还拒绝删除。无法取得所需锁时，发布失败且不替换输出。这些检查不保证能抵御所有恶意文件系统竞态。
 
+仅官方 tag 的 Windows 打包任务通过 `package.ps1 -OfficialPrereleaseTag` 写入应用自更新资格。普通本地、分支、PR、debug 和自定义资源构建只允许检查版本。[构建标记校验](../crates/app/build_support/official_release.rs)核对包版本、目标、profile、仓库、tag 及 GitHub 事件；这是分发策略，不是密码学签名。普通开发命令不要设置此标记。
+
+更新器读取分页的 GitHub Releases API，而非 `/latest`，因为当前发布工作流生成预发布版本。Windows 产物必须保持上述精确的版本／架构／固件变体命名，并提供 GitHub 的 SHA-256 摘要；不会回退到历史 `-upx.exe` 名称或另一固件变体。仅检查版本的构建选择发布元数据，不要求存在 Windows 产物，并打开对应发布页。修改产物命名或发布频道时须同时审查更新器。用户流程和恢复限制见[应用更新](USER_GUIDE.zh-CN.md#app-updates)。
+
 <a id="linux"></a>
 ## Linux
 

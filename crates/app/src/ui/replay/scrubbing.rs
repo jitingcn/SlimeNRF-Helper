@@ -145,7 +145,8 @@ impl Workbench {
     }
 
     fn request_replay_range(&mut self, range: (f64, f64), cx: &mut Context<Self>) {
-        if self.replay.settings_dirty
+        if self.shutting_down
+            || self.replay.settings_dirty
             || (self.replay.busy() && self.replay.phase != "replay.phase.viewport")
         {
             return;

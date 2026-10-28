@@ -15,6 +15,7 @@ SlimeNRF Helper is a desktop application for SlimeNRF receivers and trackers. It
 - [Stationary gyro calibration and per-axis sensitivity guides](docs/USER_GUIDE.md#gyro-calibration) under one **Gyro calibration** entry, for a direct USB tracker or an online tracker through a receiver.
 - Temperature calibration plots, fit diagnostics, SVG export, and RSSI channel plots, with serial response display and saved-log import.
 - English and Simplified Chinese, light and dark themes, and theme color settings.
+- [GitHub release checks on all platforms](docs/USER_GUIDE.md#app-updates); official Windows portable builds additionally support verified downloads and user-confirmed restart to install.
 
 Start on **Home** and choose **Connect your devices** to check your receiver and trackers. You can browse the steps in any order or open an existing feature from the sidebar. The guide shows observed device activity, not a setup-complete result. See [First use](docs/USER_GUIDE.md#first-use).
 

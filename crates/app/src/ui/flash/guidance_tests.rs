@@ -73,7 +73,9 @@ fn wired_navigation_preserves_selections_and_disarms_authorization_without_work(
             auto_requested: true,
             ..FlashState::default()
         };
-        assert!(state.open_ota_wired_update(&key));
+        let selected_mode = state.ota_wired_update_mode(&key);
+        assert!(selected_mode == Some(mode));
+        state.transition_mode(selected_mode.unwrap());
         assert!(state.mode == mode);
         assert!(state.review.is_none());
         assert!(!state.acknowledged && !state.auto && !state.auto_requested);
@@ -100,17 +102,17 @@ fn wired_navigation_rechecks_current_target_and_rejects_busy_or_unknown_routes()
         acknowledged: true,
         ..FlashState::default()
     };
-    assert!(!state.open_ota_wired_update(&key));
+    assert!(state.ota_wired_update_mode(&key).is_none());
     assert!(state.mode == Mode::Esb && state.acknowledged);
     assert!(state.pending.is_some());
     state.pending = None;
     for bootloader in ["unknown", "none"] {
         state.targets[0].info.bootloader = bootloader.into();
-        assert!(!state.open_ota_wired_update(&key));
+        assert!(state.ota_wired_update_mode(&key).is_none());
         assert!(state.mode == Mode::Esb && state.acknowledged);
     }
     state.targets.clear();
-    assert!(!state.open_ota_wired_update(&key));
+    assert!(state.ota_wired_update_mode(&key).is_none());
     assert!(state.mode == Mode::Esb && state.acknowledged);
 }
 

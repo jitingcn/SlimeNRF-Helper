@@ -83,6 +83,27 @@ impl IoGate {
     }
 }
 
+#[test]
+fn preset_load_retains_work_and_blocks_edits_until_completion() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("presets.json");
+    let gate = IoGate::new();
+    let mut replay = ReplayUiState::default();
+    assert!(!replay.presets.can_mutate());
+    let join = replay
+        .presets
+        .load(Some(path), &gate.executor)
+        .expect("preset load admitted");
+    assert!(replay.presets.busy());
+    assert!(!replay.presets.can_mutate());
+    assert!(matches!(
+        gate.complete(&mut replay.presets, join, 0),
+        PresetCompletion::Quiet
+    ));
+    assert!(!replay.presets.busy());
+    assert!(replay.presets.can_mutate());
+}
+
 fn stored_names(path: &Path) -> Vec<String> {
     PresetStore::load(Some(path.to_path_buf()))
         .unwrap()

@@ -64,6 +64,13 @@ impl Workbench {
                         }),
                 )
         };
+        let navigation_locked = self.app_update_navigation_locked();
+        let page_item =
+            |id: &'static str, label: &'static str, icon: IconName, page: FeaturePage| {
+                let selected = self.active_page == page;
+                context_button(item(id, label, icon), selected, cx)
+                    .disabled(navigation_locked && !selected)
+            };
         let mut entries = div()
             .id("feature-navigation-scroll")
             .flex_shrink_0()
@@ -73,25 +80,31 @@ impl Workbench {
             .gap_4()
             .p_2()
             .child(
-                item("nav-home", "app.navigation.home", IconName::House)
-                    .map(|button| context_button(button, self.active_page == FeaturePage::Home, cx))
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.set_feature_page(FeaturePage::Home);
-                        this.home_page_focus.focus(window, cx);
-                        cx.notify();
-                    })),
+                page_item(
+                    "nav-home",
+                    "app.navigation.home",
+                    IconName::House,
+                    FeaturePage::Home,
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    if !this.set_feature_page(FeaturePage::Home, cx) {
+                        return;
+                    }
+                    this.home_page_focus.focus(window, cx);
+                    cx.notify();
+                })),
             )
             .child(
-                item(
+                page_item(
                     "nav-device-setup",
                     "app.navigation.device_setup",
                     IconName::SquareTerminal,
+                    FeaturePage::DeviceSetup,
                 )
-                .map(|button| {
-                    context_button(button, self.active_page == FeaturePage::DeviceSetup, cx)
-                })
                 .on_click(cx.listener(|this, _, window, cx| {
-                    this.set_feature_page(FeaturePage::DeviceSetup);
+                    if !this.set_feature_page(FeaturePage::DeviceSetup, cx) {
+                        return;
+                    }
                     this.page_focus.focus(window, cx);
                     cx.notify();
                 })),
@@ -104,28 +117,32 @@ impl Workbench {
                 .min_w_0()
                 .gap_1()
                 .child(
-                    item(
+                    page_item(
                         "nav-uf2",
                         "app.navigation.firmware_update",
                         IconName::HardDrive,
+                        FeaturePage::Uf2,
                     )
-                    .map(|button| context_button(button, self.active_page == FeaturePage::Uf2, cx))
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.set_feature_page(FeaturePage::Uf2);
+                        if !this.set_feature_page(FeaturePage::Uf2, cx) {
+                            return;
+                        }
                         this.page_focus.focus(window, cx);
                         this.ensure_flash_catalog();
                         cx.notify();
                     })),
                 )
                 .child(
-                    item(
+                    page_item(
                         "nav-esb-ota",
                         "app.navigation.wireless_update",
                         IconName::Wifi,
+                        FeaturePage::Ota,
                     )
-                    .map(|button| context_button(button, self.active_page == FeaturePage::Ota, cx))
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.set_feature_page(FeaturePage::Ota);
+                        if !this.set_feature_page(FeaturePage::Ota, cx) {
+                            return;
+                        }
                         this.page_focus.focus(window, cx);
                         this.ensure_flash_catalog();
                         cx.notify();
@@ -140,60 +157,66 @@ impl Workbench {
                 .min_w_0()
                 .gap_1()
                 .child(
-                    item(
+                    page_item(
                         "nav-raw-data",
                         "app.navigation.raw_capture",
                         IconName::Activity,
+                        FeaturePage::RawCapture,
                     )
-                    .map(|button| {
-                        context_button(button, self.active_page == FeaturePage::RawCapture, cx)
-                    })
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.set_feature_page(FeaturePage::RawCapture);
+                        if !this.set_feature_page(FeaturePage::RawCapture, cx) {
+                            return;
+                        }
                         this.page_focus.focus(window, cx);
                         this.refresh_capture_sources(cx);
                         cx.notify();
                     })),
                 )
                 .child(
-                    item(
+                    page_item(
                         "nav-vqf-replay",
                         "app.navigation.vqf_replay",
                         IconName::Play,
+                        FeaturePage::VqfReplay,
                     )
-                    .map(|button| {
-                        context_button(button, self.active_page == FeaturePage::VqfReplay, cx)
-                    })
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.set_feature_page(FeaturePage::VqfReplay);
+                        if !this.set_feature_page(FeaturePage::VqfReplay, cx) {
+                            return;
+                        }
                         this.page_focus.focus(window, cx);
                         cx.notify();
                     })),
                 )
                 .child(
-                    item(
+                    page_item(
                         "nav-hid-recording",
                         "app.navigation.hid_events",
                         IconName::FileText,
+                        FeaturePage::HidLog,
                     )
-                    .map(|button| {
-                        context_button(button, self.active_page == FeaturePage::HidLog, cx)
-                    })
                     .on_click(cx.listener(|this, _, window, cx| {
-                        this.set_feature_page(FeaturePage::HidLog);
+                        if !this.set_feature_page(FeaturePage::HidLog, cx) {
+                            return;
+                        }
                         this.page_focus.focus(window, cx);
                         cx.notify();
                     })),
                 ),
         );
         entries = entries.child(
-            item("nav-tools", "app.navigation.tools", IconName::Wrench)
-                .map(|button| context_button(button, self.active_page == FeaturePage::Tools, cx))
-                .on_click(cx.listener(|this, _, window, cx| {
-                    this.set_feature_page(FeaturePage::Tools);
-                    this.tools_page_focus.focus(window, cx);
-                    cx.notify();
-                })),
+            page_item(
+                "nav-tools",
+                "app.navigation.tools",
+                IconName::Wrench,
+                FeaturePage::Tools,
+            )
+            .on_click(cx.listener(|this, _, window, cx| {
+                if !this.set_feature_page(FeaturePage::Tools, cx) {
+                    return;
+                }
+                this.tools_page_focus.focus(window, cx);
+                cx.notify();
+            })),
         );
         for items in [&[
             (
@@ -224,23 +247,25 @@ impl Workbench {
         {
             let mut group = div().flex().flex_col().flex_shrink_0().min_w_0().gap_1();
             for (id, label, icon, tooltip) in items {
-                group = group.child(item(id, label, *icon).map(|button| {
-                    if *id == "nav-gyroscope" {
-                        context_button(button, self.active_page == FeaturePage::GyroCalibration, cx)
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.set_feature_page(FeaturePage::GyroCalibration);
-                                this.calibration_page_focus.focus(window, cx);
-                                cx.notify();
-                            }))
-                    } else {
-                        button
-                            .ghost()
-                            .text_color(cx.theme().muted_foreground)
-                            .tooltip(tr(tooltip))
-                            .disabled(true)
-                            .tab_stop(false)
-                    }
-                }));
+                let button = if *id == "nav-gyroscope" {
+                    page_item(id, label, *icon, FeaturePage::GyroCalibration).on_click(cx.listener(
+                        |this, _, window, cx| {
+                            if !this.set_feature_page(FeaturePage::GyroCalibration, cx) {
+                                return;
+                            }
+                            this.calibration_page_focus.focus(window, cx);
+                            cx.notify();
+                        },
+                    ))
+                } else {
+                    item(id, label, *icon)
+                        .ghost()
+                        .text_color(cx.theme().muted_foreground)
+                        .tooltip(tr(tooltip))
+                        .disabled(true)
+                        .tab_stop(false)
+                };
+                group = group.child(button);
             }
             entries = entries.child(group);
         }
@@ -273,19 +298,19 @@ impl Workbench {
                     .px_2()
                     .pb_2()
                     .child(
-                        item("nav-settings", "app.settings.title", IconName::Settings2)
-                            .map(|button| {
-                                context_button(
-                                    button,
-                                    self.active_page == FeaturePage::Settings,
-                                    cx,
-                                )
-                            })
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.set_feature_page(FeaturePage::Settings);
-                                this.focus_settings(window, cx);
-                                cx.notify();
-                            })),
+                        page_item(
+                            "nav-settings",
+                            "app.settings.title",
+                            IconName::Settings2,
+                            FeaturePage::Settings,
+                        )
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            if !this.set_feature_page(FeaturePage::Settings, cx) {
+                                return;
+                            }
+                            this.focus_settings(window, cx);
+                            cx.notify();
+                        })),
                     )
                     .child(
                         item(

@@ -374,6 +374,9 @@ impl Workbench {
     }
 
     fn start_calibration(&mut self, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         let Some(review) = self.calibration.review.take() else {
             return;
         };
@@ -394,6 +397,9 @@ impl Workbench {
     }
 
     fn recover_calibration(&mut self, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         let result = (|| {
             let snapshot = self
                 .calibration

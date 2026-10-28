@@ -93,13 +93,30 @@ impl Appearance {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
     pub language: Language,
     pub accent: AccentColor,
     pub appearance: Appearance,
     pub advanced_features: bool,
+    pub app_update_auto_check: bool,
+    pub app_update_include_prereleases: bool,
+    pub app_update_last_attempt: Option<u64>,
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            language: Language::default(),
+            accent: AccentColor::default(),
+            appearance: Appearance::default(),
+            advanced_features: false,
+            app_update_auto_check: true,
+            app_update_include_prereleases: false,
+            app_update_last_attempt: None,
+        }
+    }
 }
 
 fn config_path() -> Result<PathBuf, String> {
@@ -251,6 +268,18 @@ fn save_to(path: &Path, preferences: &Preferences) -> Result<(), String> {
             "advanced_features".to_owned(),
             Value::Bool(preferences.advanced_features),
         );
+        object.insert(
+            "app_update_auto_check".to_owned(),
+            Value::Bool(preferences.app_update_auto_check),
+        );
+        object.insert(
+            "app_update_include_prereleases".to_owned(),
+            Value::Bool(preferences.app_update_include_prereleases),
+        );
+        object.insert(
+            "app_update_last_attempt".to_owned(),
+            serde_json::to_value(preferences.app_update_last_attempt)?,
+        );
         let parent = path
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -342,6 +371,44 @@ mod tests {
     }
 
     #[test]
+    fn update_preferences_default_and_round_trip_without_losing_other_fields() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("isolated/preferences.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let original = r#"{"language":"en","accent":"blue","advanced_features":true,"future":{"nested":{"list":[1,{"keep":"value"}]},"enabled":true},"other":[false,{"number":42}]}"#;
+        fs::write(&path, original).unwrap();
+
+        let mut preferences = load_from(&path).unwrap();
+        assert!(preferences.app_update_auto_check);
+        assert!(!preferences.app_update_include_prereleases);
+        assert_eq!(preferences.app_update_last_attempt, None);
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+
+        for (auto_check, prereleases, last_attempt) in
+            [(false, true, Some(1_793_145_600)), (true, false, None)]
+        {
+            preferences.app_update_auto_check = auto_check;
+            preferences.app_update_include_prereleases = prereleases;
+            preferences.app_update_last_attempt = last_attempt;
+            save_to(&path, &preferences).unwrap();
+            assert_eq!(load_from(&path).unwrap(), preferences);
+            let document: serde_json::Value =
+                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            let original_document: serde_json::Value = serde_json::from_str(original).unwrap();
+            assert_eq!(document["future"], original_document["future"]);
+            assert_eq!(document["other"], original_document["other"]);
+            assert_eq!(document["accent"], "blue");
+            assert_eq!(document["advanced_features"], true);
+            assert_eq!(document["app_update_auto_check"], auto_check);
+            assert_eq!(document["app_update_include_prereleases"], prereleases);
+            assert_eq!(
+                document["app_update_last_attempt"],
+                serde_json::to_value(last_attempt).unwrap()
+            );
+        }
+    }
+
+    #[test]
     fn legacy_preferences_without_language_keep_values_and_are_not_rewritten_on_load() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("preferences.json");
@@ -359,6 +426,7 @@ mod tests {
                     accent: AccentColor::Sakura,
                     appearance: Appearance::Light,
                     advanced_features: true,
+                    ..Preferences::default()
                 }
             );
             assert_eq!(fs::read_to_string(&path).unwrap(), original);
@@ -400,6 +468,7 @@ mod tests {
             accent: AccentColor::Sakura,
             appearance: Appearance::Light,
             advanced_features: true,
+            ..Preferences::default()
         };
         save_to(&path, &selected).unwrap();
         assert_eq!(load_from(&path).unwrap(), selected);
@@ -503,7 +572,7 @@ mod tests {
     fn serialized_preferences_include_newline_in_the_byte_limit() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("preferences.json");
-        let empty_document = "{\n  \"accent\": \"neutral\",\n  \"advanced_features\": true,\n  \"appearance\": \"dark\",\n  \"future\": \"\",\n  \"language\": \"en\"\n}\n";
+        let empty_document = "{\n  \"accent\": \"neutral\",\n  \"advanced_features\": true,\n  \"app_update_auto_check\": true,\n  \"app_update_include_prereleases\": false,\n  \"app_update_last_attempt\": null,\n  \"appearance\": \"dark\",\n  \"future\": \"\",\n  \"language\": \"en\"\n}\n";
         let future = "x".repeat(MAX_STORE_BYTES - empty_document.len());
         let original = format!(r#"{{"future":"{future}"}}"#);
         fs::write(&path, original).unwrap();
@@ -582,6 +651,7 @@ mod tests {
                 accent: AccentColor::Blue,
                 appearance: Appearance::Dark,
                 advanced_features: false,
+                ..Preferences::default()
             }
         );
         for appearance in [Appearance::Light, Appearance::Dark] {
@@ -647,6 +717,7 @@ mod tests {
             accent: AccentColor::Blue,
             appearance: Appearance::Light,
             advanced_features: true,
+            ..Preferences::default()
         };
         save_to(&path, &original).unwrap();
         let bytes = fs::read(&path).unwrap();

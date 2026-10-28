@@ -4,6 +4,7 @@
 )]
 
 mod app_runtime;
+mod app_update;
 mod ble_ota;
 mod board_catalog;
 #[cfg(test)]
@@ -65,6 +66,27 @@ fn startup_mode(
 }
 
 fn main() {
+    #[cfg(windows)]
+    if let Some(code) =
+        app_update::windows::dispatch(&std::env::args_os().skip(1).collect::<Vec<_>>())
+    {
+        std::process::exit(code);
+    }
+    #[cfg(windows)]
+    app_update::windows::freeze_running_image();
+    #[cfg(windows)]
+    let cleanup_worker = match app_update::windows::cleanup::startup_takeover() {
+        Ok(app_update::windows::cleanup::StartupTakeover::None) => None,
+        Ok(app_update::windows::cleanup::StartupTakeover::Continue(worker)) => Some(worker),
+        Ok(app_update::windows::cleanup::StartupTakeover::CleanupOnly(worker)) => {
+            drop(worker);
+            return;
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            return;
+        }
+    };
     match startup_mode(std::env::args_os().skip(1)) {
         Ok(StartupMode::Workbench) => {}
         Ok(StartupMode::Gallery) => {
@@ -76,11 +98,15 @@ fn main() {
             #[cfg(not(debug_assertions))]
             {
                 eprintln!("--gallery is available only in debug builds");
+                #[cfg(windows)]
+                drop(cleanup_worker);
                 std::process::exit(2);
             }
         }
         Err(error) => {
             eprintln!("{error}");
+            #[cfg(windows)]
+            drop(cleanup_worker);
             std::process::exit(2);
         }
     }
@@ -94,6 +120,8 @@ fn main() {
     ui::run(runtime.executor());
     // The native event loop has ended and UI-owned workers have joined.
     runtime.shutdown();
+    #[cfg(windows)]
+    drop(cleanup_worker);
 }
 
 #[cfg(test)]

@@ -494,6 +494,9 @@ impl Workbench {
     }
 
     fn acquire_temperature_dump(&mut self, port: &str, generation: u64, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         self.poll_sessions();
         let result = (|| {
             let session = self
@@ -717,6 +720,83 @@ mod tests {
         let svg = std::fs::read_to_string(path).unwrap();
         assert!(svg.starts_with("<svg "));
         assert!(svg.ends_with("</svg>"));
+    }
+
+    #[gpui_kit::test]
+    fn retained_temperature_content_imports_exports_and_stops(cx: &mut TestAppContext) {
+        use gpui_kit::VisualContext as _;
+
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+        let executor = runtime.executor();
+        let cx = cx.add_empty_window();
+        let workbench = cx.new_window_entity(move |window, cx| {
+            crate::ui::test_support::offline_workbench(
+                window,
+                cx,
+                crate::sessions::SessionManager::new(),
+                executor,
+            )
+        });
+        let content = workbench.update(cx, |this, cx| this.temperature_content(cx));
+        content.update(cx, |this, cx| {
+            this.choose_dump(cx);
+            assert!(this.chooser.is_some());
+        });
+        workbench.update(cx, |this, _| assert!(this.temperature.window.is_none()));
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("dump.txt");
+        std::fs::write(
+            &path,
+            include_str!("../../../recording/src/thermal_dump/fixtures/signed_sparse.txt"),
+        )
+        .unwrap();
+        cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+        crate::sessions::test_support::until(|| {
+            cx.run_until_parked();
+            content.update(cx, |this, _| {
+                this.chooser.is_none() && this.work.analysis.is_none() && !this.document.busy
+            })
+        });
+        content.update(cx, |this, _| {
+            assert!(this.document.error.is_none());
+            assert!(this.document.analysis.is_some());
+            let source = path.display().to_string();
+            assert_eq!(this.document.source.as_deref(), Some(source.as_str()));
+        });
+        content.update(cx, |this, cx| {
+            this.export_svg(cx);
+            assert!(this.export.is_some());
+        });
+        let svg = directory.path().join("analysis.svg");
+        cx.simulate_new_path_selection(|_| Some(svg.clone()));
+        crate::sessions::test_support::until(|| {
+            cx.run_until_parked();
+            content.update(cx, |this, _| {
+                this.export.is_none() && this.work.export.is_none()
+            })
+        });
+        assert!(std::fs::read_to_string(svg).unwrap().starts_with("<svg "));
+        let retained = content.update(cx, |this, cx| {
+            this.choose_dump(cx);
+            assert!(this.chooser.is_some());
+            this.document.analysis.clone().unwrap()
+        });
+        let joins = workbench.update(cx, |this, cx| this.shutdown_temperature(cx));
+        assert!(joins.is_empty());
+        cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+        cx.run_until_parked();
+        content.update(cx, |this, cx| {
+            assert!(this.document.stopped);
+            assert!(Arc::ptr_eq(
+                this.document.analysis.as_ref().unwrap(),
+                &retained
+            ));
+            this.choose_dump(cx);
+            this.export_svg(cx);
+            assert!(this.chooser.is_none());
+            assert!(this.export.is_none());
+        });
     }
 
     #[gpui_kit::test]

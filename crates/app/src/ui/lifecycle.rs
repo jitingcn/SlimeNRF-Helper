@@ -11,6 +11,9 @@ struct ShutdownPayload {
     hid_log: Option<hid_log::HidLogCleanup>,
     firmware: [Option<crate::update::Job<flash::Payload>>; 2],
     default_image: Option<crate::update::Job<flash::Image>>,
+    app_update: Option<crate::update::Job<super::app_update::Outcome>>,
+    #[cfg(any(windows, test))]
+    restart_update: Option<crate::app_update::DownloadedUpdate>,
     sessions: Option<std::thread::JoinHandle<()>>,
     discovery: Option<std::thread::JoinHandle<()>>,
     files: Vec<Shared<Task<()>>>,
@@ -19,6 +22,29 @@ struct ShutdownPayload {
 
 impl ShutdownPayload {
     fn join(self) {
+        #[cfg(windows)]
+        self.join_then_install(|update| {
+            if let Err(error) = crate::app_update::windows::install_after_shutdown(update) {
+                let message =
+                    rust_i18n::t!("app.settings.update.install_error", error = error).to_string();
+                crate::app_update::windows::show_failure(&message);
+            }
+        });
+        #[cfg(not(windows))]
+        self.join_then(|| {});
+    }
+
+    #[cfg(any(windows, test))]
+    fn join_then_install(mut self, install: impl FnOnce(crate::app_update::DownloadedUpdate)) {
+        let restart = self.restart_update.take();
+        self.join_then(move || {
+            if let Some(update) = restart {
+                install(update);
+            }
+        });
+    }
+
+    fn join_then(self, after_join: impl FnOnce()) {
         drop(self.calibration);
         drop(self.capture);
         for worker in self.replay {
@@ -33,14 +59,14 @@ impl ShutdownPayload {
         if let Some(job) = self.default_image {
             job.shutdown();
         }
+        if let Some(job) = self.app_update {
+            job.shutdown();
+        }
         if let Some(worker) = self.sessions {
             let _ = worker.join();
         }
         if let Some(worker) = self.discovery {
             let _ = worker.join();
-        }
-        if self.files.is_empty() {
-            return;
         }
         use std::{
             future::Future as _,
@@ -63,6 +89,7 @@ impl ShutdownPayload {
                 }
             }
         }
+        after_join();
     }
 }
 
@@ -144,9 +171,14 @@ impl Workbench {
         accepted_files.extend(self.saved_commands_shutdown(cx).map(|task| task.shared()));
         accepted_files.extend(self.registry_shutdown(cx).map(|task| task.shared()));
         accepted_files.extend(self.preferences_shutdown(cx));
+        accepted_files.extend(self.app_update_cleanup_files(cx));
         self.shutdown_rssi(cx);
         self.shutdown_notices(cx);
         let (firmware_cleanup, default_image_cleanup) = self.flash.stop_for_shutdown();
+        #[cfg(windows)]
+        let (app_update, restart_update) = self.shutdown_app_update();
+        #[cfg(not(windows))]
+        let app_update = self.shutdown_app_update();
         let payload = ShutdownPayload {
             calibration: self.shutdown_calibration(),
             capture: self.shutdown_capture(),
@@ -154,6 +186,11 @@ impl Workbench {
             hid_log: Some(self.shutdown_hid_log()),
             firmware: firmware_cleanup,
             default_image: default_image_cleanup,
+            app_update,
+            #[cfg(windows)]
+            restart_update,
+            #[cfg(all(test, not(windows)))]
+            restart_update: None,
             sessions: self.manager.shutdown(),
             discovery: self.monitor.shutdown(),
             files: accepted_files,

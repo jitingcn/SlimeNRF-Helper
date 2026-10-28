@@ -527,6 +527,9 @@ impl Workbench {
     }
 
     pub(super) fn toggle_connection(&mut self, port: &str, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         self.poll_sessions();
         if self.manager.is_close_requested(port) {
             return;
@@ -596,6 +599,9 @@ impl Workbench {
     }
 
     fn send_terminal_all(&mut self, port: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         if self.manager.is_close_requested(port) {
             return;
         }
@@ -613,6 +619,9 @@ impl Workbench {
     }
 
     fn queue_write(&mut self, port: &str, command: &str) -> bool {
+        if self.shutting_down {
+            return false;
+        }
         if self.manager.is_close_requested(port) {
             return false;
         }
@@ -654,6 +663,9 @@ impl Workbench {
     }
 
     fn send(&mut self, port: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         self.poll_sessions();
         if self.manager.is_close_requested(port) {
             return;
@@ -844,6 +856,9 @@ impl Workbench {
     }
 
     pub(super) fn resume_terminal_command(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         let Some(port) = self
             .tabs
             .active

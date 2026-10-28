@@ -124,6 +124,35 @@ fn search_filters_real_rows_and_clear_keeps_the_selected_section(cx: &mut TestAp
 }
 
 #[gpui_kit::test]
+fn update_search_finds_the_about_section_in_english_and_chinese(cx: &mut TestAppContext) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = fixture(cx, 1100., 900.);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-settings", cx);
+        window.click("settings-search", cx);
+        window.input("prerelease", cx);
+        assert!(window.find("app-update-status").visible());
+        assert!(window.find("app-update-prereleases").visible());
+        assert!(window.find("app-update-check").visible());
+        assert!(window.try_find("settings-language").is_none());
+        window.click("settings-section-about", cx);
+        assert_eq!(window.find("settings-section-about").checked(), Some(true));
+
+        window.click("settings-search", cx);
+        window.press("secondary-a", cx);
+        window.input("预发布", cx);
+        assert!(window.find("app-update-status").visible());
+        assert!(window.find("app-update-prereleases").visible());
+        assert!(window.find("app-update-check").visible());
+        assert!(window.try_find("settings-language").is_none());
+        assert_eq!(window.find("settings-section-about").checked(), Some(true));
+        assert_eq!(window.find("settings-search").value(), Some("预发布"));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 fn category_jumps_reveal_controls_and_locale_refresh_keeps_view_state(cx: &mut TestAppContext) {
     let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
     let fixture = fixture(cx, 1100., 620.);
@@ -131,7 +160,12 @@ fn category_jumps_reveal_controls_and_locale_refresh_keeps_view_state(cx: &mut T
         window.render_frame(cx);
         window.click("nav-settings", cx);
         window.press("end", cx);
-        assert!(window.find("open-notices").visible());
+        let scroll = &fixture.workbench.read(cx).settings.scroll;
+        assert!(scroll.max_offset().y > px(0.));
+        assert!(
+            f32::from(scroll.offset().y + scroll.max_offset().y).abs() < 0.001,
+            "End must reveal the bottom of the now-longer About section"
+        );
         window.press("home", cx);
         assert!(window.find("settings-language").visible());
         window.click("settings-section-about", cx);
@@ -1334,4 +1368,27 @@ fn explicit_technical_keywords_find_the_corresponding_existing_controls() {
             .collect();
         assert!(found.iter().any(|setting| std::mem::discriminant(setting) == std::mem::discriminant(&expected)));
     }
+}
+
+#[test]
+fn application_update_keywords_find_the_about_setting() {
+    assert!(matches!(Setting::AppUpdate.section(), Section::About));
+    for query in [
+        "update",
+        "release",
+        "prerelease",
+        "version",
+        "download",
+        "更新",
+        "发布",
+        "预发布",
+        "版本",
+        "下载",
+    ] {
+        assert!(
+            Setting::AppUpdate.matches(query, false),
+            "application update search must match {query:?}"
+        );
+    }
+    assert!(!Setting::AppUpdate.matches("unrelated-setting-query", false));
 }

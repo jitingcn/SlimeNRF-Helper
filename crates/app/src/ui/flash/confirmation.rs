@@ -224,6 +224,9 @@ impl Workbench {
             .when(!cx.theme().is_dark(), |button| button.outline())
             .disabled(!self.flash.acknowledged || self.flash.busy())
             .on_click(cx.listener(|this, _, _, cx| {
+                if this.shutting_down {
+                    return;
+                }
                 if let Some(action) = this.flash.take_confirmed_action() {
                     this.flash.auto =
                         this.flash.auto_requested && matches!(&action, Action::Uf2(..));

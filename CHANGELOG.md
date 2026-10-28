@@ -14,6 +14,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - A debug-only developer gallery with isolated synthetic controls and terminal scenes, plus documented device diagnosis and native UI smoke workflows.
 - Terminal tabs can filter displayed lines by log level while retaining untagged command output; Copy all and log export remain unfiltered.
 - The mouse wheel can switch log levels over the terminal filter control and recall command history over the input without sending commands.
+- All platforms can check GitHub releases and open a newer version's release page. Official Windows portable builds can also download a matching integrity-verified update and restart to install it. Stable and prerelease channels are selectable; automatic checks do not download or install updates.
 
 ### Changed
 

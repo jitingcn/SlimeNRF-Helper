@@ -468,6 +468,66 @@ mod tests {
     }
 
     #[gpui_kit::test]
+    fn retained_rssi_content_imports_and_stops(cx: &mut TestAppContext) {
+        use gpui_kit::VisualContext as _;
+
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+        let executor = runtime.executor();
+        let cx = cx.add_empty_window();
+        let workbench = cx.new_window_entity(move |window, cx| {
+            crate::ui::test_support::offline_workbench(
+                window,
+                cx,
+                crate::sessions::SessionManager::new(),
+                executor,
+            )
+        });
+        let content = workbench.update(cx, |this, cx| this.rssi_content(cx));
+        content.update(cx, |this, cx| {
+            this.choose_log(cx);
+            assert!(this.chooser.is_some());
+        });
+        workbench.update(cx, |this, _| assert!(this.rssi.window.is_none()));
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("scan.log");
+        std::fs::write(
+            &path,
+            include_str!("../rssi_scan/fixtures/receiver_scan.log"),
+        )
+        .unwrap();
+        cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+        crate::sessions::test_support::until(|| {
+            cx.run_until_parked();
+            content.update(cx, |this, _| this.chooser.is_none())
+        });
+        content.update(cx, |this, _| {
+            assert!(!this.document.importing);
+            assert!(this.document.error.is_none());
+            assert!(this.document.chart.is_some());
+            assert_eq!(this.document.source.as_deref(), Some("scan.log"));
+        });
+        let retained = content.update(cx, |this, cx| {
+            this.choose_log(cx);
+            assert!(this.chooser.is_some());
+            this.document.chart.clone().unwrap()
+        });
+        workbench.update(cx, |this, cx| this.shutdown_rssi(cx));
+        cx.simulate_path_prompt_response(|_| Some(vec![path.clone()]));
+        cx.run_until_parked();
+
+        content.update(cx, |this, cx| {
+            assert!(this.document.stopped);
+            assert!(Arc::ptr_eq(
+                this.document.chart.as_ref().unwrap(),
+                &retained
+            ));
+            this.choose_log(cx);
+            assert!(this.chooser.is_none());
+        });
+    }
+
+    #[gpui_kit::test]
     fn sample_inspection_has_production_keyboard_entry_and_preserves_reused_window_focus(
         cx: &mut TestAppContext,
     ) {

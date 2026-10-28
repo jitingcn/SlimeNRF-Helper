@@ -255,6 +255,10 @@ Compression can add startup overhead or antivirus false positives. Compression c
 
 The helper uses the [shared atomic publisher](../scripts/publish-file.ps1). An identical existing output is kept. Different content requires explicit `-Force` on `package.ps1`. The publisher stages on the destination volume, then moves or replaces the destination instead of overwriting its bytes. This preserves the input and other hardlinks to the old output. It refuses symlinks and reparse points in publication paths. File locks allow readers but deny writers, and input locks also deny deletion. If a required lock cannot be acquired, publication fails without replacing the output. These checks do not promise safety against every hostile filesystem race.
 
+Application self-update eligibility is stamped only by the tagged official Windows packaging job, which passes `-OfficialPrereleaseTag` to `package.ps1`. Ordinary local, branch, pull-request, debug, and custom-resource builds remain check-only. The [build marker validation](../crates/app/build_support/official_release.rs) checks the package version, target, profile, repository, tag, and GitHub event; it is a distribution policy, not a cryptographic signature. Do not set the marker in ordinary development commands.
+
+The updater reads the paginated GitHub Releases API rather than `/latest`, because the current publication workflow produces prereleases. Published Windows assets must retain the exact version/architecture/firmware-variant naming above and expose GitHub's SHA-256 digest. It does not fall back to historical `-upx.exe` names or another firmware variant. Check-only builds select release metadata without requiring a Windows asset and open the corresponding release page. Changing release naming or channel publication requires corresponding updater review. See [Application updates](USER_GUIDE.md#app-updates) for the user flow and recovery limits.
+
 <a id="linux"></a>
 ## Linux
 

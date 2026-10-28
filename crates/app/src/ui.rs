@@ -1,3 +1,4 @@
+mod app_update;
 mod calibration;
 mod capture;
 mod command_panel;
@@ -277,6 +278,7 @@ struct Workbench {
     preferences: Preferences,
     settings: settings_page::SettingsUiState,
     registry: device_registry::RegistryUiState,
+    app_update: app_update::AppUpdateState,
     preferences_io: preferences::PreferenceIo,
     sidebar: CommandSidebar,
     command_focus: Option<CommandFocus>,
@@ -438,7 +440,8 @@ impl Workbench {
                             | this.poll_replay(cx)
                             | this.poll_hid_log()
                             | this.poll_temperature(cx)
-                            | this.poll_rssi_scans(cx);
+                            | this.poll_rssi_scans(cx)
+                            | this.poll_app_update(cx);
                         if changed {
                             this.sync_registry_observations(cx);
                         }
@@ -494,6 +497,7 @@ impl Workbench {
             preferences,
             settings: settings_page::SettingsUiState::new(window, cx),
             registry: device_registry::RegistryUiState::default(),
+            app_update: app_update::AppUpdateState::new(),
             preferences_io: preferences::PreferenceIo::new(preferences_load_error),
             sidebar: CommandSidebar::default(),
             command_focus: None,
@@ -806,6 +810,7 @@ impl Workbench {
                             .icon(gpui_kit::assets::IconName::List)
                             .tooltip(label.clone())
                             .accessibility_label(label)
+                            .disabled(self.app_update_navigation_locked())
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.open_device_registry(window, cx);
                             }))

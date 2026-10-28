@@ -106,7 +106,15 @@ jobs:
         run: powershell -NoProfile -ExecutionPolicy Bypass -File ./quality.ps1 -NoFirmware
 
       - name: Package compressed Release executable
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File ./package.ps1 -NoFirmware
+        env:
+          OFFICIAL_PRERELEASE_TAG: ${{ github.repository == 'jitingcn/SlimeNRF-Helper' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !github.event.deleted && github.ref_name || '' }}
+        run: |
+          if ($env:OFFICIAL_PRERELEASE_TAG) {
+            powershell -NoProfile -ExecutionPolicy Bypass -File ./package.ps1 -NoFirmware -OfficialPrereleaseTag $env:OFFICIAL_PRERELEASE_TAG
+          } else {
+            powershell -NoProfile -ExecutionPolicy Bypass -File ./package.ps1 -NoFirmware
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Select sole no-firmware executable
         id: normal

@@ -347,22 +347,15 @@ impl FlashState {
         self.reconcile_groups(group);
     }
 
-    pub(super) fn open_ota_wired_update(&mut self, key: &str) -> bool {
+    pub(super) fn ota_wired_update_mode(&self, key: &str) -> Option<Mode> {
         if self.busy() {
-            return false;
+            return None;
         }
-        let Some(mode) = self
-            .targets
+        self.targets
             .iter()
             .find(|target| ota_target_key(target) == key)
             .and_then(ota_update_guidance)
             .and_then(OtaUpdateGuidance::wired_mode)
-        else {
-            return false;
-        };
-        // Navigation only: preserve explicit device selections and never enqueue work.
-        self.transition_mode(mode);
-        true
     }
 }
 

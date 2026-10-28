@@ -519,6 +519,9 @@ impl Workbench {
     }
 
     fn flash_start_serial_dfu(&mut self, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         self.poll_sessions();
         let gate = self
             .flash
@@ -534,6 +537,9 @@ impl Workbench {
     }
 
     fn flash_confirm_serial_dfu(&mut self, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         self.poll_sessions();
         let gate = self.flash.serial_dfu.warning.as_ref().map_or_else(
             || Err(changed_target()),

@@ -199,6 +199,42 @@ class PublicCheckerTests(unittest.TestCase):
         public = "https://github.com/upstream/repository\n" + "a" * 64 + "\nconst USB_VENDOR: u16 = 0x1209;\n"
         self.assertEqual(self.checker.scan_text("public.rs", public), set())
 
+    def test_app_update_credential_fixtures_are_exact_and_file_scoped(self):
+        path = "crates/app/src/app_update/http_tests.rs"
+        fixtures = (
+            ("authenticated-url", "https://" + "user:fixture-secret@api.github.com/private-fixture-path"),
+            ("signed-credential", "?sig" + "=FiXture%2Fpart"),
+            ("signed-credential", "?sig" + "=fixture-secret"),
+            ("signed-credential", "?sig" + "=fixture-secret-signature"),
+        )
+        for category, fixture in fixtures:
+            with self.subTest(category=category, fixture=fixture):
+                self.assertEqual(self.findings_from_text(path, fixture), set())
+                changed = fixture.replace("fixture", "different").replace("FiXture", "different")
+                self.assertEqual(self.findings_from_text(path, changed), {(path, 1, category)})
+                self.assertEqual(self.findings_from_text("other.rs", fixture),
+                                 {("other.rs", 1, category)})
+        extra = "?sig" + "=fixture-secret&" + "token" + "=unreviewed-value"
+        self.assertEqual(self.findings_from_text(path, extra), {(path, 1, "signed-credential")})
+
+    def test_app_update_windows_fixture_paths_require_exact_complete_lines(self):
+        path = "crates/app/src/app_update/windows/tests.rs"
+        target = ('target: wide(OsString::from(r"' + "C:" + r'\fixture\application.exe'
+                  + '").as_os_str()),')
+        working_directory = ('working_directory: wide(OsString::from(r"' + "C:"
+                             + r'\fixture' + '").as_os_str()),')
+        for line in (target, working_directory):
+            with self.subTest(line=line):
+                self.assertEqual(self.findings_from_text(path, "    " + line), set())
+                self.assertEqual(self.findings_from_text("other.rs", line),
+                                 {("other.rs", 1, "private-absolute-path")})
+                changed = line.replace("fixture", "private")
+                self.assertEqual(self.findings_from_text(path, changed),
+                                 {(path, 1, "private-absolute-path")})
+                suffix = line + " // " + "C:" + r'\private\customer'
+                self.assertEqual(self.findings_from_text(path, suffix),
+                                 {(path, 1, "private-absolute-path")})
+
     def test_reviewed_public_tool_path_requires_the_exact_complete_line(self):
         tool = "C:" + chr(92) + chr(92).join(("Program Files", "LLVM", "bin", "libclang.dll"))
         line = "if (-not (Test-Path -LiteralPath '" + tool + "' -PathType Leaf)) {"

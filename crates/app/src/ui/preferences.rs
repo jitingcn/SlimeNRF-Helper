@@ -12,13 +12,16 @@ pub(super) struct PreferenceIo {
     pending: Option<Preferences>,
     active: Option<ActiveSave>,
     completion: Option<Task<()>>,
+    saved: Option<Preferences>,
+    #[cfg(test)]
+    test_executor: Option<BackgroundExecutor>,
     pub(super) load_error: Option<String>,
     pub(super) save_error: Option<String>,
 }
 
 struct ActiveSave {
     join: Shared<Task<()>>,
-    output: Arc<Mutex<Option<Result<(), String>>>>,
+    output: Arc<Mutex<Option<Result<Preferences, String>>>>,
     executor: BackgroundExecutor,
 }
 
@@ -56,6 +59,25 @@ impl PreferenceIo {
         }
     }
 
+    #[cfg(test)]
+    pub(super) fn for_test_with_executor(
+        path: std::path::PathBuf,
+        executor: BackgroundExecutor,
+    ) -> Self {
+        Self {
+            test_executor: Some(executor),
+            ..Self::for_test(path)
+        }
+    }
+
+    pub(super) fn busy(&self) -> bool {
+        self.active.is_some() || self.pending.is_some()
+    }
+
+    pub(super) fn latest_snapshot_saved(&self, preferences: &Preferences) -> bool {
+        !self.busy() && self.save_error.is_none() && self.saved.as_ref() == Some(preferences)
+    }
+
     fn save(
         &mut self,
         preferences: Preferences,
@@ -78,7 +100,7 @@ impl PreferenceIo {
         let worker_output = output.clone();
         let join = executor
             .spawn(async move {
-                *worker_output.lock() = Some(target.save(&preferences));
+                *worker_output.lock() = Some(target.save(&preferences).map(|()| preferences));
             })
             .shared();
         self.active = Some(ActiveSave {
@@ -104,11 +126,15 @@ impl PreferenceIo {
         // Keep both errors visible while its replacement or retry is in flight.
         if self.pending.is_none() {
             match result {
-                Ok(()) => {
+                Ok(preferences) => {
+                    self.saved = Some(preferences);
                     self.load_error = None;
                     self.save_error = None;
                 }
-                Err(error) => self.save_error = Some(error),
+                Err(error) => {
+                    self.saved = None;
+                    self.save_error = Some(error);
+                }
             }
         }
         self.start_pending(&active.executor)
@@ -133,7 +159,8 @@ impl PreferenceIo {
                             .output
                             .lock()
                             .take()
-                            .expect("joined preference save publishes its result");
+                            .expect("joined preference save publishes its result")
+                            .map(|_| ());
                     }
                     if let Some(preferences) = pending {
                         result = target.save(&preferences);
@@ -150,6 +177,12 @@ impl PreferenceIo {
 impl Workbench {
     pub(super) fn save_preferences(&mut self, cx: &mut Context<Self>) {
         let executor = cx.background_executor().clone();
+        #[cfg(test)]
+        let executor = self
+            .preferences_io
+            .test_executor
+            .clone()
+            .unwrap_or(executor);
         self.save_preferences_with_executor(&executor, cx);
     }
 

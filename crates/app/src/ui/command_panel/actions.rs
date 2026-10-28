@@ -441,6 +441,9 @@ impl Workbench {
     }
 
     pub(super) fn retry_preparation(&mut self, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         if let Some(PendingCommand::Connecting(mut preparation)) = self.sidebar.pending.take() {
             self.start_preparation(&mut preparation);
             self.sidebar.pending = Some(PendingCommand::Connecting(preparation));
@@ -449,6 +452,9 @@ impl Workbench {
     }
 
     pub(in crate::ui) fn resume_preparation(&mut self) {
+        if self.shutting_down {
+            return;
+        }
         if !matches!(self.sidebar.pending, Some(PendingCommand::Connecting(_))) {
             return;
         }
@@ -616,6 +622,9 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.shutting_down {
+            return;
+        }
         self.poll_sessions();
         self.monitor.poll();
         self.sidebar.pending = None;
@@ -701,6 +710,9 @@ impl Workbench {
     }
 
     pub(super) fn continue_parameter(&mut self, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         let Some(PendingCommand::Parameter { preset, input, .. }) = &self.sidebar.pending else {
             return;
         };
@@ -759,6 +771,9 @@ impl Workbench {
     }
 
     pub(super) fn confirm_sidebar_command(&mut self, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         // Taking the review makes confirmation one-shot, including fast double clicks.
         match self.sidebar.pending.take() {
             Some(PendingCommand::Single {
@@ -891,6 +906,9 @@ impl Workbench {
     }
 
     pub(super) fn review_batch(&mut self, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
         if self
             .batch_input
             .read(cx)

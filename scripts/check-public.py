@@ -272,6 +272,14 @@ SIGNED_QUERY = re.compile(r"(?:[?&]|\b)(?:sig|signature|access_token|token|api_k
 # Neither an entire file nor an arbitrary replacement value is exempt.
 REVIEWED = {
     ("crates/app/src/firmware_source/http_tests.rs", "authorization-value"): {"bearer " + "fixture-secret"},
+    ("crates/app/src/app_update/http_tests.rs", "authenticated-url"): {
+        "https://" + "user:fixture-secret@api.github.com/private-fixture-path",
+    },
+    ("crates/app/src/app_update/http_tests.rs", "signed-credential"): {
+        "?sig" + "=FiXture%2Fpart",
+        "?sig" + "=fixture-secret",
+        "?sig" + "=fixture-secret-signature",
+    },
     ("crates/app/src/firmware_source/tests.rs", "authorization-value"): {"Bearer " + "ghp_private_token"},
     ("crates/app/src/firmware_source/http_tests.rs", "authenticated-url"): {
         "https://" + "user:password@api.github.com/credentials",
@@ -288,6 +296,10 @@ REVIEWED = {
 
 # Absolute paths require complete reviewed lines, never regex-token prefixes.
 REVIEWED_LINES = {
+    ("crates/app/src/app_update/windows/tests.rs", "private-absolute-path"): {
+        "36250d10780c563db98c1482baa76b505ac72e45dbbdd71c9d49c3584cde910c",
+        "2b45a5b35111e442b1db2fedcf72718a3948c3827cf339b6b7a3aa3b68dd817e",
+    },
     ("crates/app/src/bundled_resources/tests.rs", "private-absolute-path"): {
         "ddf69c2c4e85fcd02698314d3fc0fe7f142d9cccb30793083674970efa693e39",
     },

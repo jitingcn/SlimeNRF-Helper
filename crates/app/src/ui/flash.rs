@@ -594,7 +594,7 @@ impl FlashState {
         }
     }
 
-    fn busy(&self) -> bool {
+    pub(super) fn busy(&self) -> bool {
         self.job.is_some()
             || self.pending.is_some()
             || self.chooser.is_some()
@@ -673,8 +673,11 @@ impl Workbench {
             .effective_mode(self.active_page, self.preferences.advanced_features)
     }
 
-    pub(super) fn set_feature_page(&mut self, page: FeaturePage) {
+    pub(super) fn set_feature_page(&mut self, page: FeaturePage, _cx: &mut Context<Self>) -> bool {
         if self.active_page != page {
+            if self.app_update_navigation_locked() {
+                return false;
+            }
             self.flash.remote_generation += 1;
             self.active_page = page;
             self.flash.serial_dfu.warning = None;
@@ -684,6 +687,7 @@ impl Workbench {
             self.flash.auto_requested = false;
             self.sync_esb_page();
         }
+        true
     }
 
     // GPUI builders are large values. Keep section and row temporaries in separate
