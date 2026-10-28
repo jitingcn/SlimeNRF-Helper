@@ -294,7 +294,7 @@ impl Workbench {
 mod tests {
     use super::*;
     use crate::rssi_scan::{Recommendation, Sample, ScanSnapshot};
-    use gpui_kit::{TestAppContext, test::TestWindowExt as _};
+    use gpui_kit::{Pixels, ScrollDelta, TestAppContext, Window, point, test::TestWindowExt as _};
 
     fn report(channel: u8) -> Arc<ScanReport> {
         Arc::new(ScanReport {
@@ -525,6 +525,684 @@ mod tests {
             this.choose_log(cx);
             assert!(this.chooser.is_none());
         });
+    }
+
+    const LAYOUT_SCAN: &str = concat!(
+        "RSSI scan (ESB channels 0..88): samples/ch/sweep=50, sweeps=200 (total=10000 samples/ch)\n",
+        "Current channel (effective): 84\n",
+        "Recommended: channel 86 (-69 dBm)\n",
+        "All channels sorted by RSSI (lower is better):\n",
+        "0 (-42 dBm) 2 (-22 dBm) 84 (-61 dBm) 86 (-69 dBm) 88 (-66 dBm)\n",
+    );
+
+    struct LayoutFixture {
+        handle: AnyWindowHandle,
+        content: Entity<RssiWindow>,
+    }
+
+    fn layout_fixture(
+        cx: &mut TestAppContext,
+        executor: crate::app_runtime::Executor,
+        report: Arc<ScanReport>,
+    ) -> LayoutFixture {
+        let (_, workbench) = cx.update(|cx| {
+            gpui::open_window(WindowOptions::default(), cx, |window, cx| {
+                cx.new(|cx| {
+                    crate::ui::test_support::offline_workbench(
+                        window,
+                        cx,
+                        crate::sessions::SessionManager::new(),
+                        executor,
+                    )
+                })
+            })
+            .expect("open offline application")
+        });
+        let (handle, content) = cx.update(|cx| {
+            workbench.update(cx, |this, cx| {
+                let content = this.rssi_content(cx);
+                content.update(cx, |this, _| this.document.set_report(report, None));
+                this.open_rssi_window(cx);
+                (this.rssi.window.expect("open RSSI child window"), content)
+            })
+        });
+        LayoutFixture { handle, content }
+    }
+
+    fn settle_rssi_layout(cx: &mut TestAppContext, handle: AnyWindowHandle) {
+        cx.run_until_parked();
+        cx.update_window(handle, |_, window, cx| window.render_frame(cx))
+            .expect("render RSSI child window");
+    }
+
+    fn contained(viewport: Bounds<Pixels>, bounds: Bounds<Pixels>) -> bool {
+        bounds.left() >= viewport.left()
+            && bounds.right() <= viewport.right()
+            && bounds.top() >= viewport.top()
+            && bounds.bottom() <= viewport.bottom()
+    }
+
+    fn assert_rssi_visible(window: &Window, ids: &[&'static str]) {
+        let viewport = window.find("rssi-window-content").bounds();
+        for &id in ids {
+            let element = window.find(id);
+            let bounds = element.bounds();
+            assert!(
+                element.visible()
+                    && bounds.size.width > px(0.)
+                    && bounds.size.height > px(0.)
+                    && contained(viewport, bounds),
+                "{id} must be fully visible in the RSSI viewport: {bounds:?}, viewport {viewport:?}"
+            );
+        }
+    }
+
+    fn assert_unsampled_hover_target(window: &Window, id: &'static str) -> Bounds<Pixels> {
+        let chart = window.find("rssi-chart").bounds();
+        let plot = window.find("rssi-plot-area").bounds();
+        let target = window.find(id);
+        let bounds = target.bounds();
+        assert!(
+            target.visible()
+                && bounds.size.width > px(0.)
+                && bounds.size.height > px(0.)
+                && contained(chart, plot)
+                && contained(plot, bounds)
+                && bounds.top() - plot.top() <= px(2.)
+                && plot.bottom() - bounds.bottom() <= px(2.),
+            "{id} hover target must span the plot without leaving its bounds: {bounds:?}, plot {plot:?}"
+        );
+        bounds
+    }
+
+    fn reveal_rssi(
+        cx: &mut TestAppContext,
+        handle: AnyWindowHandle,
+        id: &'static str,
+        down_if_absent: bool,
+    ) -> usize {
+        for steps in 0..64 {
+            let visible = cx
+                .update_window(handle, |_, window, cx| {
+                    window.render_frame(cx);
+                    let viewport = window.find("rssi-window-content").bounds();
+                    let delta = if let Some(element) = window.try_find(id) {
+                        let bounds = element.bounds();
+                        assert!(
+                            bounds.size.width > px(0.)
+                                && bounds.size.height > px(0.)
+                                && bounds.left() >= viewport.left()
+                                && bounds.right() <= viewport.right(),
+                            "{id} must not be horizontally clipped: {bounds:?}, viewport {viewport:?}"
+                        );
+                        if contained(viewport, bounds) {
+                            assert!(element.visible(), "{id} is clipped by an ancestor");
+                            return true;
+                        }
+                        if bounds.top() < viewport.top() {
+                            viewport.top() - bounds.top() + px(2.)
+                        } else {
+                            viewport.bottom() - bounds.bottom() - px(2.)
+                        }
+                    } else if down_if_absent {
+                        -viewport.size.height * 0.5
+                    } else {
+                        viewport.size.height * 0.5
+                    };
+                    window.scroll(
+                        "rssi-window-content",
+                        ScrollDelta::Pixels(point(px(0.), delta)),
+                        cx,
+                    );
+                    false
+                })
+                .expect("scroll RSSI child window");
+            cx.run_until_parked();
+            if visible {
+                return steps;
+            }
+        }
+        panic!("scrolling did not reveal {id} within the RSSI viewport");
+    }
+
+    #[gpui_kit::test]
+    fn rssi_child_layout_fits_default_sizes_and_grows_on_resize(cx: &mut TestAppContext) {
+        let runtime = crate::app_runtime::AppRuntime::new().expect("create isolated I/O runtime");
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let report = crate::rssi_scan::parse_log(LAYOUT_SCAN).expect("parse synthetic scan");
+        assert_eq!(report.current_channel, Some(84));
+        assert_eq!(
+            report.recommendation,
+            Recommendation::Channel(Sample {
+                channel: 86,
+                rssi_dbm: -69,
+            })
+        );
+        let fixture = layout_fixture(cx, runtime.executor(), report);
+        let mut short_plot_height = px(0.);
+
+        for (width, height) in [(1114., 658.), (1060., 640.)] {
+            cx.simulate_window_resize(fixture.handle, size(px(width), px(height)));
+            settle_rssi_layout(cx, fixture.handle);
+            short_plot_height = cx
+                .update_window(fixture.handle, |_, window, cx| {
+                    assert!(window.try_find("rssi-source").is_none());
+                    assert_rssi_visible(
+                        window,
+                        &[
+                            "rssi-import",
+                            "rssi-no-sample-legend",
+                            "rssi-inspector",
+                            "rssi-previous-sample",
+                            "rssi-next-sample",
+                            "rssi-chart",
+                            "rssi-plot-area",
+                            "rssi-chart-axis-channel",
+                            "rssi-chart-hint",
+                            "rssi-sample-2",
+                            "rssi-unsampled-4",
+                            "rssi-unsampled-6",
+                        ],
+                    );
+                    let legend = window.find("rssi-no-sample-legend").bounds();
+                    let inspector = window.find("rssi-inspector").bounds();
+                    let chart = window.find("rssi-chart").bounds();
+                    assert!(
+                        legend.bottom() <= inspector.top() && inspector.bottom() <= chart.top(),
+                        "legend, inspector and chart must not overlap: \
+                         {legend:?}, {inspector:?}, {chart:?}"
+                    );
+                    assert!(window.try_find("rssi-unsampled-2").is_none());
+                    assert!(window.try_find("rssi-sample-4").is_none());
+                    assert!(window.try_find("rssi-sample-6").is_none());
+                    let mut previous = ("rssi-sample-2", window.find("rssi-sample-2").bounds());
+                    for id in [
+                        "rssi-unsampled-3",
+                        "rssi-unsampled-4",
+                        "rssi-unsampled-5",
+                        "rssi-unsampled-6",
+                    ] {
+                        let target = assert_unsampled_hover_target(window, id);
+                        assert!(
+                            previous.1.right() < target.left(),
+                            "adjacent channels {} and {id} must retain clear spacing: \
+                             {:?}, {target:?}",
+                            previous.0,
+                            previous.1
+                        );
+                        previous = (id, target);
+                    }
+                    let plot_height = window.find("rssi-plot-area").bounds().size.height;
+                    window.click("rssi-next-sample", cx);
+                    assert_eq!(fixture.content.read(cx).document.selected_channel, Some(2));
+                    window.click("rssi-next-sample", cx);
+                    assert_eq!(fixture.content.read(cx).document.selected_channel, Some(84));
+                    window.click("rssi-previous-sample", cx);
+                    assert_eq!(fixture.content.read(cx).document.selected_channel, Some(2));
+                    window.click("rssi-previous-sample", cx);
+                    assert_eq!(fixture.content.read(cx).document.selected_channel, Some(0));
+                    plot_height
+                })
+                .expect("inspect normal RSSI layout");
+        }
+
+        cx.simulate_window_resize(fixture.handle, size(px(1060.), px(900.)));
+        settle_rssi_layout(cx, fixture.handle);
+        cx.update_window(fixture.handle, |_, window, _| {
+            assert_rssi_visible(
+                window,
+                &[
+                    "rssi-inspector",
+                    "rssi-no-sample-legend",
+                    "rssi-chart",
+                    "rssi-plot-area",
+                    "rssi-chart-axis-channel",
+                    "rssi-chart-hint",
+                ],
+            );
+            assert!(
+                window.find("rssi-plot-area").bounds().size.height > short_plot_height,
+                "a taller window must give its surplus height to the plot"
+            );
+            let bar = window.find("rssi-sample-2");
+            assert!(
+                bar.visible() && bar.bounds().size.height > px(8.),
+                "the observed sample must have a real bar interior"
+            );
+            assert!(
+                bar.bounds().size.height > window.find("rssi-sample-86").bounds().size.height,
+                "the stronger measurement must have the taller bar"
+            );
+            assert_unsampled_hover_target(window, "rssi-unsampled-4");
+            assert_unsampled_hover_target(window, "rssi-unsampled-6");
+            assert!(window.try_find("rssi-unsampled-2").is_none());
+            assert!(
+                window.try_find("rssi-sample-4").is_none(),
+                "missing channels must not acquire synthetic bars"
+            );
+        })
+        .expect("inspect the resized RSSI plot");
+    }
+
+    #[gpui_kit::test]
+    fn complete_rssi_range_has_no_missing_legend_or_targets(cx: &mut TestAppContext) {
+        let runtime = crate::app_runtime::AppRuntime::new().expect("create isolated I/O runtime");
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let mut complete = (*report(2)).clone();
+        complete.channel_range = (2, 3);
+        complete.current_channel = Some(2);
+        complete.samples.push(Sample {
+            channel: 3,
+            rssi_dbm: -62,
+        });
+        let fixture = layout_fixture(cx, runtime.executor(), Arc::new(complete));
+        cx.simulate_window_resize(fixture.handle, size(px(1060.), px(640.)));
+        settle_rssi_layout(cx, fixture.handle);
+
+        cx.update_window(fixture.handle, |_, window, _| {
+            assert_rssi_visible(
+                window,
+                &["rssi-plot-area", "rssi-sample-2", "rssi-sample-3"],
+            );
+            assert!(window.try_find("rssi-no-sample-legend").is_none());
+            for id in [
+                "rssi-unsampled-1",
+                "rssi-unsampled-2",
+                "rssi-unsampled-3",
+                "rssi-unsampled-4",
+            ] {
+                assert!(
+                    window.try_find(id).is_none(),
+                    "complete range must not show {id}"
+                );
+            }
+        })
+        .expect("inspect the complete RSSI range");
+    }
+
+    #[gpui_kit::test]
+    fn live_rssi_continuation_preserves_selection_and_plot_bounds(cx: &mut TestAppContext) {
+        let runtime = crate::app_runtime::AppRuntime::new().expect("create isolated I/O runtime");
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let mut decoder = crate::rssi_scan::ScanDecoder::new();
+        let initial = LAYOUT_SCAN
+            .lines()
+            .filter_map(|line| decoder.feed_line(line))
+            .last()
+            .expect("decode initial scan");
+        let extended = decoder
+            .feed_line("6 (-127 dBm)")
+            .expect("decode the continuing measurement");
+        assert_eq!(extended.scan_id, initial.scan_id);
+        let weak_sample = Sample {
+            channel: 6,
+            rssi_dbm: -127,
+        };
+        let mut expected_samples = initial.report.samples.clone();
+        let insertion = expected_samples
+            .binary_search_by_key(&weak_sample.channel, |sample| sample.channel)
+            .expect_err("channel 6 was not observed in the initial scan");
+        expected_samples.insert(insertion, weak_sample);
+        assert_eq!(extended.report.samples, expected_samples);
+        assert_eq!(
+            extended.report.current_channel,
+            initial.report.current_channel
+        );
+        assert_eq!(
+            extended.report.recommendation,
+            initial.report.recommendation
+        );
+        let inspected_sample = |document: &RssiDocument| {
+            document.chart.as_ref().expect("live chart").report.samples
+                [document.selected_sample_index().expect("inspected sample")]
+        };
+        let retained_sample = Sample {
+            channel: 2,
+            rssi_dbm: -22,
+        };
+        let fixture = layout_fixture(cx, runtime.executor(), initial.report.clone());
+        cx.simulate_window_resize(fixture.handle, size(px(1060.), px(640.)));
+        cx.update(|cx| {
+            fixture.content.update(cx, |this, cx| {
+                let mut first = update("synthetic-port", 1, 1, true);
+                first.snapshot = initial;
+                assert!(this.document.accept_live(first));
+                cx.notify();
+            });
+        });
+        settle_rssi_layout(cx, fixture.handle);
+        let (plot_before, bar_before, missing_before) = cx
+            .update_window(fixture.handle, |_, window, cx| {
+                assert_rssi_visible(
+                    window,
+                    &[
+                        "rssi-source",
+                        "rssi-import",
+                        "rssi-no-sample-legend",
+                        "rssi-inspector",
+                        "rssi-chart",
+                        "rssi-plot-area",
+                        "rssi-chart-axis-channel",
+                        "rssi-chart-hint",
+                        "rssi-sample-2",
+                        "rssi-unsampled-4",
+                        "rssi-unsampled-6",
+                        "rssi-y-tick-0",
+                        "rssi-y-tick--20",
+                        "rssi-y-tick--40",
+                        "rssi-y-tick--60",
+                        "rssi-y-tick--80",
+                    ],
+                );
+                assert!(window.try_find("rssi-sample-6").is_none());
+                assert!(window.try_find("rssi-sample-4").is_none());
+                assert!(window.try_find("rssi-unsampled-2").is_none());
+                assert_unsampled_hover_target(window, "rssi-unsampled-4");
+                let missing = assert_unsampled_hover_target(window, "rssi-unsampled-6");
+                assert!(window.try_find("rssi-y-tick--150").is_none());
+                window.press("tab", cx);
+                assert_eq!(window.find("rssi-import").focused(), Some(true));
+                window.press("tab", cx);
+                assert_eq!(window.find("rssi-next-sample").focused(), Some(true));
+                window.press("enter", cx);
+                assert_eq!(
+                    inspected_sample(&fixture.content.read(cx).document),
+                    retained_sample
+                );
+                let plot = window.find("rssi-plot-area").bounds();
+                let bar = window.find("rssi-sample-2").bounds();
+                assert!(
+                    (f32::from(bar.size.height) - f32::from(plot.size.height) * (58. / 80.)).abs()
+                        < 3.,
+                    "the -22 dBm bar must start at the -80 dBm baseline: {bar:?}, {plot:?}"
+                );
+                assert!(
+                    f32::from(bar.bottom() - plot.bottom()).abs() < 3.,
+                    "the bar must reach the plot baseline: {bar:?}, {plot:?}"
+                );
+                (plot, bar, missing)
+            })
+            .expect("select an existing live measurement");
+
+        // A receiver continuation adds an observation; it cannot revise a
+        // measurement already accepted for this scan.
+        cx.update(|cx| {
+            fixture.content.update(cx, |this, cx| {
+                let mut continuation = update("synthetic-port", 1, 1, false);
+                continuation.snapshot = extended;
+                assert!(!this.document.accept_live(continuation));
+                cx.notify();
+            });
+        });
+        settle_rssi_layout(cx, fixture.handle);
+        cx.update_window(fixture.handle, |_, window, cx| {
+            assert_eq!(
+                window.find("rssi-plot-area").bounds(),
+                plot_before,
+                "adding a sample without changing natural content dimensions must not resize the plot"
+            );
+            assert_rssi_visible(
+                window,
+                &[
+                    "rssi-inspector",
+                    "rssi-no-sample-legend",
+                    "rssi-y-tick-0",
+                    "rssi-y-tick--25",
+                    "rssi-y-tick--50",
+                    "rssi-y-tick--75",
+                    "rssi-y-tick--100",
+                    "rssi-y-tick--125",
+                    "rssi-y-tick--150",
+                    "rssi-sample-6",
+                    "rssi-unsampled-4",
+                ],
+            );
+            assert!(window.try_find("rssi-y-tick--20").is_none());
+            assert!(window.try_find("rssi-y-tick--80").is_none());
+            assert!(window.try_find("rssi-sample-4").is_none());
+            assert!(window.try_find("rssi-unsampled-2").is_none());
+            assert!(
+                window.try_find("rssi-unsampled-6").is_none(),
+                "a continuing measurement must replace its missing-channel target"
+            );
+            assert_unsampled_hover_target(window, "rssi-unsampled-4");
+            let bar_after = window.find("rssi-sample-2").bounds();
+            assert_eq!(bar_after.left(), bar_before.left());
+            assert_eq!(bar_after.size.width, bar_before.size.width);
+            assert!(
+                bar_after.top() < bar_before.top()
+                    && bar_after.size.height > bar_before.size.height,
+                "the retained -22 dBm bar must grow when the lower bound falls: \
+                 {bar_before:?} -> {bar_after:?}"
+            );
+            assert!(
+                (f32::from(bar_after.size.height)
+                    - f32::from(plot_before.size.height) * (128. / 150.))
+                    .abs()
+                    < 3.,
+                "the retained bar must start at the -150 dBm baseline: {bar_after:?}"
+            );
+            let weak_bar = window.find("rssi-sample-6").bounds();
+            assert_eq!(weak_bar.left(), missing_before.left());
+            assert_eq!(weak_bar.size.width, missing_before.size.width);
+            assert!(
+                (f32::from(weak_bar.size.height)
+                    - f32::from(plot_before.size.height) * (23. / 150.))
+                    .abs()
+                    < 3.,
+                "the new -127 dBm bar must start at the -150 dBm baseline: {weak_bar:?}"
+            );
+            for bar in [bar_after, weak_bar] {
+                assert!(
+                    f32::from(bar.bottom() - plot_before.bottom()).abs() < 3.,
+                    "each bar must reach the plot baseline: {bar:?}, {plot_before:?}"
+                );
+            }
+            assert_eq!(
+                inspected_sample(&fixture.content.read(cx).document),
+                retained_sample
+            );
+            assert_eq!(window.find("rssi-next-sample").focused(), Some(true));
+            window.press("space", cx);
+            assert_eq!(
+                inspected_sample(&fixture.content.read(cx).document),
+                weak_sample
+            );
+            window.press("space", cx);
+            assert_eq!(
+                inspected_sample(&fixture.content.read(cx).document),
+                Sample {
+                    channel: 84,
+                    rssi_dbm: -61,
+                }
+            );
+            window.press("shift-tab", cx);
+            assert_eq!(window.find("rssi-previous-sample").focused(), Some(true));
+            window.press("enter", cx);
+            assert_eq!(
+                inspected_sample(&fixture.content.read(cx).document),
+                weak_sample
+            );
+            window.press("enter", cx);
+            assert_eq!(
+                inspected_sample(&fixture.content.read(cx).document),
+                retained_sample
+            );
+        })
+        .expect("inspect the live continuation");
+    }
+
+    #[gpui_kit::test]
+    fn rssi_axis_tick_labels_do_not_overlap_at_minimum_zoomed_height(cx: &mut TestAppContext) {
+        let runtime = crate::app_runtime::AppRuntime::new().expect("create isolated I/O runtime");
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let mut log = LAYOUT_SCAN.to_owned();
+        for channel in 8..=40 {
+            log.push_str(&format!(
+                "Channel {channel} invalid: 1/200 visits failed; excluded\n"
+            ));
+        }
+        let report = crate::rssi_scan::parse_log(&log).expect("parse long metadata scan");
+        let fixture = layout_fixture(cx, runtime.executor(), report);
+        cx.update(|cx| {
+            fixture.content.update(cx, |this, cx| {
+                this.document.source = Some(
+                    "Synthetic receiver survey with a long descriptive offline scan log filename \
+                     for the workshop and office measurements.log"
+                        .into(),
+                );
+                cx.notify();
+            });
+            gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
+        });
+        cx.simulate_window_resize(fixture.handle, size(px(560.), px(360.)));
+        settle_rssi_layout(cx, fixture.handle);
+        reveal_rssi(cx, fixture.handle, "rssi-x-tick-0", true);
+        reveal_rssi(cx, fixture.handle, "rssi-y-tick-0", false);
+
+        cx.update_window(fixture.handle, |_, window, _| {
+            assert_eq!(window.rem_size(), px(20.));
+            assert_rssi_visible(
+                window,
+                &[
+                    "rssi-y-tick-0",
+                    "rssi-y-tick--20",
+                    "rssi-y-tick--40",
+                    "rssi-y-tick--60",
+                    "rssi-y-tick--80",
+                    "rssi-x-tick-0",
+                ],
+            );
+            let ticks = [
+                "rssi-y-tick-0",
+                "rssi-y-tick--20",
+                "rssi-y-tick--40",
+                "rssi-y-tick--60",
+                "rssi-y-tick--80",
+            ];
+            for pair in ticks.windows(2) {
+                let upper = window.find(pair[0]).bounds();
+                let lower = window.find(pair[1]).bounds();
+                assert!(
+                    upper.bottom() <= lower.top(),
+                    "adjacent y ticks {} and {} overlap: {upper:?}, {lower:?}",
+                    pair[0],
+                    pair[1]
+                );
+            }
+            let bottom = window.find("rssi-y-tick--80").bounds();
+            let first = window.find("rssi-x-tick-0").bounds();
+            assert!(
+                bottom.right() <= first.left()
+                    || first.right() <= bottom.left()
+                    || bottom.bottom() <= first.top()
+                    || first.bottom() <= bottom.top(),
+                "bottom y tick and first x tick overlap: {bottom:?}, {first:?}"
+            );
+        })
+        .expect("inspect minimum-height RSSI axis labels");
+    }
+
+    #[gpui_kit::test]
+    fn rssi_small_zoomed_window_scrolls_to_controls_in_both_locales(cx: &mut TestAppContext) {
+        let runtime = crate::app_runtime::AppRuntime::new().expect("create isolated I/O runtime");
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let mut log = LAYOUT_SCAN.to_owned();
+        for channel in 8..=40 {
+            log.push_str(&format!(
+                "Channel {channel} invalid: 1/200 visits failed; excluded\n"
+            ));
+        }
+        let report = crate::rssi_scan::parse_log(&log).expect("parse long metadata scan");
+        assert_eq!(report.excluded_channels.len(), 33);
+        let fixture = layout_fixture(cx, runtime.executor(), report);
+        cx.update(|cx| {
+            fixture.content.update(cx, |this, cx| {
+                this.document.source = Some(
+                    "Synthetic receiver survey with a long descriptive offline scan log filename \
+                     for the workshop and office measurements.log"
+                        .into(),
+                );
+                cx.notify();
+            });
+        });
+        cx.simulate_window_resize(fixture.handle, size(px(560.), px(360.)));
+
+        for (language, import_label) in [
+            (crate::settings::Language::English, "Import RSSI scan log"),
+            (
+                crate::settings::Language::SimplifiedChinese,
+                "导入 RSSI 扫描日志",
+            ),
+        ] {
+            cx.update(|cx| {
+                crate::ui::theme::apply(
+                    &crate::settings::Preferences {
+                        language,
+                        ..Default::default()
+                    },
+                    cx,
+                );
+                gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
+            });
+            settle_rssi_layout(cx, fixture.handle);
+            cx.update_window(fixture.handle, |_, window, cx| {
+                window.scroll(
+                    "rssi-window-content",
+                    ScrollDelta::Pixels(point(px(0.), px(10_000.))),
+                    cx,
+                );
+            })
+            .expect("return RSSI viewport to its start");
+            settle_rssi_layout(cx, fixture.handle);
+            reveal_rssi(cx, fixture.handle, "rssi-import", false);
+            cx.update_window(fixture.handle, |_, window, cx| {
+                assert_eq!(window.rem_size(), px(20.));
+                assert_rssi_visible(window, &["rssi-import"]);
+                assert_eq!(window.find("rssi-import").label(), Some(import_label));
+                let viewport = window.find("rssi-window-content").bounds();
+                assert!(
+                    window.try_find("rssi-chart-hint").is_none_or(|hint| {
+                        !hint.visible() || !contained(viewport, hint.bounds())
+                    }),
+                    "the small zoomed window must require the scroll fallback"
+                );
+                window.click("rssi-import", cx);
+                assert!(fixture.content.read(cx).chooser.is_some());
+            })
+            .expect("activate the visible import action");
+            assert!(cx.did_prompt_for_paths());
+            cx.simulate_path_prompt_response(|_| None);
+            cx.run_until_parked();
+            cx.update(|cx| {
+                let content = fixture.content.read(cx);
+                assert!(content.chooser.is_none());
+                assert!(!content.document.importing);
+            });
+            settle_rssi_layout(cx, fixture.handle);
+            reveal_rssi(cx, fixture.handle, "rssi-source", true);
+            reveal_rssi(cx, fixture.handle, "rssi-no-sample-legend", true);
+            assert!(
+                reveal_rssi(cx, fixture.handle, "rssi-chart-hint", true) > 0,
+                "wheel input must reveal the hint below the initial viewport"
+            );
+            reveal_rssi(cx, fixture.handle, "rssi-chart-axis-channel", false);
+            reveal_rssi(cx, fixture.handle, "rssi-inspector", false);
+            reveal_rssi(cx, fixture.handle, "rssi-next-sample", false);
+            cx.update_window(fixture.handle, |_, window, cx| {
+                assert_rssi_visible(window, &["rssi-next-sample"]);
+                window.click("rssi-next-sample", cx);
+                assert_eq!(fixture.content.read(cx).document.selected_channel, Some(2));
+            })
+            .expect("inspect the next sample after scrolling");
+            reveal_rssi(cx, fixture.handle, "rssi-previous-sample", false);
+            cx.update_window(fixture.handle, |_, window, cx| {
+                assert_rssi_visible(window, &["rssi-previous-sample"]);
+                window.click("rssi-previous-sample", cx);
+                assert_eq!(fixture.content.read(cx).document.selected_channel, Some(0));
+            })
+            .expect("inspect the previous sample after scrolling");
+        }
     }
 
     #[gpui_kit::test]

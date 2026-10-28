@@ -18,6 +18,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- RSSI analysis shows measured channels at their actual numeric positions, with bars starting at the lower tick of an automatically padded and rounded dBm scale that can change with live observations. Unsampled or excluded integer channels in the reported range have small, neutral, low-contrast × marks near the baseline matching the **No sample** legend; they indicate no usable sample, not a measured zero or signal height. Actual positions and gaps remain intact, and ordinary spaces between columns stay clear. Hovering a measured bar or anywhere in a missing channel's full-height column immediately shows the channel and its dBm value or **No sample**. Current and recommended channel markers remain independent; logarithmic dBm and the truncated, auto-scaled baseline mean bar heights are not power ratios.
 - The displayed application version includes the checkout's short commit ID and marks tracked local changes as dirty; source archives fall back to the base version or a validated GitHub Actions SHA. Release versions, tags, asset names, and update comparisons remain unchanged.
 - Device lists use a flatter, more compact layout with a rounded summary bar: receiver serial numbers and online/total tracker counts share a wrapping metadata row, with the redundant command-console heading and outer list border and padding removed.
 - Device-list toolbar actions use compact icon buttons with localized hover descriptions.

@@ -1616,6 +1616,7 @@ rssi:
     legend:
       current: "Current channel"
       measured: "Measured RSSI"
+      no_sample: "No sample"
       no_recommendation: "Recommended: none"
       recommended: "Recommended channel"
     tooltip:
@@ -1624,7 +1625,7 @@ rssi:
     no_measurements: "No valid channel measurements reported."
     no_scan: "Import a scan log, or run RSSI scan in a receiver terminal."
   hint:
-    channel_activity: "Lower values indicate a quieter channel. Trackers in use can raise activity on the current channel; this is normal, not necessarily external interference."
+    channel_activity: "Lower dBm means a quieter channel. The auto-scaled, truncated baseline and logarithmic dBm mean bar heights are not power ratios. Active trackers can raise current-channel activity without external interference."
   import:
     action: "Import RSSI scan log"
     dialog:

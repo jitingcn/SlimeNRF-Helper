@@ -145,7 +145,7 @@ Auto A/B 要求单连续分段、`N×dt ≥ 60s`。A 选取首个在前 60 秒�
 <a id="rssi-scan"></a>
 ## RSSI 信道扫描
 
-依据 [Receiver aad8eae3 的扫描实现](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/aad8eae3ec8745bbc35c2ca638ac8468c7eed0bc/src/connection/rssi_scan.c#L266-L418)和[信道集合](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/aad8eae3ec8745bbc35c2ca638ac8468c7eed0bc/src/connection/esb.c#L75-L91)。解析现代带符号 dBm 输出，保留头部范围、当前与推荐信道和明确失败排除的信道。每信道结果是扫描样本中最强的 RSSI，不是平均值或追踪器链路强度；推荐值直接来自固件，不由主机重新计算。信道按编号排序，只画实际收到的点，不硬编码当前固件的 41 项集合，也不把缺失值补成 0。
+依据 [Receiver aad8eae3 的扫描实现](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/aad8eae3ec8745bbc35c2ca638ac8468c7eed0bc/src/connection/rssi_scan.c#L266-L418)和[信道集合](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/aad8eae3ec8745bbc35c2ca638ac8468c7eed0bc/src/connection/esb.c#L75-L91)。解析现代带符号 dBm 输出，保留头部范围、当前与推荐信道和明确失败排除的信道。每信道结果是扫描样本中最强的 RSSI，不是平均值或追踪器链路强度；推荐值直接来自固件，不由主机重新计算。信道按编号排序，图中每个收到的测量值在实际数字信道坐标处显示一根柱，柱顶对应测得的 dBm 值。报告范围内未采样或被排除的整数信道在基线附近显示中性、低对比度的小 × 标记，与**未采样**图例一致；它们表示没有可用样本，而非测得的零值或信号高度。实际信道位置与间隔保持不变，柱之间的普通空隙保持空白。悬停实测柱会立即显示信道及 dBm 读数，悬停缺失信道整列高度内的任意位置会立即显示信道及**未采样**。纵轴根据观测样本自动留出余量并取整，每根柱从当前最下方的标注刻度开始；新的实时观测可能使坐标轴和柱形重新缩放。dBm 是对数值，且基线自动缩放并截断，因此柱高不代表功率比。当前和推荐信道标记彼此独立。图中不硬编码当前固件的 41 项集合，也不为缺失信道虚构数值。
 
 输出没有结束标记、返回条数或最终确认；TPS 日志、短行和静默均不能证明扫描完成。图窗接收变化后的实收快照，不增加等待超时、重试或推测的完成协议。串口分片和 ANSI 控制串不能变成伪测量；冲突数据、损坏的结果行及扫描错误会使当前解析失效，后续有效头部才能开始新扫描。
 

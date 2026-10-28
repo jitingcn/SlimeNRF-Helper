@@ -1616,6 +1616,7 @@ rssi:
     legend:
       current: "当前信道"
       measured: "实测 RSSI"
+      no_sample: "未采样"
       no_recommendation: "推荐：无"
       recommended: "推荐信道"
     tooltip:
@@ -1624,7 +1625,7 @@ rssi:
     no_measurements: "未报告有效信道测量值。"
     no_scan: "在接收器终端执行 RSSI 扫描，或导入已保存的扫描日志。"
   hint:
-    channel_activity: "数值越低，信道越安静。扫描时若有追踪器正在使用，当前信道较活跃是正常现象，不一定是外部干扰。"
+    channel_activity: "dBm 越低，信道越安静。基线自动缩放并截断，且 dBm 为对数值，柱高不代表功率比。使用中的追踪器可使当前信道活跃，不一定是外部干扰。"
   import:
     action: "导入 RSSI 扫描日志"
     dialog:
