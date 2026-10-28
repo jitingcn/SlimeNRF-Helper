@@ -24,7 +24,7 @@ CLI 应用及 workspace 构建默认仍启用 `embed-firmware`。独立 checkout
 
 Cargo 默认根据可用 CPU 自动选择构建并发数，可用 `CARGO_BUILD_JOBS` 覆盖。测试操作中 nextest 的 `--build-jobs` 控制构建并发，而 `-j` / `--jobs` 控制测试执行并发。
 
-应用显示构建标识，例如干净 checkout 显示 `0.1.1+abcdef0`，已跟踪文件存在已暂存或未暂存变更时显示 `0.1.1+abcdef0.dirty`。被忽略和未跟踪的文件不会使其变为 dirty。CI 优先使用实际 checkout 的 HEAD；无法取得 Git 元数据时，源码归档显示基础版本，若有经过校验的 GitHub Actions SHA 则使用该 SHA。此显示标识不改变 Cargo 发布版本、发布标签或产物文件名，也不改变更新版本比较。
+应用显示构建标识，例如干净 checkout 显示 `0.2.0+abcdef0`，已跟踪文件存在已暂存或未暂存变更时显示 `0.2.0+abcdef0.dirty`。被忽略和未跟踪的文件不会使其变为 dirty。CI 优先使用实际 checkout 的 HEAD；无法取得 Git 元数据时，源码归档显示基础版本，若有经过校验的 GitHub Actions SHA 则使用该 SHA。此显示标识不改变 Cargo 发布版本、发布标签或产物文件名，也不改变更新版本比较。
 
 增量构建时，Cargo 逐项跟踪 Git 元数据和已跟踪的输入，而不是监视整个 checkout。已删除的已跟踪输入在缺失期间可能使构建脚本反复运行；恢复后，未变化的构建可再次保持 fresh。
 
@@ -363,14 +363,14 @@ Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage
 4. 创建与 Cargo 版本一致的附注标签。
 5. 一并推送 `main` 和标签。
 
-以 `0.1.1` 为例，最后执行：
+以 `0.2.0` 为例，最后执行：
 
 ```bash
-	git tag -a v0.1.1 -m "SlimeNRF Helper 0.1.1"
-	git push --atomic origin main v0.1.1
+	git tag -a v0.2.0 -m "SlimeNRF Helper 0.2.0"
+	git push --atomic origin main v0.2.0
 ```
 
-等待标签对应的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 核对预发布说明和三个下载文件。不要移动已发布的标签或替换附件。
+等待标签对应的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 核对预发布说明和两个下载文件。不要移动已发布的标签或替换附件。
 
 CI 成功只证明配置的检查与产物上传已完成。本地构建、WSLg 渲染、原生 GUI、USB 权限和真实设备更新是不同证据；目标发行版、macOS、签名、性能及物理硬件仍须独立验收。应用自有材料的 MIT OR Apache-2.0 许可不能替代[上文](#license-notices)所述第三方材料、源码提供、固件和产物的独立审查，不由打包成功解决。
 

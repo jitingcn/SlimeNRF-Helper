@@ -9,6 +9,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
 ### Added
 
 - A debug-only developer gallery with isolated synthetic controls and terminal scenes, plus documented device diagnosis and native UI smoke workflows.
@@ -18,7 +20,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
-- RSSI analysis shows measured channels at their actual numeric positions, with bars starting at the lower tick of an automatically padded and rounded dBm scale that can change with live observations. Unsampled or excluded integer channels in the reported range have small, neutral, low-contrast × marks near the baseline matching the **No sample** legend; they indicate no usable sample, not a measured zero or signal height. Actual positions and gaps remain intact, and ordinary spaces between columns stay clear. Hovering a measured bar or anywhere in a missing channel's full-height column immediately shows the channel and its dBm value or **No sample**. Current and recommended channel markers remain independent; logarithmic dBm and the truncated, auto-scaled baseline mean bar heights are not power ratios.
+- RSSI analysis uses a bar chart with an automatically scaled dBm axis, subtle **No sample** markers, and immediate hover details. Actual channel positions and current/recommended markers are preserved. The chart fits the available window height so its explanation remains visible at normal window sizes.
 - The displayed application version includes the checkout's short commit ID and marks tracked local changes as dirty; source archives fall back to the base version or a validated GitHub Actions SHA. Release versions, tags, asset names, and update comparisons remain unchanged.
 - Device lists use a flatter, more compact layout with a rounded summary bar: receiver serial numbers and online/total tracker counts share a wrapping metadata row, with the redundant command-console heading and outer list border and padding removed.
 - Device-list toolbar actions use compact icon buttons with localized hover descriptions.
@@ -71,6 +73,7 @@ Initial standalone application version, documented from the repository's initial
 - Gyroscope calibration guides, temperature calibration analysis with SVG export, and RSSI channel analysis.
 - English and Simplified Chinese interfaces, light and dark themes, and Windows and Linux packaging with full-firmware and no-firmware build modes.
 
-[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.1.1
 [0.1.0]: https://github.com/jitingcn/SlimeNRF-Helper/tree/c1534d42a08b71e2bf9acdf0c33892766493080e

@@ -24,7 +24,7 @@ The scripts support build, run, test, check, clippy, fmt, and clean. Build defau
 
 Cargo automatically chooses build parallelism from the available CPUs; set `CARGO_BUILD_JOBS` to override it. For test actions, nextest's `--build-jobs` controls build parallelism, whereas `-j` / `--jobs` controls concurrent test execution.
 
-The application displays a build identity such as `0.1.1+abcdef0` for a clean checkout and `0.1.1+abcdef0.dirty` when tracked files have staged or unstaged changes. Ignored and untracked files do not make it dirty. CI prefers the actual checkout HEAD; when Git metadata is unavailable, a source archive displays the base version, or a validated GitHub Actions SHA if available. This display identity does not change the Cargo release version, release tags or asset names, or update comparisons.
+The application displays a build identity such as `0.2.0+abcdef0` for a clean checkout and `0.2.0+abcdef0.dirty` when tracked files have staged or unstaged changes. Ignored and untracked files do not make it dirty. CI prefers the actual checkout HEAD; when Git metadata is unavailable, a source archive displays the base version, or a validated GitHub Actions SHA if available. This display identity does not change the Cargo release version, release tags or asset names, or update comparisons.
 
 For incremental builds, Cargo watches individual Git metadata and tracked inputs rather than the entire checkout. A deleted tracked input can cause the build script to rerun while it remains absent; after restoration, unchanged builds can be fresh again.
 
@@ -363,14 +363,14 @@ Repository permissions remain read-only except for `contents: write` on the prer
 4. Create an annotated tag that matches the Cargo version.
 5. Push `main` and the tag together.
 
-For version `0.1.1`, the final commands are:
+For version `0.2.0`, the final commands are:
 
 ```bash
-	git tag -a v0.1.1 -m "SlimeNRF Helper 0.1.1"
-	git push --atomic origin main v0.1.1
+	git tag -a v0.2.0 -m "SlimeNRF Helper 0.2.0"
+	git push --atomic origin main v0.2.0
 ```
 
-Wait for the tag's workflow to finish. Check the prerelease notes and all three downloads on [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Do not move a published tag or replace its assets.
+Wait for the tag's workflow to finish. Check the prerelease notes and both downloads on [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Do not move a published tag or replace its assets.
 
 Successful CI confirms only the configured checks and uploaded artifacts. Local builds, WSLg rendering, native GUI behavior, USB permissions, and real device updates are separate evidence. Target distributions, macOS, signing, performance, and physical hardware still require independent acceptance. The application-owned MIT OR Apache-2.0 license does not replace the separate third-party, source-availability, firmware, and artifact reviews described [above](#license-notices). Successful packaging does not resolve them.
 
