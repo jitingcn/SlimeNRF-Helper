@@ -284,10 +284,15 @@ fn version_label_keeps_prerelease_marker_independent_of_the_version_suffix() {
         super::version_label("0.1.1+build-with-hyphens", false),
         "0.1.1+build-with-hyphens"
     );
+    assert_eq!(
+        super::version_label("0.1.1+abcdef0.dirty", false),
+        "0.1.1+abcdef0.dirty"
+    );
     for (version, marked) in [
         ("0.1.1", true),
         ("0.1.1+build-with-hyphens", true),
         ("0.1.1-rc.1+build", false),
+        ("0.1.1-rc.1+abcdef0.dirty", false),
     ] {
         let label = super::version_label(version, marked);
         let prefix = format!("{version} · ");

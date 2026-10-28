@@ -137,7 +137,9 @@ pub fn run(async_io: Executor) {
         if let Err(error) = gpui::open_window(
             WindowOptions {
                 titlebar: Some(TitlebarOptions {
-                    title: Some(concat!("SlimeNRF Helper ", env!("CARGO_PKG_VERSION")).into()),
+                    title: Some(
+                        concat!("SlimeNRF Helper ", env!("SLIMENRF_BUILD_DISPLAY_VERSION")).into(),
+                    ),
                     ..TitleBar::title_bar_options()
                 }),
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -629,7 +631,10 @@ impl Render for Workbench {
             .on_close_window(move |_, _, cx| {
                 let _ = owner.update(cx, |this, cx| this.begin_shutdown(cx));
             })
-            .child(concat!("SlimeNRF Helper ", env!("CARGO_PKG_VERSION")));
+            .child(concat!(
+                "SlimeNRF Helper ",
+                env!("SLIMENRF_BUILD_DISPLAY_VERSION")
+            ));
         div()
             .size_full()
             .min_w_0()

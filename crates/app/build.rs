@@ -1,3 +1,5 @@
+#[path = "build_support/build_version.rs"]
+mod build_version;
 #[path = "build_support/notices.rs"]
 mod notices;
 #[path = "build_support/official_release.rs"]
@@ -7,12 +9,14 @@ mod resources;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=build_support/build_version.rs");
     println!("cargo:rerun-if-changed=build_support/notices.rs");
     println!("cargo:rerun-if-changed=build_support/official_release.rs");
     println!("cargo:rerun-if-changed=build_support/resources.rs");
     // rust-i18n 4.2.4 reads catalogs in its macro without tracking those inputs.
     // Watching the directory also covers newly added and removed catalog files.
     println!("cargo:rerun-if-changed=../../locales");
+    build_version::emit_build_version();
     if let Err(error) = official_release::emit_official_release() {
         panic!("Cannot mark SlimeNRF official release: {error}");
     }

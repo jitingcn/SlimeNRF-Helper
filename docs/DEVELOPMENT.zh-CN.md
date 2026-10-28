@@ -26,6 +26,10 @@ CLI 应用及 workspace 构建默认仍启用 `embed-firmware`。独立 checkout
 
 Cargo 默认根据可用 CPU 自动选择构建并发数，可用 `CARGO_BUILD_JOBS` 覆盖。测试操作中 nextest 的 `--build-jobs` 控制构建并发，而 `-j` / `--jobs` 控制测试执行并发。
 
+应用显示构建标识，例如干净 checkout 显示 `0.1.1+abcdef0`，已跟踪文件存在已暂存或未暂存变更时显示 `0.1.1+abcdef0.dirty`。被忽略和未跟踪的文件不会使其变为 dirty。CI 优先使用实际 checkout 的 HEAD；无法取得 Git 元数据时，源码归档显示基础版本，若有经过校验的 GitHub Actions SHA 则使用该 SHA。此显示标识不改变 Cargo 发布版本、发布标签或产物文件名，也不改变更新版本比较。
+
+增量构建时，Cargo 逐项跟踪 Git 元数据和已跟踪的输入，而不是监视整个 checkout。已删除的已跟踪输入在缺失期间可能使构建脚本反复运行；恢复后，未变化的构建可再次保持 fresh。
+
 <a id="windows"></a>
 ## Windows
 

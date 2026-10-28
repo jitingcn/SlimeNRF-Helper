@@ -26,6 +26,10 @@ The scripts support build, run, test, check, clippy, fmt, and clean. Build defau
 
 Cargo automatically chooses build parallelism from the available CPUs; set `CARGO_BUILD_JOBS` to override it. For test actions, nextest's `--build-jobs` controls build parallelism, whereas `-j` / `--jobs` controls concurrent test execution.
 
+The application displays a build identity such as `0.1.1+abcdef0` for a clean checkout and `0.1.1+abcdef0.dirty` when tracked files have staged or unstaged changes. Ignored and untracked files do not make it dirty. CI prefers the actual checkout HEAD; when Git metadata is unavailable, a source archive displays the base version, or a validated GitHub Actions SHA if available. This display identity does not change the Cargo release version, release tags or asset names, or update comparisons.
+
+For incremental builds, Cargo watches individual Git metadata and tracked inputs rather than the entire checkout. A deleted tracked input can cause the build script to rerun while it remains absent; after restoration, unchanged builds can be fresh again.
+
 <a id="windows"></a>
 ## Windows
 

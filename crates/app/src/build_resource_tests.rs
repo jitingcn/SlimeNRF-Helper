@@ -1,3 +1,5 @@
+#[path = "../build_support/build_version.rs"]
+mod build_version;
 #[path = "../build_support/official_release.rs"]
 mod official_release;
 #[path = "../build_support/resources.rs"]

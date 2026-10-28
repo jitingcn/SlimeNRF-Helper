@@ -182,7 +182,7 @@ pub(super) fn installed_version() -> SharedString {
     let prerelease = app_update::windows::installed_prerelease();
     #[cfg(not(windows))]
     let prerelease = false;
-    version_label(env!("CARGO_PKG_VERSION"), prerelease)
+    version_label(env!("SLIMENRF_BUILD_DISPLAY_VERSION"), prerelease)
 }
 
 fn version_label(version: &'static str, prerelease: bool) -> SharedString {
