@@ -1,3 +1,4 @@
+mod filter;
 mod geometry;
 mod keyboard;
 
@@ -13,6 +14,7 @@ use gpui_kit::base::{
 };
 use gpui_kit::{prelude::*, *};
 
+pub(crate) use filter::LogFilter;
 pub(crate) use keyboard::handle_key_down;
 
 use slimenrf_terminal_core::{AnsiColor, AnsiStyle, StyleRun, TerminalBuffer};
@@ -24,6 +26,13 @@ const REFLOW_BYTES: usize = 32 * 1024;
 #[derive(Default)]
 pub(crate) struct TranscriptState {
     lines: VecDeque<CachedLine>,
+    scratch_lines: VecDeque<CachedLine>,
+    source_lines: VecDeque<SourceLine>,
+    log_filter: LogFilter,
+    projected_filter: LogFilter,
+    projection_dirty: bool,
+    projection_generation: u64,
+    content_key_epoch: u32,
     byte_len: usize,
     identity: Option<(u64, u64)>,
     revision: Option<u64>,
@@ -285,89 +294,189 @@ impl TranscriptState {
         true
     }
 
-    pub(crate) fn sync_buffer(&mut self, buffer: &TerminalBuffer, generation: u64) {
-        let identity = (generation, buffer.selection_epoch());
-        if self.identity == Some(identity) && self.revision == Some(buffer.revision()) {
-            return;
+    pub(crate) fn log_filter(&self) -> LogFilter {
+        self.log_filter
+    }
+
+    pub(crate) fn set_log_filter(&mut self, filter: LogFilter) -> bool {
+        if self.log_filter == filter {
+            return false;
         }
-        if self.identity != Some(identity) {
-            self.clear_selection();
+        self.log_filter = filter;
+        self.projection_dirty = true;
+        self.invalidate_projection_selection();
+        self.extent_dirty = true;
+        self.reflow_cursor = 0;
+        self.reflow_generation = self.reflow_generation.wrapping_add(1);
+        true
+    }
+
+    fn invalidate_projection_selection(&mut self) {
+        self.clear_selection();
+        self.projection_generation = self.projection_generation.wrapping_add(1);
+        self.content_key_epoch = self.content_key_epoch.wrapping_add(1);
+        self.pending = None;
+        self.hit_lines.clear();
+        self.painted.clear();
+        self.runs.clear();
+    }
+
+    fn completed_selection_before(&self, offset: usize) -> bool {
+        self.completed
+            && (self.selected.is_some() || self.endpoints.iter().any(Option::is_some))
+            && self
+                .selected
+                .as_ref()
+                .is_none_or(|range| range.end <= offset)
+            && self.endpoints.iter().flatten().all(|byte| *byte <= offset)
+    }
+
+    /// Returns whether the owner must also clear Root's geometric selection.
+    pub(crate) fn sync_buffer(&mut self, buffer: &TerminalBuffer, generation: u64) -> bool {
+        let identity = (generation, buffer.selection_epoch());
+        if self.identity == Some(identity)
+            && self.revision == Some(buffer.revision())
+            && !self.projection_dirty
+        {
+            return false;
+        }
+        let mut selection_invalidated = self.identity.is_some() && self.identity != Some(identity);
+        if selection_invalidated {
+            self.invalidate_projection_selection();
         }
         if self
             .identity
             .is_some_and(|previous| previous.0 != generation)
         {
+            self.source_lines.clear();
             self.lines.clear();
             self.anchor = None;
             self.presented = None;
         }
         self.identity = Some(identity);
         self.revision = Some(buffer.revision());
+
+        // Source IDs form a bounded ordered stream, even across u64 wrap. Walk
+        // the old and new streams together rather than sorting IDs or cloning
+        // text. The spare deque retains its allocation between synchronizations.
+        let mut old_lines = std::mem::take(&mut self.lines);
+        let mut lines = std::mem::take(&mut self.scratch_lines);
+        lines.clear();
         let mut offset = 0;
         let mut count = 0;
         for (id, revision, text, styles, newline) in buffer.rows() {
             if count == 0 {
-                while self.lines.front().is_some_and(|line| line.id != id) {
-                    self.lines.pop_front();
+                let had_source = !self.source_lines.is_empty();
+                while self.source_lines.front().is_some_and(|line| line.id != id) {
+                    let removed = self.source_lines.pop_front().unwrap();
+                    if self.projected_filter.includes(removed.level) {
+                        old_lines.pop_front();
+                    }
                 }
-                if self.lines.is_empty() {
-                    self.anchor = Some(ViewportAnchor {
-                        generation,
-                        line_id: id,
-                        byte: 0,
-                        affinity: RowAffinity::Downstream,
-                        intra_row_y: px(0.),
-                    });
+                if had_source && self.source_lines.is_empty() {
+                    self.anchor = None;
                     self.presented = None;
                 }
             }
-            let unchanged = self
-                .lines
+            let previous = self
+                .source_lines
                 .get(count)
-                .is_some_and(|line| line.id == id && line.revision == revision);
-            if unchanged {
-                self.lines[count].offset = offset;
-            } else {
-                let mut row = String::with_capacity(text.len() + usize::from(newline));
-                row.push_str(text);
-                if newline {
-                    row.push('\n');
-                }
-                let text: SharedString = row.into();
-                let row_count = self
-                    .lines
-                    .get(count)
-                    .filter(|line| line.id == id)
-                    .map_or(1, |line| line.row_count);
-                let line = CachedLine {
-                    id,
-                    revision,
-                    offset,
-                    styled: Rc::new(RefCell::new(CachedText {
-                        styled: None,
-                        text: text.clone(),
-                        styles: styles.to_vec(),
-                    })),
-                    text,
-                    width: None,
-                    row_count,
-                    geometry: None,
-                };
-                if count == self.lines.len() {
-                    self.lines.push_back(line);
-                } else {
-                    self.lines[count] = line;
+                .copied()
+                .filter(|line| line.id == id);
+            let level = previous
+                .filter(|line| line.revision == revision)
+                .map_or_else(|| filter::classify(text), |line| line.level);
+            if let Some(previous) = previous
+                && !self.projection_dirty
+                && self.projected_filter.includes(previous.level) != self.log_filter.includes(level)
+                && !selection_invalidated
+            {
+                let changed_at = old_lines.front().map_or(self.byte_len, |line| line.offset);
+                // Removing a zero-byte trailing row or changing a suffix after
+                // a completed selection does not change any selected bytes or
+                // content keys. An active gesture cannot make that guarantee.
+                let removed_empty =
+                    self.projected_filter.includes(previous.level) && previous.byte_len == 0;
+                if !removed_empty && !self.completed_selection_before(changed_at) {
+                    self.invalidate_projection_selection();
+                    selection_invalidated = true;
                 }
             }
-            offset += text.len() + usize::from(newline);
+            let source = SourceLine {
+                id,
+                revision,
+                level,
+                byte_len: text.len() + usize::from(newline),
+            };
+            if count == self.source_lines.len() {
+                self.source_lines.push_back(source);
+            } else {
+                self.source_lines[count] = source;
+            }
+
+            let cached = previous
+                .filter(|line| self.projected_filter.includes(line.level))
+                .and_then(|_| old_lines.pop_front());
+            if self.log_filter.includes(level) {
+                let row = match cached {
+                    Some(mut line) if line.id == id && line.revision == revision => {
+                        line.offset = offset;
+                        line
+                    }
+                    previous => {
+                        let row_count = previous
+                            .filter(|line| line.id == id)
+                            .map_or(1, |line| line.row_count);
+                        let mut row = String::with_capacity(text.len() + usize::from(newline));
+                        row.push_str(text);
+                        if newline {
+                            row.push('\n');
+                        }
+                        let text: SharedString = row.into();
+                        CachedLine {
+                            id,
+                            revision,
+                            offset,
+                            styled: Rc::new(RefCell::new(CachedText {
+                                styled: None,
+                                text: text.clone(),
+                                styles: styles.to_vec(),
+                            })),
+                            text,
+                            width: None,
+                            row_count,
+                            geometry: None,
+                        }
+                    }
+                };
+                offset += text.len() + usize::from(newline);
+                lines.push_back(row);
+            }
             count += 1;
         }
-        self.lines.truncate(count);
+        self.source_lines.truncate(count);
+        old_lines.clear();
+        self.scratch_lines = old_lines;
+        self.lines = lines;
+        self.projected_filter = self.log_filter;
+        self.projection_dirty = false;
         self.byte_len = offset;
+        if self.anchor.is_none()
+            && let Some(line) = self.lines.front()
+        {
+            self.anchor = Some(ViewportAnchor {
+                generation,
+                line_id: line.id,
+                byte: 0,
+                affinity: RowAffinity::Downstream,
+                intra_row_y: px(0.),
+            });
+        }
         self.extent_dirty = true;
         self.rebuild_prefix();
         self.reflow_cursor = 0;
         self.reflow_generation = self.reflow_generation.wrapping_add(1);
+        selection_invalidated
     }
 
     fn update_style(&mut self, style: RenderStyle) {
@@ -409,12 +518,6 @@ impl TranscriptState {
         self.byte_len == 0
     }
 
-    pub(crate) fn has_selection(&self) -> bool {
-        self.selected
-            .as_ref()
-            .is_some_and(|range| !range.is_empty())
-    }
-
     pub(crate) fn selected_text(&self) -> Option<String> {
         let range = self.selected.as_ref()?;
         if range.end > self.byte_len {
@@ -435,6 +538,7 @@ impl TranscriptState {
         let frame = self.presented.as_ref()?;
         if frame.key != self.layout_key
             || frame.identity != self.identity
+            || frame.projection_generation != self.projection_generation
             || frame.revision != self.revision
             || self.lines.is_empty()
         {
@@ -487,12 +591,21 @@ impl TranscriptState {
         Some(line.offset + geometry.byte_at_point(&line.text, point(content_point.x, y)))
     }
 
+    fn content_key(&self, offset: usize) -> TextSelectionContentKey {
+        // The bounded core holds fewer than 2^32 displayed bytes. The upper
+        // half makes an old key unusable when its projected offsets change.
+        TextSelectionContentKey::new((u64::from(self.content_key_epoch) << 32) | offset as u64)
+    }
+
     fn resolve_offset(
         &self,
         key: Option<TextSelectionContentKey>,
         position: Point<Pixels>,
     ) -> Option<usize> {
-        key.map(|key| key.value() as usize)
+        if key.is_some_and(|key| key.value() >> 32 != u64::from(self.content_key_epoch)) {
+            return None;
+        }
+        key.map(|key| (key.value() as u32) as usize)
             .filter(|offset| {
                 self.lines.iter().any(|line| {
                     *offset >= line.offset
@@ -550,6 +663,14 @@ impl TranscriptState {
     }
 }
 
+#[derive(Clone, Copy)]
+struct SourceLine {
+    id: u64,
+    revision: u64,
+    byte_len: usize,
+    level: Option<filter::LogLevel>,
+}
+
 struct CachedLine {
     id: u64,
     revision: u64,
@@ -574,6 +695,7 @@ struct PaintedLine {
 struct PresentedFrame {
     key: LayoutKey,
     identity: Option<(u64, u64)>,
+    projection_generation: u64,
     revision: Option<u64>,
     origin: Point<Pixels>,
     viewport: Bounds<Pixels>,
@@ -988,6 +1110,7 @@ impl Element for TerminalTranscript {
         state.presented = Some(PresentedFrame {
             key: state.layout_key,
             identity: state.identity,
+            projection_generation: state.projection_generation,
             revision: state.revision,
             origin,
             viewport,
@@ -1019,8 +1142,9 @@ impl Element for TerminalTranscript {
             self.selection.resolve_content_key_with(
                 move |position, _| {
                     let state = weak.upgrade()?;
-                    let offset = state.borrow().byte_at_point(position)?;
-                    Some(TextSelectionContentKey::new(offset as u64))
+                    let state = state.borrow();
+                    let offset = state.byte_at_point(position)?;
+                    Some(state.content_key(offset))
                 },
                 cx,
             );
@@ -1119,8 +1243,8 @@ impl Element for TerminalTranscript {
 mod tests {
     use super::geometry::{RowAffinity, geometry_fixture};
     use super::{
-        FrameCorrection, PresentedFrame, RenderStyle, TranscriptState, indexed_color, styled_run,
-        text_runs,
+        FrameCorrection, LogFilter, PresentedFrame, RenderStyle, TranscriptState, indexed_color,
+        styled_run, text_runs,
     };
     use gpui_kit::base::{TextSelectionContentKey, TextSelectionCoverage};
     use gpui_kit::{Bounds, FontWeight, Hsla, Rgba, ScrollHandle, TextStyle, point, px, rgb, size};
@@ -1142,6 +1266,7 @@ mod tests {
         state.presented = Some(PresentedFrame {
             key: state.layout_key,
             identity: state.identity,
+            projection_generation: state.projection_generation,
             revision: state.revision,
             origin: point(px(0.), px(-top)),
             viewport: Bounds::new(point(px(0.), px(0.)), size(px(100.), px(40.))),
@@ -1162,6 +1287,263 @@ mod tests {
             expected_offset: point(px(0.), px(expected)),
             target_offset: point(px(0.), px(target)),
         }
+    }
+
+    fn projected_text(state: &TranscriptState) -> String {
+        state.lines.iter().map(|line| line.text.as_ref()).collect()
+    }
+
+    #[test]
+    fn exact_level_projection_keeps_unclassified_rows_and_the_full_source() {
+        let text = concat!(
+            "command\n",
+            "<err> app: fail\n",
+            "continuation\n",
+            "<wrn> radio: warn\n",
+            "\n",
+            "[12] <inf> module: info\n",
+            "<dbg> app_2: debug\n",
+            "[display dropped 42 bytes; identity parsing continued]\n",
+            "notice"
+        );
+        let mut buffer = TerminalBuffer::new();
+        buffer.push(text.as_bytes());
+        let mut state = TranscriptState::default();
+        assert_eq!(state.log_filter(), LogFilter::All);
+        assert!(!state.sync_buffer(&buffer, 1));
+        assert_eq!(projected_text(&state), text);
+        for (filter, classified) in [
+            (LogFilter::Error, "<err> app: fail\n"),
+            (LogFilter::Warning, "<wrn> radio: warn\n"),
+            (LogFilter::Info, "[12] <inf> module: info\n"),
+            (LogFilter::Debug, "<dbg> app_2: debug\n"),
+        ] {
+            assert!(state.set_log_filter(filter));
+            assert!(!state.set_log_filter(filter));
+            assert!(!state.sync_buffer(&buffer, 1));
+            let prefix = match filter {
+                LogFilter::Error => format!("command\n{classified}continuation\n\n"),
+                LogFilter::Warning => format!("command\ncontinuation\n{classified}\n"),
+                LogFilter::Info | LogFilter::Debug => {
+                    format!("command\ncontinuation\n\n{classified}")
+                }
+                LogFilter::All => unreachable!(),
+            };
+            let expected =
+                format!("{prefix}[display dropped 42 bytes; identity parsing continued]\nnotice");
+            assert_eq!(projected_text(&state), expected, "{filter:?}");
+            assert_eq!(state.byte_len, expected.len());
+            assert_eq!(buffer.text(), text);
+        }
+        assert!(state.set_log_filter(LogFilter::All));
+        assert!(!state.sync_buffer(&buffer, 1));
+        assert_eq!(projected_text(&state), text);
+
+        let mut only_hidden = TerminalBuffer::new();
+        only_hidden.push(b"<inf> app: incomplete last line");
+        state.sync_buffer(&only_hidden, 2);
+        state.set_log_filter(LogFilter::Error);
+        state.sync_buffer(&only_hidden, 2);
+        assert!(state.lines.is_empty());
+        assert!(state.is_empty());
+        assert_eq!(only_hidden.text(), "<inf> app: incomplete last line");
+    }
+
+    #[test]
+    fn filtered_utf8_selection_skips_hidden_gaps_and_freezes_across_append() {
+        let mut buffer = TerminalBuffer::new();
+        buffer.push("世界\n<inf> app: hidden\n<err> app: 🦀\n\nok".as_bytes());
+        let mut state = TranscriptState::default();
+        state.sync_buffer(&buffer, 1);
+        state.set_log_filter(LogFilter::Error);
+        state.sync_buffer(&buffer, 1);
+        let visible = "世界\n<err> app: 🦀\n\nok";
+        assert_eq!(projected_text(&state), visible);
+        assert_eq!(
+            state
+                .lines
+                .iter()
+                .map(|line| line.offset)
+                .collect::<Vec<_>>(),
+            vec![
+                0,
+                "世界\n".len(),
+                "世界\n<err> app: 🦀\n".len(),
+                visible.len() - 2
+            ]
+        );
+        let start = "世".len();
+        let end = visible.len() - 2;
+        state.update_endpoints(
+            Some(end),
+            Some(start),
+            TextSelectionCoverage::Bounded,
+            false,
+        );
+        assert_eq!(
+            state.selected_text().as_deref(),
+            Some("界\n<err> app: 🦀\n\n")
+        );
+        set_geometry(&mut state, 0, &[]);
+        let stable = state.lines[0].styled.clone();
+        buffer.push(b" appended");
+        assert!(!state.sync_buffer(&buffer, 1));
+        assert_eq!(
+            state.selected_text().as_deref(),
+            Some("界\n<err> app: 🦀\n\n")
+        );
+        assert!(Rc::ptr_eq(&stable, &state.lines[0].styled));
+        assert!(state.lines[0].geometry.is_some());
+        state.set_log_filter(LogFilter::Debug);
+        assert_eq!(state.selected_text(), None);
+        state.sync_buffer(&buffer, 1);
+        assert_eq!(projected_text(&state), "世界\n\nok appended");
+        assert!(Rc::ptr_eq(&stable, &state.lines[0].styled));
+        assert!(state.lines[0].geometry.is_some());
+        state.set_log_filter(LogFilter::All);
+        state.sync_buffer(&buffer, 1);
+        assert!(Rc::ptr_eq(&stable, &state.lines[0].styled));
+    }
+
+    #[test]
+    fn streaming_partial_tags_and_carriage_returns_reconcile_membership() {
+        let mut buffer = TerminalBuffer::new();
+        buffer.push(b"\x1b[31mplain response\x1b[0m\n\x1b[32m<err> app: failure\x1b[0m\n");
+        let mut state = TranscriptState::default();
+        state.set_log_filter(LogFilter::Error);
+        state.sync_buffer(&buffer, 1);
+        state.update_endpoints(Some(0), Some(5), TextSelectionCoverage::Bounded, false);
+        let original_epoch = buffer.selection_epoch();
+        let key = state.content_key(0);
+        buffer.push(b"<inf> app: hidden");
+        // Replacing the empty trailing row with a hidden line cannot change
+        // any existing byte endpoint.
+        assert!(!state.sync_buffer(&buffer, 1));
+        assert_eq!(state.selected_text().as_deref(), Some("plain"));
+        assert_eq!(
+            projected_text(&state),
+            "plain response\n<err> app: failure\n"
+        );
+        buffer.push(b"\n<i");
+        assert!(!state.sync_buffer(&buffer, 1));
+        assert_eq!(state.selected_text().as_deref(), Some("plain"));
+        buffer.push(b"nf> app: hidden partial");
+        assert_eq!(buffer.selection_epoch(), original_epoch);
+        assert!(!state.sync_buffer(&buffer, 1));
+        assert_eq!(state.selected_text().as_deref(), Some("plain"));
+        assert_eq!(
+            state.resolve_offset(Some(key), point(px(-1.), px(-1.))),
+            Some(0)
+        );
+        assert_eq!(
+            projected_text(&state),
+            "plain response\n<err> app: failure\n"
+        );
+
+        buffer.push(b"\n<err> app: visible");
+        assert!(!state.sync_buffer(&buffer, 1));
+        assert_eq!(state.selected_text().as_deref(), Some("plain"));
+        assert_eq!(
+            state.resolve_offset(Some(key), point(px(-1.), px(-1.))),
+            Some(0)
+        );
+        buffer.push(b"\n<i");
+        assert!(!state.sync_buffer(&buffer, 1));
+        state.clear_selection();
+        state.update_endpoints(
+            Some(state.byte_len - 2),
+            Some(state.byte_len),
+            TextSelectionCoverage::Bounded,
+            false,
+        );
+        assert_eq!(state.selected_text().as_deref(), Some("<i"));
+        let selected_tail_key = state.content_key(state.byte_len - 2);
+        buffer.push(b"nf> app: partial");
+        assert_eq!(buffer.selection_epoch(), original_epoch);
+        assert!(state.sync_buffer(&buffer, 1));
+        assert_eq!(state.selected_text(), None);
+        assert_eq!(
+            state.resolve_offset(Some(selected_tail_key), point(px(-1.), px(-1.))),
+            None
+        );
+        assert_eq!(
+            projected_text(&state),
+            "plain response\n<err> app: failure\n<err> app: visible\n"
+        );
+
+        buffer.push(b"\r<err>");
+        assert!(state.sync_buffer(&buffer, 1));
+        assert_eq!(
+            projected_text(&state),
+            "plain response\n<err> app: failure\n<err> app: visible\n<err> app: partial"
+        );
+    }
+
+    #[test]
+    fn trimming_hidden_source_rows_reuses_visible_caches_and_invalidates_offsets() {
+        let mut buffer = TerminalBuffer::new();
+        for index in 0..MAX_LINES - 1 {
+            if index % 2 == 0 {
+                buffer.push(b"<inf> app: hidden\n");
+            } else {
+                buffer.push(format!("visible {index}\n").as_bytes());
+            }
+        }
+        let mut state = TranscriptState::default();
+        state.set_log_filter(LogFilter::Error);
+        state.sync_buffer(&buffer, 1);
+        let surviving = state.lines[0].styled.clone();
+        let surviving_id = state.lines[0].id;
+        state.update_endpoints(Some(0), Some(7), TextSelectionCoverage::Bounded, false);
+        buffer.push(b"last\n");
+        assert!(state.sync_buffer(&buffer, 1));
+        assert_eq!(state.selected_text(), None);
+        assert_eq!(state.lines[0].id, surviving_id);
+        assert!(Rc::ptr_eq(&surviving, &state.lines[0].styled));
+        assert_eq!(state.lines[0].offset, 0);
+        assert_eq!(state.source_lines.len(), MAX_LINES);
+    }
+
+    #[test]
+    fn filter_change_rejects_old_keys_and_corrections_but_preserves_visible_anchor() {
+        let mut buffer = TerminalBuffer::new();
+        buffer.push(b"<err> m: A\n<inf> m: B\n<err> m: C\nuntagged\ntail");
+        let mut state = TranscriptState::default();
+        state.sync_buffer(&buffer, 1);
+        for index in 0..state.lines.len() {
+            set_geometry(&mut state, index, &[]);
+        }
+        state.rebuild_prefix();
+        present(&mut state, 2..4, 45.);
+        let anchor = state.anchor.unwrap();
+        let key = state.content_key(state.lines[2].offset);
+        state.update_endpoints(Some(0), Some(4), TextSelectionCoverage::Bounded, false);
+        state.pending = Some(correction(&state, -45., -60.));
+        assert!(state.set_log_filter(LogFilter::Error));
+        assert!(state.pending.is_none());
+        assert_eq!(state.selected_text(), None);
+        assert_eq!(state.byte_at_point(point(px(0.), px(1.))), None);
+        assert_eq!(state.resolve_offset(Some(key), point(px(0.), px(1.))), None);
+        assert!(!state.sync_buffer(&buffer, 1));
+        assert_eq!(state.anchor_top(anchor), Some(px(25.)));
+        assert_eq!(
+            state.viewport_top(Some(anchor), px(0.), px(40.), false, true),
+            px(25.)
+        );
+        assert_eq!(
+            state.viewport_top(Some(anchor), px(0.), px(40.), true, true),
+            px(40.)
+        );
+        assert_eq!(state.byte_at_point(point(px(0.), px(1.))), None);
+        let scroll = ScrollHandle::default();
+        assert!(!state.settle_frame(&scroll, true, false, false));
+
+        state.set_log_filter(LogFilter::Info);
+        state.sync_buffer(&buffer, 1);
+        set_geometry(&mut state, 0, &[]);
+        state.rebuild_prefix();
+        assert_eq!(state.anchor_index(anchor), Some(0));
+        assert_eq!(state.anchor_top(anchor), Some(px(5.)));
     }
 
     #[test]
@@ -1326,7 +1708,7 @@ mod tests {
         );
         buffer.push(b"\rnew");
         state.sync_buffer(&buffer, 1);
-        assert!(!state.has_selection());
+        assert_eq!(state.selected_text(), None);
         assert_eq!(state.byte_at_point(point(px(6.), px(21.))), None);
     }
 
@@ -1420,7 +1802,6 @@ mod tests {
         state.sync_buffer(&buffer, 1);
         state.update_selection(Some(0..3), false);
         state.clear_selection();
-        assert!(!state.has_selection());
         assert_eq!(state.selected_text(), None);
         state.update_selection(Some(3..9), false);
         assert_eq!(state.selected_text().as_deref(), Some("  \n\n  "));
@@ -1488,7 +1869,7 @@ mod tests {
         state.sync_buffer(&buffer, 1);
         assert!(Rc::ptr_eq(&retained, &state.lines[0].styled));
         assert_eq!(state.lines[0].offset, 0);
-        assert!(!state.has_selection());
+        assert_eq!(state.selected_text(), None);
         assert_eq!(state.lines.len(), MAX_LINES);
     }
 
@@ -1501,7 +1882,7 @@ mod tests {
         state.update_selection(Some(0..3), false);
         buffer.push(b"\rX");
         state.sync_buffer(&buffer, 1);
-        assert!(!state.has_selection());
+        assert_eq!(state.selected_text(), None);
         assert_eq!(state.lines[0].text.as_ref(), "Xabc");
         let old = state.lines[0].styled.clone();
         state.sync_buffer(&buffer, 2);

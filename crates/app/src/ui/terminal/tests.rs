@@ -824,7 +824,7 @@ fn transcript_keyboard_selection_reaches_the_existing_copy_owner_without_sending
         #[cfg(not(target_os = "macos"))]
         window.press("ctrl-home", cx);
         window.press("shift-end", cx);
-        window.click("terminal-copy-selection", cx);
+        window.press("secondary-c", cx);
         assert_eq!(
             cx.read_from_clipboard().and_then(|item| item.text()),
             Some("Synthetic terminal transcript".into())
@@ -833,7 +833,7 @@ fn transcript_keyboard_selection_reaches_the_existing_copy_owner_without_sending
         window.press("cmd-a", cx);
         #[cfg(not(target_os = "macos"))]
         window.press("ctrl-a", cx);
-        window.click("terminal-copy-selection", cx);
+        window.press("secondary-c", cx);
         assert_eq!(
             cx.read_from_clipboard().and_then(|item| item.text()),
             Some("Synthetic terminal transcript\nNo hardware commands\n".into())
@@ -847,6 +847,1008 @@ fn transcript_keyboard_selection_reaches_the_existing_copy_owner_without_sending
             this.manager.session("A").unwrap().state,
             ConnectionState::Disconnected
         );
+    });
+}
+
+fn click_terminal_filter_option(cx: &mut gpui_kit::VisualTestContext, label: &str) {
+    use gpui_kit::test::TestWindowExt as _;
+
+    cx.update(|window, cx| {
+        window.click("terminal-log-filter", cx);
+        let item = window
+            .within("popup-menu")
+            .find_by_label(label)
+            .path()
+            .last()
+            .unwrap()
+            .clone();
+        window.within("popup-menu").click(item, cx);
+    });
+    // PopupMenu emits DismissEvent; DropdownMenu closes its popover in the
+    // subscriber after the enclosing App update completes.
+    cx.run_until_parked();
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("popup-menu").is_none());
+        let expected = format!("Log: {label}");
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some(expected.as_str())
+        );
+    });
+}
+
+fn keyboard_terminal_filter_option(cx: &mut gpui_kit::VisualTestContext, label: &str) {
+    use gpui_kit::test::TestWindowExt as _;
+
+    cx.update(|window, cx| {
+        for _ in 0..32 {
+            if window.find("terminal-log-filter").focused() == Some(true) {
+                break;
+            }
+            window.press("tab", cx);
+        }
+        assert_eq!(window.find("terminal-log-filter").focused(), Some(true));
+        window.press("enter", cx);
+        for _ in 0..6 {
+            if window.within("popup-menu").find_by_label(label).selected() == Some(true) {
+                break;
+            }
+            window.press("down", cx);
+        }
+        assert_eq!(
+            window.within("popup-menu").find_by_label(label).selected(),
+            Some(true),
+        );
+        window.press("enter", cx);
+    });
+    cx.run_until_parked();
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("popup-menu").is_none());
+        let expected = format!("Log: {label}");
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some(expected.as_str())
+        );
+        assert_eq!(window.find("terminal-log-filter").focused(), Some(true));
+    });
+}
+
+fn copy_visible_terminal(window: &mut gpui_kit::Window, cx: &mut gpui_kit::App, port: &str) {
+    use gpui_kit::test::TestWindowExt as _;
+
+    window.click(format!("transcript-scroll:{port}"), cx);
+    window.press("secondary-a", cx);
+    window.press("secondary-c", cx);
+}
+
+fn click_terminal_tab(window: &mut gpui_kit::Window, cx: &mut gpui_kit::App, port: &str) {
+    use gpui_kit::{
+        MouseButton, point, px,
+        test::{TestEventExt as _, TestQueryExt as _},
+    };
+
+    let bounds = window
+        .find_by_label(&format!("{port} · Connected"))
+        .bounds();
+    let position = point(bounds.left() + px(10.), bounds.center().y);
+    window.pointer_down(position, MouseButton::Left, cx);
+    window.pointer_up(position, MouseButton::Left, cx);
+}
+
+#[gpui_kit::test]
+fn terminal_log_filter_is_per_tab_and_changes_only_the_visible_transcript(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::sessions::test_support::{display_manager, display_test_session};
+    use crate::terminal_view::LogFilter;
+    use gpui_kit::{
+        ClipboardItem, MouseButton, VisualContext as _, point, px,
+        test::{TestEventExt as _, TestWindowExt as _},
+    };
+
+    const SOURCE: &str = concat!(
+        "<err> core: fault\n",
+        "<wrn> core: caution\n",
+        "<inf> core: ready\n",
+        "<dbg> core: detail\n",
+        "command response\n",
+        "continuation\n",
+    );
+    const ERROR: &str = "<err> core: fault\ncommand response\ncontinuation\n";
+
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let mut manager = display_manager();
+    let display_a = display_test_session(&mut manager, "A");
+    let display_b = display_test_session(&mut manager, "B");
+    display_a.push(SOURCE.as_bytes());
+    display_b.push(b"<dbg> core: only debug");
+    let _ = manager.poll();
+    let executor = runtime.executor();
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        let mut this = offline_workbench(window, cx, manager, executor);
+        this.sync_tabs(window, cx);
+        this
+    });
+    let workspace = cx.new_window_entity(|window, cx| {
+        let focus = workbench.read(cx).page_focus.clone();
+        focus.focus(window, cx);
+        TerminalWorkspace(workbench.clone())
+    });
+    cx.replace_root_view(|window, cx| gpui_kit::base::Root::new(workspace, window, cx));
+
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("terminal-log-filter").label(), Some("Log: All"));
+    });
+    click_terminal_filter_option(cx, "Error");
+    cx.update(|window, cx| {
+        copy_visible_terminal(window, cx, "A");
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some(ERROR.into())
+        );
+    });
+    click_terminal_filter_option(cx, "Error");
+    let end = cx.update(|window, cx| {
+        assert_eq!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .selected_text()
+                .as_deref(),
+            Some(ERROR),
+            "reselecting the current level must keep the existing selection"
+        );
+        let bounds = window.find("transcript-scroll:A").bounds();
+        let start = point(
+            bounds.left() + px(10.),
+            bounds.top() + window.rem_size() * 0.625,
+        );
+        let end = point(start.x + px(60.), start.y);
+        window.pointer_down(start, MouseButton::Left, cx);
+        window.pointer_move(end, Some(MouseButton::Left), cx);
+        assert!(
+            workbench.read(cx).terminals["A"]
+                .selection
+                .snapshot(cx)
+                .is_some()
+        );
+        end
+    });
+    cx.run_until_parked();
+    keyboard_terminal_filter_option(cx, "Warning");
+    cx.update(|window, cx| {
+        assert!(
+            workbench.read(cx).terminals["A"]
+                .selection
+                .snapshot(cx)
+                .is_none(),
+            "changing the filter must clear Root's geometric selection"
+        );
+        window.pointer_up(end, MouseButton::Left, cx);
+        assert!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .selected_text()
+                .is_none(),
+            "changing the filter must discard the old byte range"
+        );
+        cx.write_to_clipboard(ClipboardItem::new_string("unchanged".into()));
+        let focus = workbench.read(cx).terminals["A"].transcript_focus.clone();
+        focus.focus(window, cx);
+        window.render_frame(cx);
+        window.press("secondary-c", cx);
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some("unchanged".into())
+        );
+    });
+    click_terminal_filter_option(cx, "Error");
+    cx.update(|window, cx| {
+        copy_visible_terminal(window, cx, "A");
+        window.click("terminal-copy", cx);
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some(SOURCE.into()),
+            "Copy all must not use the filtered projection"
+        );
+        window.click("terminal-export", cx);
+    });
+
+    let directory = tempfile::tempdir().unwrap();
+    let exported = directory.path().join("filtered-terminal.txt");
+    display_a.push(b"<err> core: later\n<inf> core: hidden\n");
+    workbench.update(cx, |this, cx| {
+        let _ = this.manager.poll();
+        cx.notify();
+    });
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .selected_text()
+                .as_deref(),
+            Some(ERROR),
+            "a completed selection must remain frozen across append"
+        );
+    });
+    cx.simulate_new_path_selection(|_| Some(exported.clone()));
+    cx.run_until_parked();
+    assert_eq!(
+        std::fs::read_to_string(exported).unwrap(),
+        SOURCE,
+        "export must freeze the complete source before the chooser returns"
+    );
+
+    display_a.push(b"<i");
+    workbench.update(cx, |this, cx| {
+        let _ = this.manager.poll();
+        cx.notify();
+    });
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .selected_text()
+                .as_deref(),
+            Some(ERROR),
+            "an unclassified append must not extend a completed selection"
+        );
+    });
+    display_a.push(b"nf> core: late");
+    workbench.update(cx, |this, cx| {
+        let _ = this.manager.poll();
+        cx.notify();
+    });
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .selected_text()
+                .as_deref(),
+            Some(ERROR),
+            "hiding a later row must preserve a completed selection before it"
+        );
+    });
+    display_a.push(b"\n<i");
+    workbench.update(cx, |this, cx| {
+        let _ = this.manager.poll();
+        cx.notify();
+    });
+    let drag_end = cx.update(|window, cx| {
+        window.render_frame(cx);
+        copy_visible_terminal(window, cx, "A");
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some(format!("{ERROR}<err> core: later\n<i")),
+            "an incomplete tag is unclassified and remains visible"
+        );
+        let bounds = window.find("transcript-scroll:A").bounds();
+        let start = point(
+            bounds.left() + px(8.),
+            bounds.top() + window.rem_size() * 5.625,
+        );
+        let end = point(start.x + px(14.), start.y);
+        window.pointer_down(start, MouseButton::Left, cx);
+        window.pointer_move(end, Some(MouseButton::Left), cx);
+        end
+    });
+    cx.run_until_parked();
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert!(
+            workbench.read(cx).terminals["A"]
+                .selection
+                .snapshot(cx)
+                .is_some(),
+            "the drag must create a Root geometric selection"
+        );
+        let selected = workbench.read(cx).terminals["A"]
+            .transcript
+            .borrow()
+            .selected_text();
+        assert!(
+            selected
+                .as_deref()
+                .is_some_and(|text| !text.is_empty() && "<i".contains(text)),
+            "the geometric selection must cover bytes in the incomplete tail: {selected:?}"
+        );
+    });
+    display_a.push(b"nf> core: later");
+    workbench.update(cx, |this, cx| {
+        let _ = this.manager.poll();
+        cx.notify();
+    });
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert!(
+            workbench.read(cx).terminals["A"]
+                .selection
+                .snapshot(cx)
+                .is_none(),
+            "projection membership changes must clear Root's geometric selection"
+        );
+        window.pointer_up(drag_end, MouseButton::Left, cx);
+        assert!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .selected_text()
+                .is_none(),
+            "a partial row becoming hidden must invalidate the previous selection"
+        );
+        cx.write_to_clipboard(ClipboardItem::new_string("unchanged".into()));
+        window.press("secondary-c", cx);
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some("unchanged".into())
+        );
+        click_terminal_tab(window, cx, "B");
+        assert_eq!(window.find("terminal-log-filter").label(), Some("Log: All"));
+    });
+    click_terminal_filter_option(cx, "Info");
+    cx.update(|window, cx| {
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Info")
+        );
+        assert!(window.try_find("transcript-scroll:B").is_some());
+        assert!(
+            workbench.read(cx).terminals["B"]
+                .transcript
+                .borrow()
+                .is_empty()
+        );
+        assert_eq!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .log_filter(),
+            LogFilter::Error
+        );
+        click_terminal_tab(window, cx, "A");
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Error")
+        );
+    });
+    workbench.update(cx, |this, cx| {
+        this.set_feature_page(super::FeaturePage::Settings);
+        this.set_feature_page(super::FeaturePage::DeviceSetup);
+        cx.notify();
+    });
+
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Error")
+        );
+    });
+    click_terminal_filter_option(cx, "Warning");
+    cx.update(|window, cx| {
+        copy_visible_terminal(window, cx, "A");
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some("<wrn> core: caution\ncommand response\ncontinuation\n".into())
+        );
+    });
+    keyboard_terminal_filter_option(cx, "Info");
+    cx.update(|window, cx| {
+        copy_visible_terminal(window, cx, "A");
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some(
+                concat!(
+                    "<inf> core: ready\ncommand response\ncontinuation\n",
+                    "<inf> core: hidden\n<inf> core: late\n<inf> core: later"
+                )
+                .into()
+            )
+        );
+    });
+    click_terminal_filter_option(cx, "Debug");
+    cx.update(|window, cx| {
+        copy_visible_terminal(window, cx, "A");
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some("<dbg> core: detail\ncommand response\ncontinuation\n".into())
+        );
+    });
+    keyboard_terminal_filter_option(cx, "All");
+    cx.update(|window, cx| {
+        copy_visible_terminal(window, cx, "A");
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some(format!(
+                "{SOURCE}<err> core: later\n<inf> core: hidden\n<inf> core: late\n<inf> core: later"
+            ))
+        );
+        for _ in 0..32 {
+            if window.find("terminal-log-filter").focused() == Some(true) {
+                break;
+            }
+            window.press("tab", cx);
+        }
+        assert_eq!(window.find("terminal-log-filter").focused(), Some(true));
+        window.press("enter", cx);
+        assert!(window.try_find("popup-menu").is_some());
+        window.press("escape", cx);
+    });
+    cx.run_until_parked();
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("popup-menu").is_none());
+        assert_eq!(window.find("terminal-log-filter").focused(), Some(true));
+    });
+    workbench.update(cx, |this, cx| {
+        assert!(this.pending_writes.is_empty());
+        assert!(this.terminals["A"].input.read(cx).value().is_empty());
+        assert!(this.terminals["B"].input.read(cx).value().is_empty());
+        assert_eq!(
+            this.terminals["B"].transcript.borrow().log_filter(),
+            LogFilter::Info
+        );
+    });
+}
+
+#[gpui_kit::test]
+fn wheel_on_log_filter_steps_per_tab_and_preserves_transcript_scrolling(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::sessions::test_support::{display_manager, display_test_session};
+    use crate::terminal_view::LogFilter;
+    use gpui_kit::{ScrollDelta, VisualContext as _, point, px, test::TestWindowExt as _};
+
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let mut manager = display_manager();
+    let display_a = display_test_session(&mut manager, "A");
+    let display_b = display_test_session(&mut manager, "B");
+    let ordinary = "unclassified output\n".repeat(100);
+    let source = format!(
+        "<err> core: fault\n<wrn> core: caution\n<inf> core: ready\n\
+         <dbg> core: detail\ncommand response\n{ordinary}"
+    );
+    display_a.push(source.as_bytes());
+    display_b.push(b"B response\n");
+    let _ = manager.poll();
+    let executor = runtime.executor();
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        let mut this = offline_workbench(window, cx, manager, executor);
+        this.sync_tabs(window, cx);
+        this
+    });
+    let workspace = cx.new_window_entity(|window, cx| {
+        let focus = workbench.read(cx).page_focus.clone();
+        focus.focus(window, cx);
+        TerminalWorkspace(workbench.clone())
+    });
+    cx.replace_root_view(|window, cx| gpui_kit::base::Root::new(workspace, window, cx));
+
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        copy_visible_terminal(window, cx, "A");
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some(source)
+        );
+        window.scroll("terminal-log-filter", ScrollDelta::Lines(point(0., 3.)), cx);
+        assert_eq!(window.find("terminal-log-filter").label(), Some("Log: All"));
+        assert!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .selected_text()
+                .is_some(),
+            "clamping at All must not clear the selection"
+        );
+
+        for (level, line) in [
+            ("Error", "<err> core: fault\n"),
+            ("Warning", "<wrn> core: caution\n"),
+            ("Info", "<inf> core: ready\n"),
+            ("Debug", "<dbg> core: detail\n"),
+        ] {
+            window.scroll(
+                "terminal-log-filter",
+                ScrollDelta::Lines(point(0., -3.)),
+                cx,
+            );
+            assert_eq!(
+                window.find("terminal-log-filter").label(),
+                Some(format!("Log: {level}").as_str())
+            );
+            assert!(
+                workbench.read(cx).terminals["A"]
+                    .transcript
+                    .borrow()
+                    .selected_text()
+                    .is_none(),
+                "a wheel filter change must clear the old selection"
+            );
+            assert!(window.try_find("popup-menu").is_none());
+            copy_visible_terminal(window, cx, "A");
+            assert_eq!(
+                cx.read_from_clipboard().and_then(|item| item.text()),
+                Some(format!("{line}command response\n{ordinary}"))
+            );
+        }
+        window.scroll(
+            "terminal-log-filter",
+            ScrollDelta::Lines(point(0., -3.)),
+            cx,
+        );
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Debug")
+        );
+        assert!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .selected_text()
+                .is_some(),
+            "clamping at Debug must not clear the selection"
+        );
+        for level in ["Info", "Warning", "Error", "All"] {
+            window.scroll("terminal-log-filter", ScrollDelta::Lines(point(0., 3.)), cx);
+            assert_eq!(
+                window.find("terminal-log-filter").label(),
+                Some(format!("Log: {level}").as_str())
+            );
+        }
+        window.scroll(
+            "terminal-log-filter",
+            ScrollDelta::Lines(point(-4., 0.)),
+            cx,
+        );
+        assert_eq!(window.find("terminal-log-filter").label(), Some("Log: All"));
+
+        let half_step = window.rem_size() * 0.75;
+        window.scroll(
+            "terminal-log-filter",
+            ScrollDelta::Pixels(point(px(0.), -half_step)),
+            cx,
+        );
+        assert_eq!(window.find("terminal-log-filter").label(), Some("Log: All"));
+        window.scroll(
+            "terminal-log-filter",
+            ScrollDelta::Pixels(point(px(0.), half_step)),
+            cx,
+        );
+        window.scroll(
+            "terminal-log-filter",
+            ScrollDelta::Pixels(point(px(0.), -half_step)),
+            cx,
+        );
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: All"),
+            "reversing direction must discard the old partial gesture"
+        );
+        window.scroll(
+            "terminal-log-filter",
+            ScrollDelta::Pixels(point(px(0.), -half_step)),
+            cx,
+        );
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Error")
+        );
+        window.scroll(
+            "terminal-log-filter",
+            ScrollDelta::Pixels(point(px(0.), px(-1000.))),
+            cx,
+        );
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Warning"),
+            "a coalesced event may advance at most one choice"
+        );
+
+        click_terminal_tab(window, cx, "B");
+        assert_eq!(window.find("terminal-log-filter").label(), Some("Log: All"));
+        window.scroll(
+            "terminal-log-filter",
+            ScrollDelta::Lines(point(0., -3.)),
+            cx,
+        );
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Error")
+        );
+        assert_eq!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .log_filter(),
+            LogFilter::Warning
+        );
+        click_terminal_tab(window, cx, "A");
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Warning")
+        );
+        assert_eq!(
+            workbench.read(cx).terminals["B"]
+                .transcript
+                .borrow()
+                .log_filter(),
+            LogFilter::Error
+        );
+        workbench.update(cx, |this, cx| {
+            let terminal = this.terminals.get_mut("A").unwrap();
+            terminal.follow = false;
+            terminal.scroll.set_offset(point(px(0.), px(0.)));
+            cx.notify();
+        });
+        window.render_frame(cx);
+        let before = workbench.read(cx).terminals["A"].scroll.offset().y;
+        window.scroll(
+            "transcript-scroll:A",
+            ScrollDelta::Pixels(point(px(0.), px(-100.))),
+            cx,
+        );
+        assert!(workbench.read(cx).terminals["A"].scroll.offset().y < before);
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Warning"),
+            "scrolling the transcript must not change the filter"
+        );
+    });
+    cx.update(|window, cx| {
+        window.click("terminal-log-filter", cx);
+        let item = window
+            .within("popup-menu")
+            .find_by_label("Info")
+            .path()
+            .last()
+            .unwrap()
+            .clone();
+        window
+            .within("popup-menu")
+            .scroll(item, ScrollDelta::Lines(point(0., -3.)), cx);
+        assert_eq!(
+            workbench.read(cx).terminals["A"]
+                .transcript
+                .borrow()
+                .log_filter(),
+            LogFilter::Warning,
+            "a wheel over the menu is not a wheel over the trigger"
+        );
+        window.press("escape", cx);
+    });
+    cx.run_until_parked();
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("popup-menu").is_none());
+    });
+    workbench.update(cx, |this, cx| {
+        assert!(this.pending_writes.is_empty());
+        assert_eq!(this.terminal_command_runs().count(), 0);
+        assert!(this.terminals["A"].input.read(cx).value().is_empty());
+        assert!(this.terminals["B"].input.read(cx).value().is_empty());
+    });
+}
+
+#[gpui_kit::test]
+fn wheel_on_command_input_navigates_each_ports_history_without_sending(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::sessions::test_support::{connected, peer, stopped, until};
+    use gpui_kit::{
+        Modifiers, ScrollDelta, VisualContext as _, point, px,
+        test::{TestEventExt as _, TestWindowExt as _},
+    };
+    use std::io::{ErrorKind, Read as _, Write as _};
+
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let (workbench, cx, _runtime, listener) = terminal_fixture(cx);
+    workbench.update(cx, |this, _| {
+        this.inventory.ports = ["A", "B"].into_iter().map(terminal_test_endpoint).collect();
+        this.manager.connect("A").unwrap();
+    });
+    let mut peer_a = peer(&listener);
+    workbench.update(cx, |this, _| {
+        connected(&mut this.manager, "A");
+        this.manager.connect("B").unwrap();
+    });
+    let mut peer_b = peer(&listener);
+    workbench.update(cx, |this, _| {
+        connected(&mut this.manager, "B");
+        for (port, commands) in [("A", ["older A", "newer A"]), ("B", ["older B", "newer B"])] {
+            for command in commands {
+                this.terminals
+                    .get_mut(port)
+                    .unwrap()
+                    .history
+                    .record_submission(command, &Ok::<(), ()>(()));
+            }
+        }
+    });
+    // Manual reconnect creates a fresh transcript. Feed this generation enough
+    // synthetic device output to exercise its real scroll viewport.
+    let received = "Synthetic received output\n".repeat(100);
+    peer_a.write_all(received.as_bytes()).unwrap();
+    workbench.update(cx, |this, _| {
+        until(|| {
+            let _ = this.manager.poll();
+            this.manager.session("A").unwrap().terminal.text() == received
+        });
+    });
+    peer_a.set_nonblocking(true).unwrap();
+    peer_b.set_nonblocking(true).unwrap();
+    let workspace = cx.new_window_entity(|window, cx| {
+        let focus = workbench.read(cx).page_focus.clone();
+        focus.focus(window, cx);
+        TerminalWorkspace(workbench.clone())
+    });
+    cx.replace_root_view(|window, cx| gpui_kit::base::Root::new(workspace, window, cx));
+    cx.simulate_resize(gpui_kit::size(px(800.), px(600.)));
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+    let (input_a, input_b) = workbench.read_with(cx, |this, _| {
+        (
+            this.terminals["A"].input.entity_id(),
+            this.terminals["B"].input.entity_id(),
+        )
+    });
+
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        window.click(("input", input_a), cx);
+        window.input("draft A", cx);
+        for (delta, expected) in [
+            (3., "newer A"),
+            (3., "older A"),
+            (3., "older A"),
+            (-3., "newer A"),
+            (-3., "draft A"),
+            (-3., "draft A"),
+        ] {
+            window.scroll(("input", input_a), ScrollDelta::Lines(point(0., delta)), cx);
+            assert_eq!(window.find(("input", input_a)).value(), Some(expected));
+        }
+        window.scroll(("input", input_a), ScrollDelta::Lines(point(5., 0.)), cx);
+        assert_eq!(window.find(("input", input_a)).value(), Some("draft A"));
+
+        let half_step = window.rem_size() * 0.75;
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(0.), half_step)),
+            cx,
+        );
+        assert_eq!(window.find(("input", input_a)).value(), Some("draft A"));
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(0.), -half_step)),
+            cx,
+        );
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(0.), half_step)),
+            cx,
+        );
+        assert_eq!(
+            window.find(("input", input_a)).value(),
+            Some("draft A"),
+            "reversing direction must discard the old partial gesture"
+        );
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(0.), half_step)),
+            cx,
+        );
+        assert_eq!(window.find(("input", input_a)).value(), Some("newer A"));
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(0.), px(1000.))),
+            cx,
+        );
+        assert_eq!(window.find(("input", input_a)).value(), Some("older A"));
+        window.scroll(("input", input_a), ScrollDelta::Lines(point(0., -3.)), cx);
+        window.scroll(("input", input_a), ScrollDelta::Lines(point(0., -3.)), cx);
+        assert_eq!(window.find(("input", input_a)).value(), Some("draft A"));
+
+        click_terminal_tab(window, cx, "B");
+        window.click(("input", input_b), cx);
+        window.input("draft B", cx);
+        window.scroll(("input", input_b), ScrollDelta::Lines(point(0., 3.)), cx);
+        assert_eq!(window.find(("input", input_b)).value(), Some("newer B"));
+        assert_eq!(
+            workbench.read(cx).terminals["A"]
+                .input
+                .read(cx)
+                .value()
+                .as_ref(),
+            "draft A"
+        );
+        click_terminal_tab(window, cx, "A");
+        assert_eq!(window.find(("input", input_a)).value(), Some("draft A"));
+        click_terminal_tab(window, cx, "B");
+        window.scroll(("input", input_b), ScrollDelta::Lines(point(0., -3.)), cx);
+        assert_eq!(window.find(("input", input_b)).value(), Some("draft B"));
+
+        click_terminal_tab(window, cx, "A");
+        window.click(("input", input_a), cx);
+        let long_text = "wide text ".repeat(20);
+        window.input(&long_text, cx);
+        let input_entity = workbench.read(cx).terminals["A"].input.clone();
+        let value = input_entity.read(cx).value();
+        assert!(
+            value.contains(long_text.as_str()),
+            "the test must enter enough text to overflow the input"
+        );
+        // Start at the left edge rather than relying on caret-follow after
+        // typing. The subsequent wheel must move the actual Input viewport.
+        input_entity.update(cx, |input, cx| {
+            input.set_scroll_offset(point(px(0.), px(0.)), cx);
+        });
+        window.render_frame(cx);
+        let before = input_entity.read(cx).scroll_offset().x;
+        assert_eq!(before, px(0.));
+        let half_step = window.rem_size() * 0.75;
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(-1.), half_step)),
+            cx,
+        );
+        assert_eq!(input_entity.read(cx).value(), value);
+        assert_eq!(
+            input_entity.read(cx).scroll_offset().x,
+            before,
+            "a partial vertical gesture must not pan the overflowing input"
+        );
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(-1.), half_step)),
+            cx,
+        );
+        assert_eq!(
+            input_entity.read(cx).value().as_ref(),
+            "newer A",
+            "vertical trackpad motion with axis drift must recall history"
+        );
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(-1.), -half_step * 2.)),
+            cx,
+        );
+        assert_eq!(
+            input_entity.read(cx).value(),
+            value,
+            "scrolling down must restore the overflowing draft"
+        );
+        input_entity.update(cx, |input, cx| {
+            input.set_scroll_offset(point(px(0.), px(0.)), cx);
+        });
+        window.render_frame(cx);
+        window.change_modifiers(Modifiers::control(), cx);
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(-20.), half_step * 2.)),
+            cx,
+        );
+        assert_eq!(
+            input_entity.read(cx).value(),
+            value,
+            "modified gestures must not recall a command"
+        );
+        assert!(
+            input_entity.read(cx).scroll_offset().x < px(0.),
+            "modified gestures must remain available to the native input"
+        );
+        window.change_modifiers(Modifiers::default(), cx);
+        input_entity.update(cx, |input, cx| {
+            input.set_scroll_offset(point(px(0.), px(0.)), cx);
+        });
+        window.render_frame(cx);
+        window.scroll(
+            ("input", input_a),
+            ScrollDelta::Pixels(point(px(-250.), px(0.))),
+            cx,
+        );
+        let input = workbench.read(cx).terminals["A"].input.read(cx);
+        assert_eq!(input.value(), value);
+        assert!(
+            input.scroll_offset().x < before,
+            "horizontal wheel input must still scroll the native text editor"
+        );
+
+        let before = input.value();
+        workbench.update(cx, |this, cx| {
+            let terminal = this.terminals.get_mut("A").unwrap();
+            terminal.follow = false;
+            terminal.scroll.set_offset(point(px(0.), px(0.)));
+            cx.notify();
+        });
+        window.render_frame(cx);
+        let top = workbench.read(cx).terminals["A"].scroll.offset().y;
+        assert_eq!(top, px(0.));
+        window.scroll(
+            "transcript-scroll:A",
+            ScrollDelta::Pixels(point(px(0.), px(-100.))),
+            cx,
+        );
+        assert!(
+            workbench.read(cx).terminals["A"].scroll.offset().y < top,
+            "a wheel over the transcript must still scroll the transcript"
+        );
+        assert_eq!(
+            workbench.read(cx).terminals["A"].input.read(cx).value(),
+            before
+        );
+    });
+    workbench.update(cx, |this, _| {
+        assert!(this.pending_writes.is_empty());
+        assert_eq!(this.terminal_command_runs().count(), 0);
+        assert!(this.terminals["A"].pending.is_none());
+        assert!(this.terminals["B"].pending.is_none());
+        until(|| this.manager.writes_idle("A") && this.manager.writes_idle("B"));
+    });
+    for peer in [&mut peer_a, &mut peer_b] {
+        let mut byte = [0];
+        assert_eq!(
+            peer.read(&mut byte).unwrap_err().kind(),
+            ErrorKind::WouldBlock,
+            "history scrolling must not write a command to either port"
+        );
+    }
+    workbench.update(cx, |this, _| {
+        this.manager.disconnect("A").unwrap();
+        this.manager.disconnect("B").unwrap();
+        stopped(&mut this.manager, "A");
+        stopped(&mut this.manager, "B");
+    });
+}
+
+#[gpui_kit::test]
+fn closing_and_reopening_a_terminal_resets_its_log_filter(cx: &mut gpui_kit::TestAppContext) {
+    use crate::terminal_view::LogFilter;
+    use gpui_kit::{VisualContext as _, test::TestWindowExt as _};
+
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let (workbench, cx, _runtime, _listener) = terminal_fixture(cx);
+    let workspace = cx.new_window_entity(|window, cx| {
+        let focus = workbench.read(cx).page_focus.clone();
+        focus.focus(window, cx);
+        TerminalWorkspace(workbench.clone())
+    });
+    cx.replace_root_view(|window, cx| gpui_kit::base::Root::new(workspace, window, cx));
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+    });
+    click_terminal_filter_option(cx, "Error");
+    cx.update(|window, cx| {
+        assert_eq!(
+            window.find("terminal-log-filter").label(),
+            Some("Log: Error")
+        );
+        workbench.update(cx, |this, cx| {
+            this.request_terminal_close("A", window, cx);
+            assert!(!this.terminals.contains_key("A"));
+            this.manager.connect("A").unwrap();
+            this.sync_tabs(window, cx);
+            assert_eq!(
+                this.terminals["A"].transcript.borrow().log_filter(),
+                LogFilter::All
+            );
+            this.manager.disconnect("A").unwrap();
+            crate::sessions::test_support::stopped(&mut this.manager, "A");
+        });
     });
 }
 
@@ -918,6 +1920,12 @@ fn send_all_tracks_admitted_connected_sessions_without_reserving_footer_space(
             let input = window.find(("input", input_id)).bounds();
             let clear = window.find("terminal-clear").bounds();
             assert!(input.right() <= send.left());
+            assert!(
+                (send.size.height - input.size.height).abs() <= px(1.),
+                "Send must use the same height as the command input",
+            );
+            assert!((send.top() - input.top()).abs() <= px(1.));
+            assert!((send.size.width - send.size.height).abs() <= px(1.));
             assert!(clear.top() >= input.bottom());
             assert!(
                 clear.top() - input.bottom() <= window.rem_size(),

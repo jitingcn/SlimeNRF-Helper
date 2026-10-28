@@ -15,7 +15,9 @@ use gpui_kit::{
     px, rems, rgb, size,
 };
 
-use super::{TerminalTranscript, TranscriptState, TranscriptViewport, geometry::ViewportAnchor};
+use super::{
+    LogFilter, TerminalTranscript, TranscriptState, TranscriptViewport, geometry::ViewportAnchor,
+};
 use slimenrf_terminal_core::{MAX_LINES, TerminalBuffer};
 
 struct TranscriptHarness {
@@ -229,6 +231,18 @@ impl Fixture {
         use gpui_kit::test::TestWindowExt;
 
         cx.update_window(self.window.into(), |_, window, cx| window.press(key, cx))
+            .unwrap();
+    }
+
+    fn filter(&self, cx: &mut TestAppContext, filter: LogFilter) {
+        self.window
+            .update(cx, |view, window, cx| {
+                let changed = view.state.borrow_mut().set_log_filter(filter);
+                if changed {
+                    gpui_kit::base::TextSelection::clear(window, cx);
+                    cx.notify();
+                }
+            })
             .unwrap();
     }
 
@@ -861,6 +875,195 @@ fn native_wheel_before_deferred_resize_commit_keeps_the_user_delta(cx: &mut Test
     }
 }
 
+fn filtered_lines() -> String {
+    (0..80)
+        .map(|index| {
+            let level = if index % 2 == 0 { "<err>" } else { "<inf>" };
+            format!(
+                "{level} app: {index:03} {}",
+                "abcdefghijklmnopqrstuvwx".repeat(2)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[gpui_kit::test]
+fn native_filter_only_changes_preserve_or_rebase_paused_anchor_through_resize(
+    cx: &mut TestAppContext,
+) {
+    cx.update(gpui_kit::init);
+    let text = filtered_lines();
+    for soft_wrap in [false, true] {
+        for scale in [1., 1.25] {
+            let fixture =
+                Fixture::new(cx, &text, soft_wrap, false, scale, size(px(180.), px(120.)));
+            fixture.settle(cx);
+            fixture.wheel(cx, -300.);
+            fixture.settle(cx);
+            let (anchor, filter, revision) = fixture.inspect(cx, |view| {
+                let state = view.state.borrow();
+                let anchor = state.anchor.unwrap();
+                let row = state
+                    .lines
+                    .iter()
+                    .find(|row| row.id == anchor.line_id)
+                    .unwrap();
+                let filter = if row.text.starts_with("<err>") {
+                    LogFilter::Error
+                } else {
+                    LogFilter::Info
+                };
+                (anchor, filter, view.buffer.revision())
+            });
+            fixture.filter(cx, filter);
+            fixture.settle(cx);
+            fixture.inspect(cx, |view| {
+                let state = view.state.borrow();
+                assert_eq!(view.buffer.revision(), revision);
+                assert_eq!(anchor_key(state.anchor.unwrap()), anchor_key(anchor));
+                let top = state.anchor_top(anchor).unwrap();
+                assert!(
+                    f32::from(view.scroll.offset().y + top).abs() < 0.01,
+                    "the visible physical anchor must stay at the viewport top"
+                );
+            });
+            fixture.resize(cx, size(px(120.), px(100.)));
+            fixture.settle(cx);
+            fixture.inspect(cx, |view| {
+                let state = view.state.borrow();
+                assert_eq!(anchor_key(state.anchor.unwrap()), anchor_key(anchor));
+                let top = state.anchor_top(anchor).unwrap();
+                assert!(f32::from(view.scroll.offset().y + top).abs() < 0.01);
+            });
+            let other = if filter == LogFilter::Error {
+                LogFilter::Info
+            } else {
+                LogFilter::Error
+            };
+            fixture.filter(cx, other);
+            fixture.settle(cx);
+            fixture.inspect(cx, |view| {
+                let state = view.state.borrow();
+                assert_eq!(view.buffer.revision(), revision);
+                assert!(!state.lines.iter().any(|row| row.id == anchor.line_id));
+                assert_eq!(state.anchor.unwrap().line_id, state.lines[0].id);
+                assert!(view.scroll.offset().y.abs() < state.layout_key.row_height);
+            });
+        }
+    }
+}
+
+#[gpui_kit::test]
+fn native_filter_only_changes_follow_the_visible_tail_without_new_output(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let text = filtered_lines();
+    for soft_wrap in [false, true] {
+        let fixture = Fixture::new(cx, &text, soft_wrap, true, 1.25, size(px(180.), px(120.)));
+        fixture.settle(cx);
+        let revision = fixture.inspect(cx, |view| view.buffer.revision());
+        for filter in [LogFilter::Error, LogFilter::Info, LogFilter::All] {
+            fixture.filter(cx, filter);
+            fixture.settle(cx);
+            fixture.inspect(cx, |view| {
+                let state = view.state.borrow();
+                assert_eq!(view.buffer.revision(), revision);
+                let tail = (state.height() - view.scroll.bounds().size.height).max(px(0.));
+                assert!(
+                    f32::from(view.scroll.offset().y + tail).abs() < 0.01,
+                    "Follow must reach the filtered tail without a new serial chunk"
+                );
+                assert!(state.pending.is_none());
+            });
+        }
+    }
+}
+
+#[gpui_kit::test]
+fn native_empty_filtered_projection_can_render_navigate_and_reappear(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let fixture = Fixture::new(
+        cx,
+        "<dbg> core: only debug",
+        true,
+        false,
+        1.,
+        size(px(180.), px(120.)),
+    );
+    fixture.settle(cx);
+    fixture.filter(cx, LogFilter::Info);
+    fixture.settle(cx);
+    fixture.inspect(cx, |view| {
+        let state = view.state.borrow();
+        assert!(state.lines.is_empty());
+        assert_eq!(state.height(), px(0.));
+        assert_eq!(state.selected_text(), None);
+    });
+    fixture.focus(cx);
+    fixture.press(cx, "secondary-a");
+    fixture.settle(cx);
+    fixture.inspect(cx, |view| {
+        assert_eq!(view.state.borrow().selected_text(), None)
+    });
+    fixture.filter(cx, LogFilter::All);
+    fixture.settle(cx);
+    fixture.inspect(cx, |view| {
+        assert_eq!(
+            view.state.borrow().lines[0].text.as_ref(),
+            "<dbg> core: only debug"
+        );
+    });
+}
+
+#[gpui_kit::test]
+fn native_filter_change_supersedes_a_queued_follow_correction(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    let fixture = Fixture::new(
+        cx,
+        &filtered_lines(),
+        true,
+        false,
+        1.25,
+        size(px(180.), px(120.)),
+    );
+    fixture.settle_natural(cx);
+    fixture.wheel(cx, -300.);
+    fixture.settle_natural(cx);
+    fixture
+        .window
+        .update(cx, |view, _, cx| {
+            view.follow = true;
+            cx.notify();
+        })
+        .unwrap();
+    fixture.draw_natural(cx);
+    fixture.inspect(cx, |view| {
+        assert!(
+            view.state.borrow().pending.is_some(),
+            "resuming Follow must queue a correction before the filter changes"
+        );
+    });
+    let offset = fixture
+        .window
+        .update(cx, |view, _, _| {
+            view.follow = false;
+            let mut state = view.state.borrow_mut();
+            assert!(state.set_log_filter(LogFilter::Error));
+            assert!(state.pending.is_none());
+            view.scroll.offset()
+        })
+        .unwrap();
+    assert_eq!(fixture.deliver(cx), 1);
+    fixture.inspect(cx, |view| assert_eq!(view.scroll.offset(), offset));
+    fixture.window.update(cx, |_, _, cx| cx.notify()).unwrap();
+    fixture.settle_natural(cx);
+    fixture.inspect(cx, |view| {
+        assert!(!view.follow);
+        assert_eq!(view.state.borrow().log_filter(), LogFilter::Error);
+        assert!(view.state.borrow().pending.is_none());
+    });
+}
+
 #[gpui_kit::test]
 fn native_follow_reaches_the_reflowed_bottom_after_resize_without_output(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
@@ -1163,7 +1366,7 @@ fn native_keyboard_pages_preserve_paused_history_and_leave_command_input_keys_al
     }
     fixture.inspect(cx, |view| {
         assert_eq!(view.state.borrow().endpoints, endpoints);
-        assert!(!view.state.borrow().has_selection());
+        assert_eq!(view.state.borrow().selected_text(), None);
         assert!(!view.follow);
     });
 }

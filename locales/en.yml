@@ -1656,7 +1656,6 @@ serial:
       clear: "Clear"
       close_tab: "Close tab"
       copy_all: "Copy all"
-      copy_selection: "Copy selection"
       export_log: "Export log"
       follow: "Follow"
       retry: "Retry"
@@ -1668,7 +1667,7 @@ serial:
       closing: "Closing this terminal after the connection stops"
     command_placeholder:
       batch: "Command for selected devices"
-      single: "Command · Enter to send · ↑/↓ history"
+      single: "Command · Enter to send · ↑/↓ or wheel for history"
     empty:
       connect_hint: "Connect a serial device to open its terminal"
       no_connection: "No device connected"
@@ -1684,6 +1683,14 @@ serial:
         write: "Could not export log to %{path}: %{error}"
       hint: "Save the currently retained log for this port"
       success: "Log exported to %{path}"
+    log_filter:
+      all: "All"
+      debug: "Debug"
+      error: "Error"
+      hint: "Scroll here to change the level. Show only this level and unclassified output; Copy all and Export log still include everything."
+      info: "Info"
+      label: "Log: %{level}"
+      warning: "Warning"
     status:
       connecting: "Connecting %{port}…"
       sending: "Commands are still sending; please wait"

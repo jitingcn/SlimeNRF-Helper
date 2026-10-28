@@ -12,12 +12,15 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Added
 
 - A debug-only developer gallery with isolated synthetic controls and terminal scenes, plus documented device diagnosis and native UI smoke workflows.
+- Terminal tabs can filter displayed lines by log level while retaining untagged command output; Copy all and log export remain unfiltered.
+- The mouse wheel can switch log levels over the terminal filter control and recall command history over the input without sending commands.
 
 ### Changed
 
 - Device lists use a flatter, more compact layout with a rounded summary bar: receiver serial numbers and online/total tracker counts share a wrapping metadata row, with the redundant command-console heading and outer list border and padding removed.
 - Device-list toolbar actions use compact icon buttons with localized hover descriptions.
-- The terminal Send button uses a return-key icon. Send all appears directly below it in the existing lower toolbar only when multiple eligible command ports are connected, without reserving extra vertical space.
+- The terminal Send button uses a larger return-key icon button aligned with the command input. Send all appears directly below it in the existing lower toolbar only when multiple eligible command ports are connected, without reserving extra vertical space.
+- Selected terminal text is copied with keyboard shortcuts instead of a separate toolbar button.
 - The root is now a virtual Cargo workspace, with the desktop application's source and build support in `crates/app` alongside the existing recording core. Root development commands and resource path semantics are unchanged.
 - The terminal model and firmware-image parsing and content validation are isolated in internal workspace libraries. GUI presentation, hardware access, device authorization, and application build resources remain in the desktop app; the new libraries can be built and tested without its Python-based build. This is an internal boundary change, not a new user-facing feature.
 - Developer test scripts use cargo-nextest, with doctests available as a separate action; quality scripts run both. Windows MSVC builds use the Rust toolchain's bundled LLD linker, and Linux builds can opt into mold.

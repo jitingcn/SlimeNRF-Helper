@@ -175,6 +175,8 @@ The terminal separates its lossy display buffer from lossless structured observa
 
 `terminal_view` keeps physical lines and their UTF-8 byte offsets separate from visual rows. Soft wrapping uses native `StyledText` geometry without adding line breaks to copied or exported text. Visible lines and selection endpoints use the current terminal width before painting. Other history reflows in bounded batches. Hidden terminal tabs do not schedule reflow.
 
+Each `TranscriptState` owns its tab's log-level filter and projects retained source rows into contiguous display byte offsets while retaining physical line IDs. Exact-level filtering keeps unclassified output visible and never changes serial observation or the terminal buffer. Selection copying uses the projection; Copy all and export use the complete retained buffer. Filter changes invalidate text selection and stale layout corrections, while surviving rows retain their cached text and layout.
+
 Theme and font changes discard cached `StyledText` layouts, which retain resolved colors and font metrics. History and semantic ANSI runs remain intact. The existing bounded reflow rebuilds layouts with the current style, so theme changes recolor retained text without new serial output.
 
 `terminal_view` preserves a paused viewport as a physical-line ID, UTF-8 byte, row affinity, and intra-row position. Layout samples the raw scroll offset before GPUI clamps it during prepaint. Logical offsets stay continuous. Painting, selection, and hit geometry share the translation snapped by `Window::pixel_snap_point`. Deferred corrections check the actual prepaint offset to preserve intervening input.

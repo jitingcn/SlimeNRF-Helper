@@ -1656,7 +1656,6 @@ serial:
       clear: "清空"
       close_tab: "关闭标签页"
       copy_all: "全部复制"
-      copy_selection: "复制选中内容"
       export_log: "导出日志"
       follow: "跟随输出"
       retry: "重试"
@@ -1668,7 +1667,7 @@ serial:
       closing: "正在关闭此终端，等待连接停止"
     command_placeholder:
       batch: "发送给所选设备的命令"
-      single: "命令 · 回车发送 · ↑/↓ 历史"
+      single: "命令 · 回车发送 · ↑/↓ 或滚轮查看历史"
     empty:
       connect_hint: "连接串口设备以打开终端"
       no_connection: "尚未连接设备"
@@ -1684,6 +1683,14 @@ serial:
         write: "无法将日志导出到 %{path}：%{error}"
       hint: "保存此端口当前保留的回看日志"
       success: "日志已导出到 %{path}"
+    log_filter:
+      all: "全部"
+      debug: "调试"
+      error: "错误"
+      hint: "在此滚动可切换级别。仅显示所选日志级别及无法分类的输出；全部复制和导出日志仍包含所有内容。"
+      info: "信息"
+      label: "日志：%{level}"
+      warning: "警告"
     status:
       connecting: "正在连接 %{port}…"
       sending: "命令仍在发送中；请稍候"

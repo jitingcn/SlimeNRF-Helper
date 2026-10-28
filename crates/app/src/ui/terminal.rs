@@ -14,7 +14,7 @@ use crate::{
     domain::{Inventory, SerialEndpoint, console_port_allowed},
     i18n::tr,
     sessions::{ConnectionState, WriteReceipt},
-    terminal_view::{TerminalTranscript, TranscriptState, TranscriptViewport},
+    terminal_view::{LogFilter, TerminalTranscript, TranscriptState, TranscriptViewport},
 };
 use futures_util::{FutureExt as _, future::Shared};
 use gpui_kit::component::{
@@ -22,11 +22,13 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::{Input, InputEvent, InputState},
+    menu::{DropdownMenu, PopupMenuItem},
     tab::{Tab, TabBar},
 };
 use gpui_kit::{
     AnyElement, App, BackgroundExecutor, ClipboardItem, Context, Entity, FocusHandle, FontWeight,
-    KeyDownEvent, MouseButton, ScrollHandle, SharedString, Subscription, Task, Window, div,
+    HitboxBehavior, IntoElement, KeyDownEvent, MouseButton, Pixels, ScrollDelta, ScrollEvent,
+    ScrollHandle, SharedString, Subscription, Task, TouchPhase, WeakEntity, Window, canvas, div,
     prelude::*, px, rems,
 };
 use gpui_kit::{
@@ -35,6 +37,118 @@ use gpui_kit::{
 };
 use slimenrf_terminal_core::CommandHistory;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
+
+const TERMINAL_LOG_FILTERS: [LogFilter; 5] = [
+    LogFilter::All,
+    LogFilter::Error,
+    LogFilter::Warning,
+    LogFilter::Info,
+    LogFilter::Debug,
+];
+
+// One selection step per 1.5 rem of continuous trackpad motion.
+const TERMINAL_WHEEL_STEP_REMS: f32 = 1.5;
+
+#[derive(Default)]
+struct TerminalWheel {
+    remainder: f32,
+}
+
+enum WheelResult {
+    Ignored,
+    Accumulating,
+    Step { upward: bool },
+}
+
+impl TerminalWheel {
+    fn scroll(&mut self, event: &ScrollEvent, rem_size: Pixels) -> WheelResult {
+        if event.touch_phase == TouchPhase::Cancelled {
+            self.remainder = 0.;
+            return WheelResult::Ignored;
+        }
+        if event.touch_phase == TouchPhase::Started {
+            self.remainder = 0.;
+        }
+        let (x, y, threshold) = match event.delta {
+            ScrollDelta::Lines(delta) => (delta.x, delta.y, 1.),
+            ScrollDelta::Pixels(delta) => (
+                f32::from(delta.x),
+                f32::from(delta.y),
+                f32::from(rem_size) * TERMINAL_WHEEL_STEP_REMS,
+            ),
+        };
+        let result = if !x.is_finite()
+            || !y.is_finite()
+            || !threshold.is_finite()
+            || threshold <= 0.
+            || y == 0.
+            || x.abs() > y.abs()
+        {
+            WheelResult::Ignored
+        } else {
+            let delta = (y / threshold).clamp(-1., 1.);
+            if self.remainder.signum() != delta.signum() {
+                self.remainder = 0.;
+            }
+            self.remainder = (self.remainder + delta).clamp(-1., 1.);
+            if self.remainder.abs() >= 1. {
+                let upward = self.remainder > 0.;
+                self.remainder = 0.;
+                WheelResult::Step { upward }
+            } else {
+                WheelResult::Accumulating
+            }
+        };
+        if event.touch_phase == TouchPhase::Ended {
+            self.remainder = 0.;
+        }
+        result
+    }
+}
+
+fn next_terminal_log_filter(current: LogFilter, upward: bool) -> LogFilter {
+    let index = TERMINAL_LOG_FILTERS
+        .iter()
+        .position(|filter| *filter == current)
+        .expect("every terminal log filter is in the menu");
+    let next = if upward {
+        index.saturating_sub(1)
+    } else {
+        (index + 1).min(TERMINAL_LOG_FILTERS.len() - 1)
+    };
+    TERMINAL_LOG_FILTERS[next]
+}
+
+fn terminal_history_wheel_capture(port: String, owner: WeakEntity<Workbench>) -> impl IntoElement {
+    canvas(
+        |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+        move |_, hitbox, window, _| {
+            window.on_mouse_event(move |event: &ScrollEvent, phase, window, cx| {
+                if !phase.capture()
+                    || !hitbox.should_handle_scroll(window)
+                    || event.modifiers.modified()
+                {
+                    return;
+                }
+                let _ = owner.update(cx, |this, cx| {
+                    let Some(terminal) = this.terminals.get_mut(&port) else {
+                        return;
+                    };
+                    match terminal.history_wheel.scroll(event, window.rem_size()) {
+                        WheelResult::Ignored => {}
+                        WheelResult::Accumulating => cx.stop_propagation(),
+                        WheelResult::Step { upward } => {
+                            cx.stop_propagation();
+                            this.recall_terminal_command(&port, upward, window, cx);
+                        }
+                    }
+                });
+            });
+        },
+    )
+    .absolute()
+    .inset_0()
+}
 
 pub(super) struct TerminalSession {
     pub(super) input: Entity<InputState>,
@@ -51,6 +165,8 @@ pub(super) struct TerminalSession {
     _subscription: Subscription,
     pub(super) pending: Option<TerminalConnect>,
     history: CommandHistory,
+    history_wheel: TerminalWheel,
+    filter_wheel: TerminalWheel,
     export: TerminalExport,
     export_status: Option<Result<std::path::PathBuf, String>>,
 }
@@ -272,6 +388,8 @@ impl Workbench {
                     _subscription: subscription,
                     pending: None,
                     history: CommandHistory::default(),
+                    history_wheel: TerminalWheel::default(),
+                    filter_wheel: TerminalWheel::default(),
                     export: TerminalExport::default(),
                     export_status: None,
                 },
@@ -825,14 +943,37 @@ impl Workbench {
             }
         }
         terminal.selection_identity = Some(identity);
-        terminal
+        let selection_invalidated = terminal
             .transcript
             .borrow_mut()
             .sync_buffer(&session.terminal, session.generation);
+        if selection_invalidated && terminal.selection.snapshot(cx).is_some() {
+            TextSelection::clear(window, cx);
+        }
         terminal.revision = Some(revision);
         if terminal.follow {
             terminal.scroll.scroll_to_bottom();
         }
+    }
+
+    fn set_terminal_log_filter(
+        &mut self,
+        port: &str,
+        filter: LogFilter,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(terminal) = self.terminals.get_mut(port) else {
+            return;
+        };
+        if !terminal.transcript.borrow_mut().set_log_filter(filter) {
+            return;
+        }
+        terminal.revision = None;
+        if terminal.selection.snapshot(cx).is_some() {
+            TextSelection::clear(window, cx);
+        }
+        cx.notify();
     }
 
     fn copy_terminal_selection(&self, port: &str, _window: &mut Window, cx: &mut Context<Self>) {
@@ -965,7 +1106,12 @@ impl Workbench {
             .expect("selected tab has a session");
         let reconnecting = self.manager.is_reconnecting(port);
         let closing = self.manager.is_close_requested(port);
-        let transcript_empty = terminal.transcript.borrow().is_empty();
+        let transcript_empty = session
+            .terminal
+            .rows()
+            .next()
+            .is_none_or(|(_, _, text, _, newline)| text.is_empty() && !newline);
+        let log_filter = terminal.transcript.borrow().log_filter();
         let waiting = terminal
             .pending
             .as_ref()
@@ -1084,12 +1230,16 @@ impl Workbench {
         let cancel_port = port.to_owned();
         let clear_port = port.to_owned();
         let copy_port = port.to_owned();
-        let copy_selection_port = port.to_owned();
         let follow_port = port.to_owned();
         let wrap_port = port.to_owned();
         let older_history_port = port.to_owned();
         let newer_history_port = port.to_owned();
+        let history_wheel_port = port.to_owned();
+        let history_wheel_owner = cx.weak_entity();
         let export_port = port.to_owned();
+        let filter_port = port.to_owned();
+        let filter_wheel_port = port.to_owned();
+        let filter_owner = cx.weak_entity();
         let title = self.serial_name(port);
         let mut panel = div()
             .flex()
@@ -1205,6 +1355,7 @@ impl Workbench {
                     .min_w_0()
                     .child(
                         div()
+                            .relative()
                             .flex_1()
                             .min_w_0()
                             // Input keybindings dispatch actions before raw key events.
@@ -1232,6 +1383,12 @@ impl Workbench {
                                     );
                                 },
                             ))
+                            // A non-occluding hitbox captures vertical gestures before
+                            // Input can consume their incidental horizontal motion.
+                            .child(terminal_history_wheel_capture(
+                                history_wheel_port,
+                                history_wheel_owner,
+                            ))
                             .child(Input::new(&terminal.input)),
                     )
                     .when(terminal.pending.is_some(), |row| {
@@ -1252,7 +1409,6 @@ impl Workbench {
                     })
                     .child(
                         Button::new("terminal-send")
-                            .small()
                             .flex_shrink_0()
                             .primary()
                             .when(!cx.theme().is_dark(), |button| button.outline())
@@ -1300,20 +1456,6 @@ impl Workbench {
                                     })),
                             )
                             .child(
-                                Button::new("terminal-copy-selection")
-                                    .small()
-                                    .ghost()
-                                    .label(tr("serial.terminal.action.copy_selection"))
-                                    .disabled(!terminal.transcript.borrow().has_selection())
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        this.copy_terminal_selection(
-                                            &copy_selection_port,
-                                            window,
-                                            cx,
-                                        );
-                                    })),
-                            )
-                            .child(
                                 Button::new("terminal-copy")
                                     .small()
                                     .ghost()
@@ -1336,6 +1478,68 @@ impl Workbench {
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         this.export_terminal_log(&export_port, cx);
                                     })),
+                            )
+                            .child(
+                                Button::new("terminal-log-filter")
+                                    .small()
+                                    .dropdown_caret(true)
+                                    .label(
+                                        rust_i18n::t!(
+                                            "serial.terminal.log_filter.label",
+                                            level = terminal_log_filter_label(log_filter)
+                                        )
+                                        .to_string(),
+                                    )
+                                    .tooltip(tr("serial.terminal.log_filter.hint"))
+                                    .on_scroll(cx.listener(
+                                        move |this, event: &ScrollEvent, window, cx| {
+                                            let Some(terminal) =
+                                                this.terminals.get_mut(&filter_wheel_port)
+                                            else {
+                                                return;
+                                            };
+                                            let wheel = terminal
+                                                .filter_wheel
+                                                .scroll(event, window.rem_size());
+                                            match wheel {
+                                                WheelResult::Ignored => {}
+                                                WheelResult::Accumulating => cx.stop_propagation(),
+                                                WheelResult::Step { upward } => {
+                                                    let filter = next_terminal_log_filter(
+                                                        terminal.transcript.borrow().log_filter(),
+                                                        upward,
+                                                    );
+                                                    cx.stop_propagation();
+                                                    this.set_terminal_log_filter(
+                                                        &filter_wheel_port,
+                                                        filter,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                }
+                                            }
+                                        },
+                                    ))
+                                    .dropdown_menu(move |mut menu, _, _| {
+                                        for filter in TERMINAL_LOG_FILTERS {
+                                            let owner = filter_owner.clone();
+                                            let port = filter_port.clone();
+                                            menu = menu.item(
+                                                PopupMenuItem::new(terminal_log_filter_label(
+                                                    filter,
+                                                ))
+                                                .checked(filter == log_filter)
+                                                .on_click(move |_, window, cx| {
+                                                    let _ = owner.update(cx, |this, cx| {
+                                                        this.set_terminal_log_filter(
+                                                            &port, filter, window, cx,
+                                                        );
+                                                    });
+                                                }),
+                                            );
+                                        }
+                                        menu
+                                    }),
                             )
                             .child(
                                 Checkbox::new("terminal-follow")
@@ -1426,6 +1630,16 @@ impl Workbench {
         }
         panel.into_any_element()
     }
+}
+
+fn terminal_log_filter_label(filter: LogFilter) -> String {
+    tr(match filter {
+        LogFilter::All => "serial.terminal.log_filter.all",
+        LogFilter::Error => "serial.terminal.log_filter.error",
+        LogFilter::Warning => "serial.terminal.log_filter.warning",
+        LogFilter::Info => "serial.terminal.log_filter.info",
+        LogFilter::Debug => "serial.terminal.log_filter.debug",
+    })
 }
 
 // Port first: tab/header ellipsis may hide a long description, never the distinguishing port.

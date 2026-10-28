@@ -66,7 +66,7 @@ To analyze data, import a `.slimecap` file or a paired CSV and metadata file in 
 
 The application groups trackers and reliably associated serial functions by receiver. Serial ports that cannot be associated reliably remain separate. Associating a receiver with a serial port requires matching USB IDs and a unique, nonempty USB serial number. Associating a tracker's direct and wireless endpoints requires a unique, normalized device address. Names, tracker IDs, and channels do not prove that two endpoints are the same device. A tracker ID is valid only within its receiver.
 
-Use **Command console** for terminal commands. A CDC port marked **Raw data capture only** is a separate data interface, not a console. Open **Raw capture** to use it. If the console is unavailable or the association is ambiguous, check the USB connection and refresh the device list before selecting again. Do not choose a port by its number.
+Use the device's command-console serial port for terminal commands. A CDC port marked **Raw data capture only** is a separate data interface, not a console. Open **Raw capture** to use it. If the console is unavailable or the association is ambiguous, check the USB connection and refresh the device list before selecting again. Do not choose a port by its number.
 
 - At startup, the application enumerates devices and listens to the main HID interface in read-only mode. It does not open serial ports, send `info`, calibrate, or start raw capture automatically. Opening the ESB page starts read-only firmware information queries.
 - Click a receiver name, available console port name, terminal tab, or online tracker card to change the current command target. Check tracker cards to work with the selected targets. Offline cards cannot join a command selection, but a uniquely identified offline pairing can keep focus for nickname editing. A connected direct serial port with a unique matching identity can also make a card appear online.
@@ -79,11 +79,17 @@ Each port sends and receives independently. Switching tabs or feature pages does
 
 The terminal has bounded scrollback, ANSI colors, output following, cross-line drag selection, plain-text copying, and ↑/↓ recall of the last 100 commands per port. Recalling a command does not send it. Drag selection pauses output following, but reception continues in the background. **Export log** saves only the retained UTF-8 text snapshot at the time you click. It is not a continuous file log, raw capture, or full VT screen emulator.
 
+You can also browse command history with the wheel over the command input: scroll up for older commands and down for newer ones. Returning past the newest history entry restores your draft. This does not send a command; scrolling over the transcript still scrolls its output.
+
 If **Export log** fails, an existing destination file remains unchanged.
 
 New terminal tabs start with **Follow** and **Wrap lines** on. Wrapping fits long output to the terminal width. Each tab retains your manual choices when you switch tabs or pages. These controls affect only the display. Copy and export preserve the retained text's bytes and original line breaks.
 
-Focus the transcript with Tab to navigate its text. Use the arrow keys to move the caret, and hold Shift to extend the selection. Home and End move to the ends of the displayed row. Page Up and Page Down scroll the transcript. On Windows and Linux, Ctrl+Home and Ctrl+End move to the retained text's boundaries, Ctrl+A selects all retained text, and Ctrl+C copies the selection. Keyboard navigation pauses **Follow** without stopping reception. Turn **Follow** on again to resume following new output.
+The **Log level** menu defaults to **All**. Choose **Error**, **Warning**, **Info**, or **Debug** to show that exact level, recognized from the firmware's `<err>`, `<wrn>`, `<inf>`, and `<dbg>` prefixes. Untagged output, including command responses and continuation lines, always remains visible; a continuation does not inherit the preceding line's level. Each tab keeps its own filter until closed. Changing the filter clears the text selection but does not stop reception or delete retained text. **Copy all** and **Export log** still include all retained levels.
+
+Scroll over the log-level control to move through its choices: down selects the next level and up the previous one. The first and last choices do not wrap around. Horizontal scrolling does not change the level.
+
+Focus the transcript with Tab to navigate its text. Use the arrow keys to move the caret, and hold Shift to extend the selection. Home and End move to the ends of the displayed row. Page Up and Page Down scroll the transcript. On Windows and Linux, Ctrl+Home and Ctrl+End move to the displayed text's boundaries, Ctrl+A selects all displayed text, and Ctrl+C copies the selection without including filtered-out lines. There is no separate selection-copy button. Keyboard navigation pauses **Follow** without stopping reception. Turn **Follow** on again to resume following new output.
 
 TPS is the rate of sensor records received by the host. A lack of recent data does not prove that a device is powered off and does not indicate its battery level, signal, or capabilities. A completed serial write is not a device ACK or proof of command completion.
 

@@ -357,6 +357,7 @@ mod tests {
         state.presented = Some(PresentedFrame {
             key: state.layout_key,
             identity: state.identity,
+            projection_generation: state.projection_generation,
             revision: state.revision,
             origin: point(px(0.), px(0.)),
             viewport: Bounds::new(point(px(0.), px(0.)), size(px(100.), px(40.))),
@@ -386,7 +387,7 @@ mod tests {
         }
         state.navigate(Navigation::Left, false, &scroll);
         assert_eq!(state.endpoints, [Some(1), Some(1)]);
-        assert!(!state.has_selection());
+        assert_eq!(state.selected_text(), None);
         state.navigate(Navigation::DocumentEnd, true, &scroll);
         assert_eq!(state.selected_text().as_deref(), Some("界世界 🦀\n\nend"));
         state.navigate(Navigation::DocumentStart, true, &scroll);
