@@ -167,6 +167,34 @@ fn symlink(target: &Path, link: &Path, directory: bool) -> bool {
     result.is_ok()
 }
 
+#[cfg(windows)]
+fn windows_short_path(path: &Path) -> io::Result<PathBuf> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetShortPathNameW(long: *const u16, short: *mut u16, length: u32) -> u32;
+    }
+
+    let input: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    // SAFETY: input is NUL-terminated, and a null output is valid for a size query.
+    let needed = unsafe { GetShortPathNameW(input.as_ptr(), std::ptr::null_mut(), 0) };
+    if needed == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let mut output = vec![0_u16; needed as usize];
+    // SAFETY: output has space for `needed` UTF-16 units and input remains valid.
+    let written = unsafe { GetShortPathNameW(input.as_ptr(), output.as_mut_ptr(), needed) };
+    if written == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if written >= needed {
+        return Err(io::Error::other("short path changed during retrieval"));
+    }
+    output.truncate(written as usize);
+    Ok(PathBuf::from(OsString::from_wide(&output)))
+}
+
 #[test]
 fn initial_repository_scans_nonignored_candidates_before_first_commit() {
     let fixture = Fixture::new();
@@ -714,6 +742,115 @@ fn root_override_cannot_select_parent_or_another_repository() {
         audit_at(&fixture.root, None).err(),
         Some("invalid-application-sentinel")
     );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_short_path_git_root_preserves_audit_guards() {
+    fn reported_root(root: &Path) -> PathBuf {
+        let output = git(root, &["rev-parse", "--show-toplevel"]).expect("query fixture Git root");
+        let root = std::str::from_utf8(&output)
+            .expect("Git root is UTF-8")
+            .trim_end_matches(['\r', '\n']);
+        lexical_absolute(Path::new(root)).expect("Git root is absolute")
+    }
+
+    let fixture = Fixture::new();
+    let original = lexical_absolute(&fixture.root).expect("fixture root is absolute");
+    let short = windows_short_path(&original).expect("query Windows 8.3 path");
+    let short = lexical_absolute(&short).expect("short root is absolute");
+    let mut git_root = reported_root(&short);
+    if paths_equal(&short, &git_root) && !paths_equal(&short, &original) {
+        fixture.git(&[
+            "config",
+            "--local",
+            "core.worktree",
+            original.to_str().expect("fixture path is UTF-8"),
+        ]);
+        git_root = reported_root(&short);
+    }
+    assert!(
+        paths_equal(
+            &fs::canonicalize(&short).expect("canonicalize short root"),
+            &fs::canonicalize(&git_root).expect("canonicalize Git root"),
+        ),
+        "Git and the short path must name the same fixture"
+    );
+    if !paths_equal(&short, &original) {
+        assert!(
+            !paths_equal(&short, &git_root),
+            "an 8.3 alias exists but Git did not report a distinct worktree spelling"
+        );
+    }
+    if paths_equal(&short, &git_root) {
+        eprintln!(
+            "No distinct Windows 8.3/Git root spelling available; alias mismatch not exercised"
+        );
+    } else {
+        eprintln!("Windows 8.3/Git root spelling mismatch exercised");
+    }
+
+    reset_trace();
+    let report = audit_at(&short, Some(&short)).expect("audit through Windows short path");
+    assert!(report.findings.is_empty());
+    assert_eq!(
+        application_root(&short, None).expect("resolve short application root"),
+        short
+    );
+    ACCESS_TRACE.with(|trace| {
+        assert!(
+            trace.borrow().opened.contains(&short.join("Cargo.toml")),
+            "candidate traversal must retain the lexical root"
+        );
+    });
+
+    let alternate = if !paths_equal(&short, &original) {
+        Some(&original)
+    } else if !paths_equal(&short, &git_root) {
+        Some(&git_root)
+    } else {
+        None
+    };
+    if let Some(alternate) = alternate {
+        reset_trace();
+        assert_eq!(
+            audit_at(&short, Some(alternate)).err(),
+            Some("root-does-not-match-application")
+        );
+        assert_not_opened(&[short.join("Cargo.toml")]);
+    }
+
+    fixture.put("guarded.txt", b"must not be opened\n");
+    let guarded_candidate = short.join("guarded.txt");
+    reset_trace();
+    inject_reparse(&guarded_candidate);
+    let report = audit_at(&short, None).expect("audit candidate with injected reparse point");
+    assert_not_opened(&[guarded_candidate]);
+    assert_eq!(
+        report.findings,
+        findings(&[("guarded.txt", 0, "symlink-or-reparse-point")])
+    );
+
+    fixture.put(
+        "Cargo.toml",
+        b"[package]\nname = \"different-application\"\n",
+    );
+    reset_trace();
+    assert_eq!(
+        audit_at(&short, None).err(),
+        Some("invalid-application-sentinel")
+    );
+
+    let git_metadata = short.join(".git");
+    for guarded in [&short, &git_metadata] {
+        reset_trace();
+        inject_reparse(guarded);
+        assert_eq!(
+            audit_at(&short, None).err(),
+            Some("symlink-or-reparse-point")
+        );
+        assert_not_opened(&[short.join("Cargo.toml")]);
+    }
 }
 
 #[test]

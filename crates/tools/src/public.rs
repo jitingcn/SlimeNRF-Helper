@@ -468,7 +468,13 @@ fn application_root(root: &Path, requested: Option<&Path>) -> BoundaryResult<Pat
     let git_root = std::str::from_utf8(&git_root)
         .map_err(|_| "git-root-does-not-match-application")?
         .trim_end_matches(['\r', '\n']);
-    if !paths_equal(&lexical_absolute(Path::new(git_root))?, &root) {
+    let git_root = lexical_absolute(Path::new(git_root))?;
+    // Compare resolved names only after the reparse checks; keep the lexical root for reads.
+    let resolved_root =
+        fs::canonicalize(&root).map_err(|_| "git-root-does-not-match-application")?;
+    let resolved_git_root =
+        fs::canonicalize(&git_root).map_err(|_| "git-root-does-not-match-application")?;
+    if !paths_equal(&resolved_git_root, &resolved_root) {
         return Err("git-root-does-not-match-application");
     }
     let workspace = read_public_bytes(&root, "Cargo.toml")?;

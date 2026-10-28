@@ -196,6 +196,8 @@ cargo nextest run --locked -p slimenrf-tools public::tests
 
 The checker inventories tracked files, nonignored untracked files, and tracked files that match ignore rules. It checks working-tree contents, not staged bytes or Git history. Forbidden publication paths are reported without reading their contents. Text reads are limited to 8 MiB per file and use UTF-8 with an optional BOM. Binary, undecodable, oversized, unreadable, or otherwise unreviewed candidates fail the check, as do symlinks and reparse points.
 
+After checking the application root and `.git` for symlinks or reparse points, the Git-root comparison resolves path aliases, including Windows 8.3/long-name spellings. Candidate traversal and explicit `--root` matching remain lexical. The Windows fixture uses an actual temporary-directory short path and reports whether a distinct Git-root spelling was exercised; to see that status, run `cargo test --locked -p slimenrf-tools windows_short_path_git_root_preserves_audit_guards -- --nocapture`.
+
 Exit code `0` means no findings, `1` means findings need review, and `2` means invalid arguments or a root, Git, or setup failure. Findings contain path, line, and category, not matched secret values. The finite known patterns and documentation-link checks do not prove that credentials, hardware identities, history, or release artifacts are clear. Review those separately. The checker does not stage, publish, delete files, or alter user state.
 
 <a id="license-notices"></a>

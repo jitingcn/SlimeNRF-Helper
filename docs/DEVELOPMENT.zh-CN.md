@@ -196,6 +196,8 @@ cargo nextest run --locked -p slimenrf-tools public::tests
 
 检查器列出已跟踪文件、未被忽略的未跟踪文件，以及匹配忽略规则但仍被跟踪的文件。它检查工作树内容，不检查暂存字节或 Git 历史。禁止公开的路径只报告，不读取其内容。每个文本文件最多读取 8 MiB，使用 UTF-8，可带 BOM。二进制、无法解码、超限、不可读或其他未经审查的候选会使检查失败，符号链接和 reparse point 也会被拒绝。
 
+检查应用根目录与 `.git` 不含符号链接或 reparse point 后，Git 根目录比较会解析路径别名，包括 Windows 8.3 短名与长名。候选路径遍历和显式 `--root` 匹配仍使用词法路径。Windows fixture 使用真实临时目录短路径，并报告是否覆盖了 Git 根目录不同写法；运行 `cargo test --locked -p slimenrf-tools windows_short_path_git_root_preserves_audit_guards -- --nocapture` 可查看状态。
+
 退出码 `0` 表示没有发现问题，`1` 表示发现需要审查的问题，`2` 表示参数无效，或根目录、Git、运行条件出错。问题报告只含路径、行号和类别，不输出匹配到的秘密值。有限的已知模式和文档链接检查不能证明凭据、硬件身份、历史或发布产物已清理，仍需分别审查。检查器不暂存、不发布、不删除文件，也不改变用户状态。
 
 <a id="license-notices"></a>
