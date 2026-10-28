@@ -1,7 +1,9 @@
 use crate::{
     board_catalog::valid_filename,
-    firmware::{MAX_CONTAINER_SIZE, Nrf52Chip, inspect_uf2},
     update::{Progress, Uf2CopyReport, Uf2FinalizationStage},
+};
+use slimenrf_firmware_image::image::{
+    MAX_CONTAINER_SIZE, Uf2ContentError, Uf2ImagePurpose, inspect_uf2, validate_uf2_content,
 };
 #[cfg(not(target_os = "linux"))]
 use std::collections::BTreeSet;
@@ -36,12 +38,6 @@ impl CopyFile for File {
     }
 }
 
-/// Frozen image authorization supplied by planning, never inferred at execution.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum WritePurpose {
-    Application,
-    Bootloader(Nrf52Chip),
-}
 #[derive(Clone, Debug)]
 pub struct Uf2Volume {
     pub mount: PathBuf,
@@ -318,29 +314,16 @@ pub fn revalidate(volume: &Uf2Volume) -> Result<(), String> {
 pub fn validate_for_volume(
     volume: &Uf2Volume,
     bytes: &[u8],
-    purpose: WritePurpose,
+    purpose: Uf2ImagePurpose,
 ) -> Result<(), String> {
-    let (family, limit) = match purpose {
-        WritePurpose::Application => {
-            let metadata = inspect_uf2(bytes)?;
-            let family = metadata
-                .family_id
-                .ok_or("UF2 has no family ID; select a family-tagged nRF image")?;
-            let limit = match family {
-                0xada5_2840 => 1024 * 1024,
-                0x621e_937a | 0x1b57_745f => 512 * 1024,
-                _ => {
-                    return Err(format!(
-                        "UF2 family {family:#010x} is not a supported nRF52 application family"
-                    ));
-                }
-            };
-            (family, limit)
+    // Board-ID mismatch takes precedence over application capacity errors.
+    // The family on this error is content metadata, never device authorization.
+    let (family, capacity_error) = match validate_uf2_content(bytes, purpose) {
+        Ok(facts) => (facts.expected_application_family_id, None),
+        Err(error @ Uf2ContentError::FlashCapacityExceeded { family_id, .. }) => {
+            (family_id, Some(error))
         }
-        WritePurpose::Bootloader(chip) => {
-            chip.validate_bootloader(bytes)?;
-            (chip.application_family(), 0)
-        }
+        Err(error) => return Err(error.into()),
     };
     if let Some(board) = &volume.board_id {
         let board = board.to_ascii_lowercase();
@@ -352,27 +335,17 @@ pub fn validate_for_volume(
             ));
         }
     }
-    // Application retains its existing capacity and UICR policy. Bootloader
-    // records were checked against the frozen chip's stricter updater layout.
-    if purpose == WritePurpose::Application {
-        for block in bytes.as_chunks::<512>().0 {
-            let address = u32::from_le_bytes(block[12..16].try_into().unwrap());
-            let size = u32::from_le_bytes(block[16..20].try_into().unwrap());
-            if address < 0x1000_1000 && address + size > limit {
-                return Err(format!(
-                    "UF2 address {address:#x} exceeds the selected nRF family flash capacity"
-                ));
-            }
-        }
+    match capacity_error {
+        Some(error) => Err(error.into()),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 pub fn write(
     volume: &Uf2Volume,
     name: &str,
     bytes: &[u8],
-    purpose: WritePurpose,
+    purpose: Uf2ImagePurpose,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(Progress),
 ) -> Result<CopyOutcome, String> {
@@ -383,7 +356,7 @@ fn write_with<W: CopyFile>(
     volume: &Uf2Volume,
     name: &str,
     bytes: &[u8],
-    purpose: WritePurpose,
+    purpose: Uf2ImagePurpose,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(Progress),
     wrap: impl FnOnce(File) -> W,
@@ -537,13 +510,14 @@ fn reboot_with<W: CopyFile>(
     // CURRENT is supplied by this frozen device, and its family may be a USB
     // VID/PID rather than an application family. Validate the whole container,
     // not the application whitelist. Never choose any other UF2 as a fallback.
-    inspect_uf2(&current)?;
+    inspect_uf2(&current).map_err(String::from)?;
     copy_to_volume(volume, "REBOOT.UF2", &current, cancel, progress, wrap)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{WritePurpose, inspect_volume, reboot, revalidate, write};
+    use super::{inspect_volume, reboot, revalidate, write};
+    use slimenrf_firmware_image::image::Uf2ImagePurpose;
     use std::{
         fs,
         sync::atomic::{AtomicBool, Ordering},
@@ -581,7 +555,7 @@ mod tests {
             &volume,
             "firmware.uf2",
             &bytes,
-            WritePurpose::Application,
+            Uf2ImagePurpose::Application,
             &cancel,
             &mut |_| {},
         )
@@ -592,7 +566,7 @@ mod tests {
                 &volume,
                 "firmware.uf2",
                 &bytes,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &cancel,
                 &mut |_| {}
             )
@@ -603,7 +577,7 @@ mod tests {
                 &volume,
                 "../other.uf2",
                 &bytes,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &cancel,
                 &mut |_| {}
             )
@@ -614,7 +588,7 @@ mod tests {
                 &volume,
                 "CURRENT.UF2",
                 &bytes,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &cancel,
                 &mut |_| {}
             )
@@ -628,7 +602,7 @@ mod tests {
                 &volume,
                 "wrong.uf2",
                 &wrong,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &cancel,
                 &mut |_| {}
             )
@@ -645,7 +619,7 @@ mod tests {
                 &volume,
                 "new.uf2",
                 &bytes,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &cancel,
                 &mut |_| {}
             )
@@ -664,7 +638,7 @@ mod tests {
                 &volume,
                 "cancel.uf2",
                 &bytes,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &cancel,
                 &mut |_| {}
             )
@@ -677,7 +651,7 @@ mod tests {
                 &volume,
                 "partial.uf2",
                 &bytes,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &cancel,
                 &mut |p| {
                     if p.completed > 0 {
@@ -708,7 +682,7 @@ mod tests {
             &volume,
             "firmware.uf2",
             &bytes,
-            WritePurpose::Application,
+            Uf2ImagePurpose::Application,
             &cancel,
             &mut |_| {},
         )

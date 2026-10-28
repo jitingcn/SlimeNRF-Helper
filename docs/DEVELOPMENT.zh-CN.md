@@ -6,7 +6,7 @@
 
 以下命令均从仓库根目录执行。工程规则以[根 AGENTS](../AGENTS.md)和[记录内核 AGENTS](../crates/recording/AGENTS.md)为准；本页维护操作步骤，不保存历史测试数量或工作站测量。
 
-根清单是虚拟 workspace。默认桌面应用及其源码、构建支持位于 `crates/app`；记录库仍位于 `crates/recording`。共享配置、翻译、脚本、锁文件、工具链和输出目录仍保留在仓库根目录。
+根清单是虚拟 workspace。默认桌面应用及其源码、构建支持位于 `crates/app`；内部库包括 `crates/recording`（`slimenrf-recording`）、`crates/terminal-core`（`slimenrf-terminal-core`）和 `crates/firmware-image`（`slimenrf-firmware-image`）。终端内核仅依赖标准库；固件镜像内核解析并校验镜像内容，不访问硬件或运行时。GPUI 表示、资源、设备授权、传输和生命周期仍归应用所有。共享配置、翻译、脚本、锁文件、工具链和输出目录仍保留在仓库根目录。
 
 命令、行为或链接变更时，同步更新默认英文文档及其同目录的 `.zh-CN.md` 对应文档。导航和跨文档链接保持当前语言。
 
@@ -16,11 +16,11 @@
 
 脚本 test 操作和非纯格式质量检查需要安装 cargo-nextest：`cargo install --locked cargo-nextest --version 0.9.150`。脚本不会自动安装；build、check、纯格式和显式的纯 doctest 操作不需要它。
 
-应用构建需要 Python 3.11+ 及标准库 `tomllib`，用于生成版权材料。这是仅构建时需要的工具，适用于完整和无固件模式下的脚本、直接 Cargo、测试、检查与编辑器分析。运行打包后的应用或只构建 `slimenrf-recording` 不需要 Python。
+应用构建需要 Python 3.11+ 及标准库 `tomllib`，用于生成版权材料。这是仅构建时需要的工具，适用于完整和无固件模式下的脚本、直接 Cargo、测试、检查与编辑器分析。运行打包后的应用或只构建任一内部库不需要 Python，构建内核也不运行应用构建脚本。
 
 可选的 `SLIMENRF_PYTHON` 只接受一个解释器可执行文件名或路径，不接受带参数的 shell 命令。应用 Cargo 构建中，含路径分隔符的相对路径以仓库根目录为基准解析；单独的可执行文件名按正常可执行文件搜索规则查找。显式选择无效或为空时直接失败，不回退。未设置时，应用构建在 Windows 上先探测 `py -3`，再探测 `python3` 和 `python`；Linux 打包探测 `python3` 和 `python`。这些候选均失败时，两种入口都可通过 `PATH` 上的 `uv` 查找已安装的 Python 3.11+。查找忽略项目、虚拟环境、配置和网络，绝不下载 Python。每个选中的解释器都须通过版本及 `tomllib` 探测；编辑器环境也必须能使用该解释器。
 
-CLI 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷时，所有 CLI 构建、运行、检查、打包命令明确加 `-NoFirmware` 或 `--no-firmware`，直接 Cargo 用 `--no-default-features`。完整构建必须提供预期固件，不能用无固件包代替完整包验收。
+CLI 应用及 workspace 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷时，所有选择应用的 CLI 构建、运行、检查、测试和打包命令明确加 `-NoFirmware` 或 `--no-firmware`，直接 Cargo 用 `--no-default-features`。完整构建必须提供预期固件，不能用无固件包代替完整包验收。
 
 脚本支持 build/run/test/check/clippy/fmt/clean：build 默认 Release，run/test/check/clippy 默认开发配置；显式 Debug/Release 互斥。默认 build/run 选择桌面应用，test/check/clippy 覆盖 workspace，fmt 覆盖全部成员；显式 Cargo 包选择优先。开发 profile 中应用使用优化级别 0，recording 和其他依赖使用级别 1；Cargo 默认的 build override 仍不优化。Release 使用优化级别 2、fat LTO、单个 codegen unit，并剥离符号。权威配置见 [Cargo.toml](../Cargo.toml)；package 只取实际 Release 产物，不用开发版替代。
 
@@ -65,7 +65,25 @@ cargo nextest run --workspace --all-targets --locked
 cargo test --workspace --doc --locked
 ```
 
-无固件模式为 Clippy、nextest 和 doctest 添加 `--no-default-features`。脚本 test 操作只运行 nextest；使用 `./build.ps1 -Action test -CargoArguments @('--doc')` 或 `bash ./build.sh test --cargo-arguments --doc` 单独通过 Cargo 运行 doctest。纯 doctest 操作使用 Cargo 参数语义。只查内核可用 `cargo nextest run --locked -p slimenrf-recording` 和 `cargo test --locked --doc -p slimenrf-recording`，仍需 C 编译器，但不需 Python、GPUI、硬件接口、应用 YAML 或固件。外部 updater fixture 与完整固件 oracle 为有真实额外输入的独立检查，不把 ignored 当通过。
+无固件模式为 Clippy、nextest 和 doctest 添加 `--no-default-features`。脚本 test 操作只运行 nextest；使用 `./build.ps1 -Action test -CargoArguments @('--doc')` 或 `bash ./build.sh test --cargo-arguments --doc` 单独通过 Cargo 运行 doctest。纯 doctest 操作使用 Cargo 参数语义。
+
+单独处理内核时可明确选择包；`cargo test` 包含其单元测试和 doctest，`cargo doc --no-deps` 构建其 API 文档：
+
+```text
+cargo check --locked -p slimenrf-recording
+cargo test --locked -p slimenrf-recording
+cargo doc --locked --no-deps -p slimenrf-recording
+
+cargo check --locked -p slimenrf-terminal-core
+cargo test --locked -p slimenrf-terminal-core
+cargo doc --locked --no-deps -p slimenrf-terminal-core
+
+cargo check --locked -p slimenrf-firmware-image
+cargo test --locked -p slimenrf-firmware-image
+cargo doc --locked --no-deps -p slimenrf-firmware-image
+```
+
+如对单个内核使用 nextest，以 `-p` 选择，例如 `cargo nextest run --locked -p slimenrf-recording`，并用 `cargo test --locked --doc -p slimenrf-recording` 单独运行 doctest。记录内核仍需 C 编译器。终端和镜像库不需要 Python、应用构建脚本、GPUI、硬件接口、应用 YAML 或固件载荷。这些定向命令不替代适用的完整和无固件 workspace 覆盖。外部 updater fixture 与完整固件 oracle 为有真实额外输入的独立检查，不把 ignored 当通过。
 
 创建 `Workbench` GUI 测试 fixture 前，在测试函数的最外层创建一个 `ui::test_support::UiTestSession`。同一 `TestAppContext` 的所有 fixture 共用这个会话。让会话保持到回调和断言结束，以隔离进程级语言状态。
 
@@ -138,7 +156,7 @@ Controls 场景提供可选择的合成卡片、短/长内容和动态详情；T
 2. 在 [locales/en.yml](../locales/en.yml) 和 [locales/zh-CN.yml](../locales/zh-CN.yml) 中添加相同的 YAML 层级。层级片段使用小写字母、数字和下划线，以字母开头。叶节点保存文案，不要再拆功能文件。
 3. 保持各语言的 `%{name}` 占位符名称一致。保留有意义的换行。
 4. 用 `tr("firmware.serial_dfu.enter")` 读取普通文案。需要替换占位符时使用 `rust_i18n::t!`。
-5. 直接显示命令值、设备输出、设备名称和用户预设名称，不要把这些数据传给翻译函数。若要翻译记录内核的枚举错误，在应用层映射到键，不要给 `slimenrf-recording` 添加翻译依赖。
+5. 直接显示命令值、设备输出、设备名称和用户预设名称，不要把这些数据传给翻译函数。若要翻译内核错误，在应用层映射到键，不要给内核库添加翻译依赖。
 6. 重新构建应用。仅修改 YAML 也会触发编译，无需触碰 Rust 文件或清理缓存。
 7. 运行[质量检查](#checks-and-editor)的完整和无固件模式。随后切换英文与简体中文，检查修改的界面、输入提示和已打开的工具窗口，并确认已输入的值保持不变。
 
@@ -196,11 +214,11 @@ Windows 上，探测测试程序必须与受控的探测可执行文件放在同
 python3 scripts/generate_notices.py --refresh-inputs --check
 ```
 
-语义指纹不包含 profile 设置；直接依赖变更仍须按下述流程审查。不得借仅 profile 刷新绕过依赖或来源审查。
+语义指纹不包含 profile 设置；workspace 成员及依赖变更仍须按下述流程审查。不得借仅 profile 刷新绕过依赖或来源审查。
 
 Cargo 输入、vendor 源码或许可材料变更时：
 
-1. 审查变更输入。依赖变更时，用以下命令获取两个锁定目标依赖图。从 `slimenrf-helper` 沿 normal 和 build 边追踪，排除 dev 边。将 build 和 proc-macro 路径标为编译工具，保留生成器文件头说明的保守并集与 feature 合并。
+1. 审查变更输入。workspace 成员或依赖变更时，即使第三方版本不变，也用以下命令获取两个锁定目标依赖图。从 `slimenrf-helper` 沿 normal 和 build 边追踪，排除 dev 边。将 build 和 proc-macro 路径标为编译工具，保留生成器文件头说明的保守并集与 feature 合并。
 
    ```bash
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-pc-windows-msvc

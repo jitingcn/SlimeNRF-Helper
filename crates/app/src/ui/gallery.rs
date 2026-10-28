@@ -15,6 +15,7 @@ use gpui_kit::{
     Subscription, TitlebarOptions, Window, WindowBounds, WindowDecorations, WindowOptions, div,
     point, prelude::*, px, rems, size,
 };
+use slimenrf_terminal_core::TerminalBuffer;
 
 use super::{
     AppAssets, Quit,
@@ -26,7 +27,6 @@ use super::{
 use crate::{
     i18n::tr,
     settings::{Appearance, Language, Preferences},
-    terminal::TerminalBuffer,
     terminal_view::{TerminalTranscript, TranscriptState, TranscriptViewport},
 };
 

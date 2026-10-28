@@ -5,8 +5,8 @@ use super::super::{
 };
 use super::{completed, connected, fixture, peer, socket_transport, stopped, until};
 use crate::domain::{DeviceIdentity, Inventory, SerialEndpoint, SerialPortKind};
-use crate::terminal::TerminalBuffer;
 use parking_lot::Mutex;
+use slimenrf_terminal_core::TerminalBuffer;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

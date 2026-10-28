@@ -4,7 +4,7 @@ use super::{FeaturePage, Workbench};
 use crate::{
     ble_ota, board_catalog,
     bundled_resources::Resource,
-    esb_ota, firmware, firmware_source as source, firmware_update, opendfu, uf2,
+    esb_ota, firmware_source as source, firmware_update, uf2,
     update::{
         ActivationSubmission, Job, OtaPhase, OtaPreparation, OtaTargetProgress, Progress,
         ReceiverActivationReport, ReceiverAvailability, UpdateOutcome,
@@ -23,6 +23,10 @@ use gpui_kit::component::{
     tooltip::Tooltip,
 };
 use gpui_kit::{prelude::*, *};
+use slimenrf_firmware_image::{
+    image::{self as firmware, Uf2ImagePurpose},
+    secure_dfu,
+};
 use std::{
     collections::{BTreeSet, HashMap},
     time::{Duration, Instant},
@@ -140,10 +144,10 @@ struct AutoQueryTracker {
 
 #[derive(Clone)]
 enum Action {
-    Uf2(Vec<uf2::Uf2Volume>, Image, uf2::WritePurpose),
+    Uf2(Vec<uf2::Uf2Volume>, Image, Uf2ImagePurpose),
     Reboot(Vec<uf2::Uf2Volume>),
     Enter(SerialEndpoint),
-    OpenDfu(SerialEndpoint, Image, opendfu::Options),
+    OpenDfu(SerialEndpoint, Image, secure_dfu::Options),
     QueryGroups(OtaQueryPlan),
     EsbGroups(Vec<OtaPlanGroup>),
     Ble(Vec<ble_ota::BleDevice>, Image),

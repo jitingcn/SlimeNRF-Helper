@@ -2,7 +2,6 @@
 use std::{
     collections::HashSet,
     future::Future,
-    io::{Cursor, Read},
     pin::Pin,
     sync::{
         Arc,
@@ -19,7 +18,7 @@ use btleplug::{
     platform::{Adapter, Manager, Peripheral},
 };
 use futures_util::{Stream, StreamExt};
-use serde_json::Value;
+use slimenrf_firmware_image::legacy_dfu::{self, Package};
 use tokio::time::{Instant, timeout};
 use uuid::Uuid;
 
@@ -58,8 +57,6 @@ const IO_TIMEOUT: Duration = Duration::from_secs(20);
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(3);
 const SCAN_TIME: Duration = Duration::from_secs(6);
 const PRN: usize = 6;
-const MAX_IMAGE: usize = 1024 * 1024;
-const MAX_ZIP: usize = 4 * 1024 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct BleDevice {
@@ -68,150 +65,6 @@ pub struct BleDevice {
     pub adapter_id: String,
     pub name: String,
     pub address: String,
-}
-
-#[derive(Debug)]
-pub(crate) struct Package {
-    image: Vec<u8>,
-    init: Vec<u8>,
-}
-
-#[cfg(test)]
-impl Package {
-    pub(crate) fn payloads(&self) -> (&[u8], &[u8]) {
-        (&self.image, &self.init)
-    }
-}
-
-fn safe_member(name: &str) -> Result<(), String> {
-    if name.is_empty()
-        || name.contains(['\\', ':', '\0'])
-        || name
-            .split('/')
-            .any(|p| p.is_empty() || p == "." || p == "..")
-    {
-        return Err(format!("Unsafe DFU ZIP member: {name:?}"));
-    }
-    Ok(())
-}
-
-fn member(
-    archive: &mut zip::ZipArchive<Cursor<&[u8]>>,
-    name: &str,
-    limit: usize,
-) -> Result<Vec<u8>, String> {
-    safe_member(name)?;
-    let mut file = archive
-        .by_name(name)
-        .map_err(|e| format!("DFU ZIP {name}: {e}"))?;
-    if file.size() == 0 || file.size() > limit as u64 {
-        return Err(format!("DFU ZIP {name} is empty or exceeds {limit} bytes"));
-    }
-    let size = file.size();
-    let mut bytes = Vec::with_capacity(size as usize);
-    (&mut file)
-        .take(size + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| format!("DFU ZIP {name}: {e}"))?;
-    if bytes.len() as u64 != size {
-        return Err(format!("DFU ZIP {name} has an inconsistent size"));
-    }
-    Ok(bytes)
-}
-
-fn parse_package(name: &str, bytes: &[u8]) -> Result<Package, String> {
-    if !name.to_ascii_lowercase().ends_with(".zip") || bytes.len() > MAX_ZIP {
-        return Err("BLE OTA requires a Legacy DFU application ZIP (maximum 4 MiB)".into());
-    }
-    let mut archive = crate::firmware::zip_envelope::open(
-        bytes,
-        crate::firmware::zip_envelope::Limits {
-            bytes: MAX_ZIP,
-            members: 64,
-            directory: MAX_ZIP,
-        },
-    )?;
-    let mut names = HashSet::new();
-    for i in 0..archive.len() {
-        let file = archive
-            .by_index(i)
-            .map_err(|e| format!("Invalid DFU ZIP: {e}"))?;
-        let name = file
-            .name()
-            .map_err(|e| format!("Cannot decode DFU ZIP member name: {e}"))?;
-        safe_member(name.trim_end_matches('/'))?;
-        if !names.insert(name.as_ref().to_owned()) {
-            return Err(format!("Duplicate DFU ZIP member: {name}"));
-        }
-        if file
-            .unix_mode()
-            .is_some_and(|mode| mode & 0o170000 == 0o120000)
-        {
-            return Err("DFU ZIP symbolic links are not supported".into());
-        }
-    }
-    let manifest: Value = serde_json::from_slice(&member(&mut archive, "manifest.json", 65536)?)
-        .map_err(|e| format!("Invalid DFU manifest: {e}"))?;
-    let root = manifest
-        .get("manifest")
-        .and_then(Value::as_object)
-        .ok_or("Not a Legacy DFU manifest; Secure DFU/MCUboot packages are not supported")?;
-    if root
-        .iter()
-        .any(|(key, value)| key != "application" && !value.is_null())
-    {
-        return Err("BLE OTA accepts application-only Legacy DFU packages, not bootloader/SoftDevice updates".into());
-    }
-    let entry = root
-        .get("application")
-        .and_then(Value::as_object)
-        .ok_or("Legacy DFU ZIP has no application entry")?;
-    let bin = entry
-        .get("bin_file")
-        .and_then(Value::as_str)
-        .ok_or("DFU application is missing bin_file")?;
-    let dat = entry
-        .get("dat_file")
-        .and_then(Value::as_str)
-        .ok_or("DFU application is missing dat_file")?;
-    if bin == dat
-        || !bin.to_ascii_lowercase().ends_with(".bin")
-        || !dat.to_ascii_lowercase().ends_with(".dat")
-    {
-        return Err("Legacy DFU requires separate .bin and .dat members".into());
-    }
-    let image = member(&mut archive, bin, MAX_IMAGE)?;
-    let init = member(&mut archive, dat, 1024)?;
-    if image.len() % 4 != 0 {
-        return Err("Legacy DFU firmware must be 4-byte aligned".into());
-    }
-    if image.starts_with(&[0x3d, 0xb8, 0xf3, 0x96]) {
-        return Err("MCUboot images cannot be sent over Legacy BLE DFU".into());
-    }
-    // Secure DFU .dat is protobuf, not this fixed little-endian SDK11 header.
-    if init.len() < 12 || init[..2] != [0x52, 0] {
-        return Err("Not an Adafruit Legacy init packet (device_type must be 0x0052); Secure DFU is not supported".into());
-    }
-    let count = u16::from_le_bytes([init[8], init[9]]) as usize;
-    let extension = init
-        .get(10 + count * 2..)
-        .ok_or("Truncated Legacy SoftDevice requirements")?;
-    let valid_extension = match extension.len() {
-        2 => true,                           // DFU 0.5 CRC16
-        6 => extension[..4] == [0, 0, 0, 0], // DFU 0.6 CRC16
-        40 | 104 => {
-            let kind = if extension.len() == 40 { 1 } else { 2 };
-            extension[..4] == [kind, 0, 0, 0]
-                && u32::from_le_bytes(extension[4..8].try_into().unwrap()) as usize == image.len()
-        }
-        _ => false,
-    };
-    if !valid_extension {
-        return Err(
-            "Unsupported or malformed Legacy init packet; Secure DFU is not supported".into(),
-        );
-    }
-    Ok(Package { image, init })
 }
 
 fn cancelled(cancel: &AtomicBool) -> Result<(), String> {
@@ -368,7 +221,9 @@ pub(crate) async fn prepare(
 ) -> Result<Package, String> {
     cancelled(cancel)?;
     await_package(
-        tokio::task::spawn_blocking(move || parse_package(&name, &bytes)),
+        tokio::task::spawn_blocking(move || {
+            legacy_dfu::parse_package(&name, &bytes).map_err(String::from)
+        }),
         cancel,
     )
     .await
@@ -425,9 +280,10 @@ pub(crate) async fn flash(
         let notifications = ble(cancel, "Open DFU notification stream", peripheral.notifications()).await?;
         ble(cancel, "Subscribe DFU notifications", peripheral.subscribe(&cp)).await?;
         let chunk = chunk_size(peripheral.mtu())?;
-        report(progress, format!("Legacy DFU: {chunk}-byte packets, PRN {PRN}"), 0, package.image.len());
+        let (image, init) = package.payloads();
+        report(progress, format!("Legacy DFU: {chunk}-byte packets, PRN {PRN}"), 0, image.len());
         let mut transport = Gatt { peripheral: &peripheral, control: &cp, packet: &packet, notifications, cancel };
-        upload(&mut transport, package, chunk, cancel, progress, &mut started).await
+        upload(&mut transport, image, init, chunk, cancel, progress, &mut started).await
     }.await;
     finish_connection(&mut connection, result, started).await
 }
@@ -610,7 +466,8 @@ async fn receipt(
 
 async fn upload(
     transport: &mut impl Transport,
-    package: &Package,
+    image: &[u8],
+    init: &[u8],
     chunk: usize,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
@@ -620,11 +477,11 @@ async fn upload(
     *started = true;
     transport.control(&[1, 4]).await?;
     let mut sizes = [0; 12];
-    sizes[8..].copy_from_slice(&(package.image.len() as u32).to_le_bytes());
+    sizes[8..].copy_from_slice(&(image.len() as u32).to_le_bytes());
     transport.packet(&sizes).await?;
     response(transport, cancel, 1, None).await?;
     transport.control(&[2, 0]).await?;
-    for bytes in package.init.chunks(chunk) {
+    for bytes in init.chunks(chunk) {
         cancelled(cancel)?;
         transport.packet(bytes).await?;
     }
@@ -633,20 +490,15 @@ async fn upload(
     transport.control(&[8, PRN as u8, 0]).await?;
     transport.control(&[3]).await?;
     let mut sent = 0;
-    for (index, bytes) in package.image.chunks(chunk).enumerate() {
+    for (index, bytes) in image.chunks(chunk).enumerate() {
         cancelled(cancel)?;
         transport.packet(bytes).await?;
         sent += bytes.len();
         // The final packet may produce a completion response instead of a PRN. Do not
         // consume that response here then wait for it a second time (including exact PRN multiples).
-        if (index + 1) % PRN == 0 && sent < package.image.len() {
+        if (index + 1) % PRN == 0 && sent < image.len() {
             receipt(transport, cancel, sent).await?;
-            report(
-                progress,
-                "Uploading Legacy BLE firmware",
-                sent,
-                package.image.len(),
-            );
+            report(progress, "Uploading Legacy BLE firmware", sent, image.len());
         }
     }
     response(transport, cancel, 3, Some(sent)).await?;
@@ -654,7 +506,7 @@ async fn upload(
         progress,
         "Validating Legacy BLE firmware",
         sent,
-        package.image.len(),
+        image.len(),
     );
     transport.control(&[4]).await?;
     response(transport, cancel, 4, None).await?;
@@ -664,7 +516,7 @@ async fn upload(
         progress,
         "Firmware validated; activate/reset sent",
         sent,
-        package.image.len(),
+        image.len(),
     );
     Ok(())
 }
@@ -672,9 +524,10 @@ async fn upload(
 #[cfg(test)]
 mod tests {
     use super::{
-        Backend, Cleanup, Notification, Package, Transport, await_package, bounded, chunk_size,
-        finish_connection, notification, parse_package, scan, upload,
+        Backend, Cleanup, Notification, Transport, await_package, bounded, chunk_size,
+        finish_connection, notification, scan, upload,
     };
+    use slimenrf_firmware_image::legacy_dfu;
     use std::{
         collections::VecDeque,
         io::{Cursor, Write},
@@ -711,17 +564,13 @@ mod tests {
     fn init() -> Vec<u8> {
         vec![0x52, 0, 0xff, 0xff, 1, 0, 0, 0, 1, 0, 0xfe, 0xff, 0, 0]
     }
-    fn package(bin_name: &str, image: &[u8], dat: &[u8], extra: bool) -> Vec<u8> {
+    fn package(image: &[u8], dat: &[u8]) -> Vec<u8> {
         let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
         let options = zip::write::SimpleFileOptions::default();
-        let mut manifest = serde_json::json!({"manifest":{"application":{"bin_file":bin_name,"dat_file":"application.dat"}}});
-        if extra {
-            manifest["manifest"]["bootloader"] =
-                serde_json::json!({"bin_file":"boot.bin","dat_file":"boot.dat"});
-        }
+        let manifest = serde_json::json!({"manifest":{"application":{"bin_file":"application.bin","dat_file":"application.dat"}}});
         for (name, bytes) in [
             ("manifest.json", serde_json::to_vec(&manifest).unwrap()),
-            (bin_name, image.to_vec()),
+            ("application.bin", image.to_vec()),
             ("application.dat", dat.to_vec()),
         ] {
             zip.start_file(name, options).unwrap();
@@ -730,50 +579,6 @@ mod tests {
         zip.finish().unwrap().into_inner()
     }
 
-    #[test]
-    fn parses_legacy_application_without_changing_init() {
-        let bytes = package("nested/app.bin", &[1, 2, 3, 4], &init(), false);
-        let parsed = parse_package("legacy.ZIP", &bytes).unwrap();
-        assert_eq!(parsed.image, [1, 2, 3, 4]);
-        assert_eq!(parsed.init, init());
-    }
-    #[test]
-    fn legacy_zip_rejects_unsafe_envelopes_and_false_member_sizes() {
-        let bytes = package("app.bin", &[1, 2, 3, 4], &init(), false);
-        let end = bytes.len() - 22;
-        for (field, value) in [(8, 65u16), (10, 65), (4, 1), (6, 1), (10, u16::MAX)] {
-            let mut malformed = bytes.clone();
-            malformed[end + field..end + field + 2].copy_from_slice(&value.to_le_bytes());
-            assert!(parse_package("legacy.zip", &malformed).is_err());
-        }
-        let central = u32::from_le_bytes(bytes[end + 16..end + 20].try_into().unwrap()) as usize;
-        let local =
-            u32::from_le_bytes(bytes[central + 42..central + 46].try_into().unwrap()) as usize;
-        let size = u32::from_le_bytes(bytes[central + 24..central + 28].try_into().unwrap());
-        for declared in [0, size - 1, size + 1] {
-            let mut malformed = bytes.clone();
-            malformed[local + 22..local + 26].copy_from_slice(&declared.to_le_bytes());
-            malformed[central + 24..central + 28].copy_from_slice(&declared.to_le_bytes());
-            assert!(parse_package("legacy.zip", &malformed).is_err());
-        }
-    }
-    #[test]
-    fn rejects_secure_mcuboot_traversal_unaligned_and_multi_image() {
-        for (name, image, dat, extra) in [
-            (
-                "app.bin",
-                vec![1, 2, 3, 4],
-                vec![0x12, 0x0c, 0x0a, 0x0a, 0x08, 1],
-                false,
-            ),
-            ("app.bin", vec![0x3d, 0xb8, 0xf3, 0x96], init(), false),
-            ("../app.bin", vec![1, 2, 3, 4], init(), false),
-            ("app.bin", vec![1, 2, 3], init(), false),
-            ("app.bin", vec![1, 2, 3, 4], init(), true),
-        ] {
-            assert!(parse_package("bad.zip", &package(name, &image, &dat, extra)).is_err());
-        }
-    }
     #[test]
     fn negotiated_chunks_never_exceed_att_payload_and_are_words() {
         assert_eq!(chunk_size(23).unwrap(), 20);
@@ -833,15 +638,14 @@ mod tests {
             Notification::Response(3),
             Notification::Response(4),
         ]);
-        let data = Package {
-            image: vec![0x55; 140],
-            init: init(),
-        };
+        let image = vec![0x55; 140];
+        let packet = init();
         runtime()
             .unwrap()
             .block_on(upload(
                 &mut io,
-                &data,
+                &image,
+                &packet,
                 20,
                 &AtomicBool::new(false),
                 &mut |_| {},
@@ -867,13 +671,13 @@ mod tests {
         );
         assert_eq!(io.writes[1].1, [0, 0, 0, 0, 0, 0, 0, 0, 140, 0, 0, 0]);
         let packets: Vec<_> = io.writes.iter().filter(|(cp, _)| !cp).collect();
-        assert_eq!(packets[1].1, data.init);
+        assert_eq!(packets[1].1, packet);
         assert_eq!(
             packets[2..]
                 .iter()
                 .flat_map(|(_, bytes)| bytes.iter().copied())
                 .collect::<Vec<_>>(),
-            data.image
+            image
         );
     }
     #[test]
@@ -889,10 +693,8 @@ mod tests {
                 .unwrap()
                 .block_on(upload(
                     &mut io,
-                    &Package {
-                        image: vec![0; 120],
-                        init: init(),
-                    },
+                    &[0; 120],
+                    &init(),
                     20,
                     &AtomicBool::new(false),
                     &mut |_| {},
@@ -910,10 +712,8 @@ mod tests {
         ]);
         let result = runtime().unwrap().block_on(upload(
             &mut io,
-            &Package {
-                image: vec![0; 140],
-                init: init(),
-            },
+            &[0; 140],
+            &init(),
             20,
             &AtomicBool::new(false),
             &mut |_| {},
@@ -937,10 +737,8 @@ mod tests {
         io.fail_activation = true;
         let result = runtime().unwrap().block_on(upload(
             &mut io,
-            &Package {
-                image: vec![0; 4],
-                init: init(),
-            },
+            &[0; 4],
+            &init(),
             20,
             &AtomicBool::new(false),
             &mut |_| {},
@@ -982,10 +780,8 @@ mod tests {
                 .unwrap()
                 .block_on(upload(
                     &mut io,
-                    &Package {
-                        image: vec![0; 4],
-                        init: init()
-                    },
+                    &[0; 4],
+                    &init(),
                     20,
                     &AtomicBool::new(true),
                     &mut |_| {},
@@ -1003,7 +799,7 @@ mod tests {
             let cancel = AtomicBool::new(false);
             let completed = Arc::new(AtomicBool::new(false));
             let parsed = Arc::clone(&completed);
-            let bytes = package("application.bin", &[1, 2, 3, 4], &init(), false);
+            let bytes = package(&[1, 2, 3, 4], &init());
             let storage: Arc<[u8]> = Arc::from(bytes);
             let parser_storage = Arc::clone(&storage);
             let (entered, ready) = oneshot::channel();
@@ -1011,7 +807,8 @@ mod tests {
             let task = tokio::task::spawn_blocking(move || {
                 entered.send(()).unwrap();
                 blocked.recv().unwrap();
-                let result = parse_package("legacy.zip", &parser_storage);
+                let result =
+                    legacy_dfu::parse_package("legacy.zip", &parser_storage).map_err(String::from);
                 parsed.store(true, Ordering::Release);
                 result
             });
@@ -1113,15 +910,14 @@ mod tests {
                 starts: Arc::clone(&starts),
                 drops: Arc::clone(&drops),
             };
-            let package = Package {
-                image: vec![0x55; 20],
-                init: init(),
-            };
+            let image = [0x55; 20];
+            let packet = init();
             let mut started = false;
             let mut progress = |_| {};
             let mut upload = Box::pin(require_send(upload(
                 &mut io,
-                &package,
+                &image,
+                &packet,
                 20,
                 &cancel,
                 &mut progress,
@@ -1198,14 +994,13 @@ mod tests {
                     starts: worker_starts,
                     drops: worker_drops,
                 };
-                let package = Package {
-                    image: vec![0x55; 20],
-                    init: init(),
-                };
+                let image = [0x55; 20];
+                let packet = init();
                 let mut started = false;
                 let result = upload(
                     &mut io,
-                    &package,
+                    &image,
+                    &packet,
                     20,
                     &cancel,
                     &mut |value| progress.emit(value),

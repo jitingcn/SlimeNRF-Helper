@@ -4,6 +4,7 @@ use super::support::{
 };
 use crate::domain::TrackerLink;
 use crate::ui::flash::{Action, Mode, Payload, ota_target_key, plan_ota_groups};
+use slimenrf_firmware_image::{image::Uf2ImagePurpose, secure_dfu};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -85,11 +86,7 @@ fn background_default_preserves_other_page_review_and_auto_copy_intent() {
                     .unwrap();
                     let volume =
                         crate::uf2::inspect_volume(directory.path(), "INFO_UF2.TXT").unwrap();
-                    Action::Uf2(
-                        vec![volume],
-                        image.clone(),
-                        crate::uf2::WritePurpose::Application,
-                    )
+                    Action::Uf2(vec![volume], image.clone(), Uf2ImagePurpose::Application)
                 }
                 Mode::OpenDfu => Action::OpenDfu(
                     crate::domain::SerialEndpoint {
@@ -104,7 +101,7 @@ fn background_default_preserves_other_page_review_and_auto_copy_intent() {
                         usb_interface: None,
                     },
                     image.clone(),
-                    crate::opendfu::Options::default(),
+                    secure_dfu::Options::default(),
                 ),
                 Mode::Ble => Action::Ble(vec![], image.clone()),
                 Mode::Esb => unreachable!(),

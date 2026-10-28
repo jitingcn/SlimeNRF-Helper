@@ -336,9 +336,9 @@ impl TranscriptState {
 #[cfg(test)]
 mod tests {
     use super::Navigation;
-    use crate::terminal::{MAX_LINES, TerminalBuffer};
     use crate::terminal_view::{PresentedFrame, TranscriptState, geometry::geometry_fixture};
     use gpui_kit::{Bounds, ScrollHandle, point, px, size};
+    use slimenrf_terminal_core::{MAX_LINES, TerminalBuffer};
 
     fn fixture(text: &str, seams: &[&[usize]]) -> (TerminalBuffer, TranscriptState, ScrollHandle) {
         let mut buffer = TerminalBuffer::new();

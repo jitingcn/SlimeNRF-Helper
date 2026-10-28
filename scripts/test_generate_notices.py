@@ -33,7 +33,9 @@ class NoticeGeneratorTests(unittest.TestCase):
         for name, content in {
             "Cargo.toml": b'[workspace.package]\nlicense = "MIT OR Apache-2.0"\n',
             "crates/app/Cargo.toml": b'[package]\nname = "slimenrf-helper"\nlicense.workspace = true\n',
-            "crates/recording/Cargo.toml": b'[package]\nlicense.workspace = true\n',
+            "crates/firmware-image/Cargo.toml": b'[package]\nname = "slimenrf-firmware-image"\nlicense.workspace = true\n',
+            "crates/recording/Cargo.toml": b'[package]\nname = "slimenrf-recording"\nlicense.workspace = true\n',
+            "crates/terminal-core/Cargo.toml": b'[package]\nname = "slimenrf-terminal-core"\nlicense.workspace = true\n',
             "Cargo.lock": b'[[package]]\nname = "example"\nversion = "1.2.3"\nchecksum = "abc123"\n',
             "LICENSE-MIT": b"Application MIT terms\n",
             "LICENSE-APACHE": b"Application Apache terms\n",
@@ -222,6 +224,49 @@ class NoticeGeneratorTests(unittest.TestCase):
         self.assertEqual(notices.semantic_manifest_hash(manifest), notices.digest(canonical))
         self.assertNotEqual(notices.semantic_manifest_hash(manifest.replace(b"example", b"other")),
                             notices.digest(canonical))
+
+    def test_extracted_manifests_are_reviewed_and_watched(self):
+        output = self.root / "notices.txt"
+        snapshot = self.root / notices.INPUT
+        self.assertEqual(self.invoke("--output", str(output), "--cargo-rerun"), 0)
+        records = self.stdout.splitlines()
+        before_output = output.read_bytes()
+        before_snapshot = snapshot.read_bytes()
+        for name in ("crates/firmware-image/Cargo.toml", "crates/terminal-core/Cargo.toml"):
+            with self.subTest(name=name):
+                self.assertIn(f"cargo:rerun-if-changed={self.root / name}", records)
+                path = self.root / name
+                original = path.read_bytes()
+                path.write_bytes(original + b'\n[dependencies]\nnew = "1"\n')
+                self.assertEqual(self.invoke("--output", str(output)), 1)
+                self.assertIn(f"Stale input hash: {name}", self.stderr)
+                self.assertEqual(self.invoke("--refresh-inputs", "--output", str(output)), 1)
+                self.assertIn(f"Manifest semantics changed: {name}", self.stderr)
+                self.assertEqual(snapshot.read_bytes(), before_snapshot)
+                self.assertEqual(output.read_bytes(), before_output)
+                path.write_bytes(original)
+
+    def test_extracted_manifests_require_inventory_and_semantic_fingerprints(self):
+        snapshot = self.root / notices.INPUT
+        for section, message in (
+            ("input_sha256", "Missing mandatory application or vendor license input"),
+            ("manifest_semantic_sha256", "Missing or invalid reviewed manifest semantic"),
+        ):
+            for name in ("crates/firmware-image/Cargo.toml", "crates/terminal-core/Cargo.toml"):
+                with self.subTest(section=section, name=name):
+                    value = self.document[section].pop(name)
+                    self.save()
+                    before = snapshot.read_bytes()
+                    self.assertEqual(self.invoke("--check", "--refresh-inputs"), 1)
+                    self.assertIn(message, self.stderr)
+                    self.assertEqual(snapshot.read_bytes(), before)
+                    if section == "input_sha256":
+                        output = self.root / "pending.txt"
+                        self.assertEqual(self.invoke("--development", "--output", str(output), "--cargo-rerun"), 0)
+                        self.assertIn(f"cargo:rerun-if-changed={self.root / name}", self.stdout.splitlines())
+                        self.assertIn(b"DEVELOPMENT LICENSE REVIEW PENDING", output.read_bytes())
+                        self.assertEqual(snapshot.read_bytes(), before)
+                    self.document[section][name] = value
 
     def test_refresh_rejects_dependency_package_lock_and_vendor_changes(self):
         snapshot = self.root / notices.INPUT

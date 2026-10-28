@@ -7,6 +7,7 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, Entity, ScrollDelta, TestAppContext, WindowBounds,
     WindowOptions, point, px, size, test::TestWindowExt as _,
 };
+use slimenrf_terminal_core::MAX_LINES;
 
 struct Fixture {
     handle: AnyWindowHandle,
@@ -59,7 +60,7 @@ fn settle_gallery(cx: &mut TestAppContext, fixture: &Fixture) {
 fn settle_terminal(cx: &mut TestAppContext, fixture: &Fixture, phase: &str) {
     // Match the transcript lifecycle's bounded reflow settlement: callbacks
     // may require more than one frame as wrapped lines are measured.
-    for _ in 0..crate::terminal::MAX_LINES + 10 {
+    for _ in 0..MAX_LINES + 10 {
         cx.run_until_parked();
         let delivered = cx
             .update_window(fixture.handle, |_, window, cx| {

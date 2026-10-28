@@ -52,7 +52,7 @@ pub struct FlashPreset {
     pub display_name: String,
     pub bootloader: Option<Resource>,
     pub bootloader_board: Option<String>,
-    pub bootloader_mcu: Option<crate::firmware::Nrf52Chip>,
+    pub bootloader_mcu: Option<slimenrf_firmware_image::image::Nrf52Chip>,
     pub additional_bootloaders: Vec<Resource>,
     pub success: Option<String>,
     pub targets: Vec<FlashTarget>,

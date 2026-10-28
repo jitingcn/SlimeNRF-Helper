@@ -7,8 +7,12 @@
 use crate::{
     ble_ota, discovery,
     domain::{Inventory, ReceiverEndpoint, SerialEndpoint, TrackerLink, console_port_allowed},
-    esb_ota, firmware, opendfu, uf2,
+    esb_ota, opendfu, uf2,
     update::{OtaPhase, OtaTargetProgress, Progress, UpdateOutcome},
+};
+use slimenrf_firmware_image::{
+    image::{self as firmware, Uf2ImagePurpose},
+    legacy_dfu, secure_dfu,
 };
 use std::sync::{
     Arc,
@@ -26,10 +30,10 @@ pub(crate) struct EsbGroup {
 }
 
 pub(crate) enum UpdateRequest {
-    Uf2(Vec<uf2::Uf2Volume>, FileImage, uf2::WritePurpose),
+    Uf2(Vec<uf2::Uf2Volume>, FileImage, Uf2ImagePurpose),
     Reboot(Vec<uf2::Uf2Volume>),
     Enter(SerialEndpoint),
-    OpenDfu(SerialEndpoint, FileImage, opendfu::Options),
+    OpenDfu(SerialEndpoint, FileImage, secure_dfu::Options),
     QueryGroups(Vec<(ReceiverEndpoint, Vec<TrackerLink>, bool)>),
     EsbGroups(Vec<EsbGroup>),
 }
@@ -255,12 +259,12 @@ trait BleBatchTransport {
         &mut self,
         image: FileImage,
         cancel: &AtomicBool,
-    ) -> impl Future<Output = Result<ble_ota::Package, String>> + Send;
+    ) -> impl Future<Output = Result<legacy_dfu::Package, String>> + Send;
 
     fn flash(
         &mut self,
         device: &ble_ota::BleDevice,
-        package: &ble_ota::Package,
+        package: &legacy_dfu::Package,
         cancel: &AtomicBool,
         progress: &mut (dyn FnMut(Progress) + Send),
     ) -> impl Future<Output = Result<(), String>> + Send;
@@ -271,14 +275,14 @@ impl BleBatchTransport for &ble_ota::Backend {
         &mut self,
         image: FileImage,
         cancel: &AtomicBool,
-    ) -> impl Future<Output = Result<ble_ota::Package, String>> + Send {
+    ) -> impl Future<Output = Result<legacy_dfu::Package, String>> + Send {
         ble_ota::prepare(image.name, image.bytes, cancel)
     }
 
     fn flash(
         &mut self,
         device: &ble_ota::BleDevice,
-        package: &ble_ota::Package,
+        package: &legacy_dfu::Package,
         cancel: &AtomicBool,
         progress: &mut (dyn FnMut(Progress) + Send),
     ) -> impl Future<Output = Result<(), String>> + Send {

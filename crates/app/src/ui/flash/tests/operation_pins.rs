@@ -557,7 +557,7 @@ fn opendfu_admission_preserves_accepted_serial_writes(cx: &mut gpui_kit::TestApp
         Action::OpenDfu(
             port,
             super::support::local_image("synthetic-handoff.hex"),
-            crate::opendfu::Options::default(),
+            slimenrf_firmware_image::secure_dfu::Options::default(),
         )
     });
 }

@@ -28,13 +28,17 @@ class PrereleasePreparationTests(unittest.TestCase):
         self.commit = "1234567890abcdef1234567890abcdef12345678"
         self.body = "### Added\n\n- A user-facing feature.\n\n### Fixed\n\n- A corrected behavior."
         self.workspace_manifest = (
-            '[workspace]\nmembers = ["crates/app", "crates/member"]\n'
+            '[workspace]\nmembers = ["crates/app", "crates/recording", '
+            '"crates/firmware-image", "crates/terminal-core"]\n'
             '[workspace.package]\nversion = "1.2.3"\n'
         )
         self.app_manifest = '[package]\nname = "slimenrf-helper"\nversion.workspace = true\n'
         self.put("Cargo.toml", self.workspace_manifest)
         self.put("crates/app/Cargo.toml", self.app_manifest)
-        self.put("crates/member/Cargo.toml", '[package]\nname = "member"\nversion = "9.9.9"\n')
+        for crate, version in (("recording", "2.0.0"), ("firmware-image", "3.0.0"),
+                               ("terminal-core", "4.0.0")):
+            self.put(f"crates/{crate}/Cargo.toml",
+                     f'[package]\nname = "slimenrf-{crate}"\nversion = "{version}"\n')
         self.changelog = (
             "# Changelog\n\n## [Unreleased]\n\n### Changed\n\n- Not yet released.\n\n"
             f"## [1.2.3] - 2026-10-26\n\n{self.body}\n\n"

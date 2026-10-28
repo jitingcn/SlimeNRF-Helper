@@ -45,7 +45,12 @@ class WorkspacePackagingTests(unittest.TestCase):
         executable.chmod(0o755)
         app = {"name": "slimenrf-helper", "version": "1.2.3", "id": "app-id",
                "manifest_path": str(self.root / manifest_path)}
-        packages = [app]
+        packages = [app, *(
+            {"name": f"slimenrf-{crate}", "version": version, "id": f"{crate}-id",
+             "manifest_path": str(self.root / f"crates/{crate}/Cargo.toml")}
+            for crate, version in (("recording", "2.0.0"), ("firmware-image", "3.0.0"),
+                                   ("terminal-core", "4.0.0"))
+        )]
         if include_decoy:
             packages.append({"name": "slimenrf-helper", "version": "9.9.9", "id": "other-id",
                              "manifest_path": str(self.root / "Cargo.toml")})
@@ -54,20 +59,26 @@ class WorkspacePackagingTests(unittest.TestCase):
         artifact = {"reason": "compiler-artifact", "package_id": "app-id",
                     "target": {"name": "slimenrf-helper", "kind": ["bin"]},
                     "profile": {"test": False}, "executable": str(executable)}
-        artifacts = self.put("artifacts.jsonl", (json.dumps(artifact) + "\n").encode())
+        library_artifact = artifact | {"package_id": "firmware-image-id",
+                                       "executable": str(self.root / "target/release/not-the-app")}
+        artifacts = self.put("artifacts.jsonl",
+                             (json.dumps(library_artifact) + "\n" + json.dumps(artifact) + "\n").encode())
         return subprocess.run([sys.executable, str(SCRIPTS / "package-artifact.py"), str(self.root),
                                str(metadata), str(artifacts), "1", "0", "elf"],
                               capture_output=True, text=True)
 
     def test_package_selects_relocated_workspace_app_and_keeps_artifact_name(self):
-        result = self.package("crates/app/Cargo.toml", ["app-id"], include_decoy=True)
+        result = self.package("crates/app/Cargo.toml",
+                              ["app-id", "recording-id", "firmware-image-id", "terminal-core-id"],
+                              include_decoy=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         artifact = self.root / "dist/slimenrf-helper-1.2.3-linux-x64-no-firmware"
         self.assertEqual(artifact.read_bytes(), (self.root / "target/release/slimenrf-helper").read_bytes())
         self.assertTrue(artifact.stat().st_mode & 0o111)
 
     def test_package_rejects_old_location_and_nonmember(self):
-        for manifest, members in (("Cargo.toml", ["app-id"]), ("crates/app/Cargo.toml", [])):
+        for manifest, members in (("Cargo.toml", ["app-id", "terminal-core-id"]),
+                                  ("crates/app/Cargo.toml", ["recording-id", "firmware-image-id"])):
             with self.subTest(manifest=manifest, members=members):
                 result = self.package(manifest, members)
                 self.assertNotEqual(result.returncode, 0)
@@ -75,18 +86,25 @@ class WorkspacePackagingTests(unittest.TestCase):
                 self.assertFalse((self.root / "dist").exists())
 
     def test_flatpak_stages_real_workspace_inputs_without_empty_examples(self):
-        for relative in (
+        source_inputs = (
             "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "LICENSE-MIT", "LICENSE-APACHE",
             "scripts/generate_notices.py", "scripts/notices-inputs.json",
             "crates/app/Cargo.toml", "crates/app/build.rs", "crates/app/src/main.rs",
             "crates/app/build_support/notices.rs", "locales/en.yml",
             "crates/recording/Cargo.toml", "crates/recording/build.rs",
             "crates/recording/src/lib.rs", "crates/recording/vendor/vqf/LICENSE",
-            "scripts/appimage/slimenrf-helper.svg",
-            f"scripts/flatpak/{flatpak.APP_ID}.desktop",
-        ):
-            self.put(relative)
-        self.put("crates/app/src/.cache/private.txt", b"excluded\n")
+            "crates/firmware-image/Cargo.toml", "crates/firmware-image/src/lib.rs",
+            "crates/firmware-image/src/parsers/nested.rs",
+            "crates/terminal-core/Cargo.toml", "crates/terminal-core/src/lib.rs",
+            "crates/terminal-core/src/model/nested.rs",
+        )
+        for relative in (*source_inputs, "scripts/appimage/slimenrf-helper.svg",
+                         f"scripts/flatpak/{flatpak.APP_ID}.desktop"):
+            self.put(relative, f"fixture for {relative}\n".encode())
+        for relative in ("crates/app/src/.cache/private.txt",
+                         "crates/firmware-image/src/target/private.txt",
+                         "crates/terminal-core/src/.cache/private.txt"):
+            self.put(relative, b"excluded\n")
         self.put("config/selected.yaml", b"firmware_root: ignored\n")
         self.put("firmware/test.UF2", b"firmware\n")
         self.put("firmware/nested/not-staged.uf2", b"nested\n")
@@ -103,13 +121,13 @@ class WorkspacePackagingTests(unittest.TestCase):
                           [], 0, stdout="[source.crates-io]\nreplace-with = 'vendored-sources'\n"))):
                     source = flatpak.stage_sources(self.root, stage, no_firmware,
                                                    lambda path: open(path, "rb"))
-                for relative in ("Cargo.toml", "crates/app/Cargo.toml", "crates/app/build.rs",
-                                 "crates/app/src/main.rs", "crates/app/build_support/notices.rs",
-                                 "crates/recording/src/lib.rs", "crates/recording/vendor/vqf/LICENSE",
-                                 "locales/en.yml", ".cargo/config.toml"):
-                    self.assertTrue((source / relative).is_file(), relative)
+                for relative in source_inputs:
+                    self.assertEqual((source / relative).read_bytes(), (self.root / relative).read_bytes(), relative)
+                self.assertEqual((source / ".cargo/config.toml").read_text(encoding="utf-8"),
+                                 "[source.crates-io]\nreplace-with = 'vendored-sources'\n")
                 self.assertEqual((source / "slimenrf-helper.yaml").read_bytes(), b"firmware_root: ignored\n")
-                for absent in ("examples", "src", "build_support", "crates/app/src/.cache"):
+                for absent in ("examples", "src", "build_support", "crates/app/src/.cache",
+                               "crates/firmware-image/src/target", "crates/terminal-core/src/.cache"):
                     self.assertFalse((source / absent).exists(), absent)
                 firmware = source / "flatpak-firmwares"
                 self.assertEqual(firmware.exists(), not no_firmware)

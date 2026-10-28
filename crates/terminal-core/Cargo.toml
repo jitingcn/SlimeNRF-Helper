@@ -1,0 +1,11 @@
+[package]
+name = "slimenrf-terminal-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Hardware-independent SlimeNRF terminal transcript and command history"
+
+[lints]
+workspace = true

@@ -28,9 +28,12 @@ class PublicCheckerTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve() / "application"
         self.root.mkdir()
-        self.put("Cargo.toml", '[workspace]\nmembers = ["crates/app", "crates/recording"]\n')
+        self.put("Cargo.toml", '[workspace]\nmembers = ["crates/app", "crates/recording", '
+                               '"crates/firmware-image", "crates/terminal-core"]\n')
         self.put("crates/app/Cargo.toml", '[package]\nname = "slimenrf-helper"\n')
         self.put("crates/recording/Cargo.toml", '[package]\nname = "slimenrf-recording"\n')
+        self.put("crates/firmware-image/Cargo.toml", '[package]\nname = "slimenrf-firmware-image"\n')
+        self.put("crates/terminal-core/Cargo.toml", '[package]\nname = "slimenrf-terminal-core"\n')
         self.put("crates/app/src/main.rs", "fn main() {}\n")
         (self.root / "scripts").mkdir()
         shutil.copyfile(CHECKER, self.root / "scripts/check-public.py")
@@ -114,6 +117,21 @@ class PublicCheckerTests(unittest.TestCase):
         self.assertNotIn("ignored-only.txt", report.inventory.candidates)
         self.assertEqual(self.findings(report), set())
         self.assertEqual(report.counts["scanned_text"], len(report.inventory.candidates))
+
+    def test_new_crate_sources_are_inventoried_and_scanned(self):
+        tracked = "crates/terminal-core/src/lib.rs"
+        untracked = "crates/firmware-image/src/parser.rs"
+        for path in (tracked, untracked):
+            self.put(path, "// " + "token" + ' = "public-review-fixture"\n')
+        self.git("add", "--", tracked)
+
+        report = self.checker.audit()
+        self.assertIn(tracked, report.inventory.tracked)
+        self.assertIn(untracked, report.inventory.untracked)
+        self.assertEqual(self.findings(report), {
+            (tracked, 1, "credential-assignment"),
+            (untracked, 1, "credential-assignment"),
+        })
 
     def test_forbidden_tracked_paths_are_flagged_without_content_reads(self):
         paths = (".local/private.txt", "dist/export.txt", "captures/session.csv",

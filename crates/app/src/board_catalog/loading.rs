@@ -40,7 +40,7 @@ struct RawPreset {
     target: FlashTarget,
     bootloader: Option<Resource>,
     bootloader_board: Option<String>,
-    bootloader_mcu: Option<crate::firmware::Nrf52Chip>,
+    bootloader_mcu: Option<slimenrf_firmware_image::image::Nrf52Chip>,
     success: Option<String>,
     targets: Option<Vec<FlashTarget>>,
 }

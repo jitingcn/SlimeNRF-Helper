@@ -4,8 +4,8 @@ use super::{
     SessionManager, SessionView, Worker, WriteReceipt, port_key,
 };
 use crate::domain::DeviceIdentity;
-use crate::terminal::TerminalBuffer;
 use parking_lot::Mutex;
+use slimenrf_terminal_core::TerminalBuffer;
 use std::io;
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, AtomicUsize};

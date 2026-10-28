@@ -4,7 +4,7 @@
 
 [Home](../README.md) · [Development](DEVELOPMENT.md) · [Protocol contracts](PROTOCOLS.md)
 
-The project has one product, one desktop executable, and a small Cargo workspace. The root is a virtual workspace; `crates/app` contains the `slimenrf-helper` composition point and is the default member. The internal `crates/recording` (`slimenrf-recording`) library owns the recording and replay core, which can be consumed independently but is not released separately. App source, build script and build support live under `crates/app`; shared configuration, translations, scripts, assets and workspace settings remain at the repository root. Module boundaries follow dependencies and resource ownership, not pages or file length. There is no dynamic DLL plugin system or forwarding layer for old paths. The [root AGENTS](../AGENTS.md) and [core AGENTS](../crates/recording/AGENTS.md) define the mandatory engineering rules.
+The project has one product, one desktop executable, and a small Cargo workspace. The root is a virtual workspace; `crates/app` contains the `slimenrf-helper` composition point and is the default member. The internal libraries are `crates/recording` (`slimenrf-recording`) for recording and replay, `crates/terminal-core` (`slimenrf-terminal-core`) for the std-only terminal model, and `crates/firmware-image` (`slimenrf-firmware-image`) for image parsing and content validation. The recording core can be consumed independently but is not released separately. App source, build script and build support live under `crates/app`; shared configuration, translations, scripts, assets and workspace settings remain at the repository root. Module boundaries follow dependencies and resource ownership, not pages or file length. There is no dynamic DLL plugin system or forwarding layer for old paths. The [root AGENTS](../AGENTS.md) and [recording-core AGENTS](../crates/recording/AGENTS.md) define the mandatory engineering rules.
 
 ## Dependency direction and modules
 
@@ -13,6 +13,8 @@ flowchart TD
 	UI[GPUI presentation] --> App[Application orchestration: admission, frozen plans, scheduling, resource handoff]
 	App --> Device[Device and protocol services]
 	App --> Core[slimenrf-recording]
+	App --> Terminal[slimenrf-terminal-core]
+	App --> Image[slimenrf-firmware-image]
 ```
 
 Unless a package is named explicitly, module paths below are relative to `crates/app/src`.
@@ -26,7 +28,7 @@ Unless a package is named explicitly, module paths below are relative to `crates
 | `discovery` | Passive enumeration and native interface metadata ingestion, the single passive reader for the receiver's main HID interface, and HID leases. |
 | `receiver_events` | Shared `Watch` driver for event capability checks, subscriptions, renewal, and bounded stop. Passive discovery and the exclusive calibration worker supply their own filter, mask, and subscription intent. |
 | `sessions` | Serial connections, interface-aware recovery identity, current-inventory console admission, control lines, workers, bounded write and display queues, close completion, session generations, serial leases, and the reservation-validated one-use `ReservedConsoleSource` handoff. |
-| `terminal` / `terminal_view` | Streaming ANSI and UTF-8, bounded scrollback and command history, byte-based selection, and cached visual rows for optional line wrapping. |
+| `terminal_view` | GPUI terminal presentation, byte-based selection, cached visual rows, scrolling, and optional line wrapping. |
 | `rssi_scan` | Bounded parsing of RSSI console tables, source metadata, and sparse measured snapshots. No device access or UI dependency. |
 | `commands` / `operations` | One command catalog, parameter, risk, role, and route authorization, frozen batch targets, and per-target results. |
 | `shortcuts` / `settings/shortcuts` | Validated ordered saved-card data and bounded transactional storage, separate from preferences and device authorization. |
@@ -39,9 +41,9 @@ Unless a package is named explicitly, module paths below are relative to `crates
 | `calibration` / `calibration/{direct,wireless,worker}` | Evidence model and reducer, complete console responses, receiver-event association, and the private native calibration worker. Dispatch, application, storage, observation lifetime, and user acknowledgement remain separate. |
 | `ui/calibration` / `ui/calibration/render` / `ui/calibration/tests` | Guide state and actions, rendering, and UI behavior tests. The Workbench retains the application session across navigation. |
 | `firmware_update` | Execution of admitted frozen data requests, identity revalidation, transport scheduling, and non-localized structured results and progress. |
-| `uf2` / `opendfu` / `esb_ota` / `ble_ota` | Real volume discovery and copying, and the respective update protocols. |
+| `uf2` / `opendfu` / `esb_ota` / `ble_ota` | Device authorization, real volume discovery and copying, and the respective update protocols. |
 | `board_catalog` / `remote_config` | External and bundled configuration, exact mappings, and remote-source configuration. |
-| `bundled_resources` / `firmware` / `firmware_source` | Independent resource identities and bounded integrity-checked reads, image parsing, HTTP, catalogs, and downloads. |
+| `bundled_resources` / `firmware_source` | Independent resource identities and bounded integrity-checked reads, HTTP, catalogs, and downloads. |
 | `update::Job` | Bounded progress, cancellation requests, retention of async or blocking workers, and joins. |
 | `app_runtime` | The continuously driven Tokio I/O runtime, shared HTTP client, and lazy BLE backend shared across operations. |
 | `hid_log` | Raw records, bounded nonblocking subscriptions, the file format, the writer thread, and on-demand parsing. |
@@ -49,8 +51,14 @@ Unless a package is named explicitly, module paths below are relative to `crates
 | `ui/settings_page` | Retained settings search, typed categories, section anchors, control focus, and grouped presentation. Uses the existing preference update and save path. |
 | `ui/page_scroll` | Page scroll containers, viewport-edge scrollbars, and page-navigation keys. Does not own forms or device state. |
 | `crates/recording` | Recording, protocols, normalization, interchange formats, calibration and replay math, analysis, and preset I/O. |
+| `crates/terminal-core` | Std-only streaming ANSI and UTF-8 model, bounded scrollback and command history, semantic styles, and selection invalidation. |
+| `crates/firmware-image` | UF2, Intel HEX, and MCUboot image parsing, Legacy and Secure DFU package parsing, shared ZIP envelope checks, content validation, and target preparation without device access. |
 
-The recording core's `capture/{protocol,normalize,format}` modules do not access devices. `replay` owns segmented computation and safe FFI. `analysis` owns availability and A/B analysis. `presets` takes an explicit storage path from its caller. Numerical C and CMSIS sources, licenses, and the native build belong to the library's `vendor/vqf` and `build.rs`. The app's `build.rs` handles application configuration and firmware resources, generates license notices with the existing Python renderer, and tracks changes to the translation directory. Notice generation requires Python 3.11+ only for application builds, not core-only builds or application runtime. The core does not depend on GPUI, Tokio, HID or serial access, desktop directories, translations, or application configuration.
+The terminal core holds model data; `terminal_view` and the UI retain presentation and interaction. The firmware-image core checks image content without accessing hardware or a runtime. Image, Legacy and Secure DFU, and shared ZIP-envelope errors expose inspectable failure kinds and preserve nested error sources; the app converts them to text only at presentation or executor boundaries. Content validation does not authorize a device write or establish image authenticity. The app retains resources, transports, device authorization, frozen write purpose, mount and device identity checks, and operation lifecycle.
+
+The recording core's `capture/{protocol,normalize,format}` modules do not access devices. `replay` owns segmented computation and safe FFI. `analysis` owns availability and A/B analysis. `presets` takes an explicit storage path from its caller. Numerical C and CMSIS sources, licenses, and the native build belong to the library's `vendor/vqf` and `build.rs`. The recording core does not depend on GPUI, Tokio, HID or serial access, desktop directories, translations, or application configuration.
+
+The app's `build.rs` handles application configuration and firmware resources, generates license notices with the existing Python renderer, and tracks changes to the translation directory. Python 3.11+ is required for application builds in both firmware modes, not when building only any of the three libraries or running the application. Neither the terminal nor image library runs the application build script or depends on GPUI or hardware interfaces.
 
 `board_catalog/loading/bounded_yaml` bounds input size and shares expanded text, node, and depth limits across the typed parse. Alias expansion, mapping keys, and ignored fields consume the same limits before schema visitors retain values. Ordinary aliases remain supported. The [parser constants](../crates/app/src/board_catalog/loading/bounded_yaml.rs) define the limits.
 

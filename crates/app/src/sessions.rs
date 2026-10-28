@@ -1,8 +1,8 @@
 use crate::domain::{DeviceIdentity, SerialEndpoint, SerialRole};
 use crate::i18n::tr;
 use crate::rssi_scan::ScanSnapshot;
-use crate::terminal::TerminalBuffer;
 use parking_lot::Mutex;
+use slimenrf_terminal_core::TerminalBuffer;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};

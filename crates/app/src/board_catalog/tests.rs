@@ -250,7 +250,10 @@ fn no_external_config_loads_real_embedded_catalog_and_case_aliases() {
             !cfg!(feature = "embed-firmware")
         );
         if cfg!(feature = "embed-firmware") {
-            assert!(crate::firmware::parse_image(filename, &result.unwrap().bytes).is_ok());
+            assert!(
+                slimenrf_firmware_image::image::parse_image(filename, &result.unwrap().bytes)
+                    .is_ok()
+            );
         } else {
             assert!(result.is_err());
         }

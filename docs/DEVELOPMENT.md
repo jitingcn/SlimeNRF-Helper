@@ -6,7 +6,7 @@
 
 Run all commands from the repository root. Follow the engineering rules in the [root AGENTS](../AGENTS.md) and [recording-core AGENTS](../crates/recording/AGENTS.md). This page maintains procedures, not historical test counts or workstation measurements.
 
-The root manifest is a virtual workspace. The default desktop package and its source and build support are in `crates/app`; the recording library remains in `crates/recording`. Shared configuration, translations, scripts, lockfile, toolchain, and output directories remain at the repository root.
+The root manifest is a virtual workspace. The default desktop package and its source and build support are in `crates/app`; the internal libraries are `crates/recording` (`slimenrf-recording`), `crates/terminal-core` (`slimenrf-terminal-core`), and `crates/firmware-image` (`slimenrf-firmware-image`). The terminal core is std-only; the firmware-image core parses and validates image content without hardware or runtime access. GPUI presentation, resources, device authorization, transport, and lifecycle remain in the app. Shared configuration, translations, scripts, lockfile, toolchain, and output directories remain at the repository root.
 
 When commands, behavior, or links change, update both the default English document and its same-directory `.zh-CN.md` counterpart. Keep navigation and cross-document links in the selected language.
 
@@ -16,11 +16,11 @@ For native development, use the stable Rust toolchain pinned in [rust-toolchain.
 
 Install cargo-nextest for script test actions and non-format-only quality checks: `cargo install --locked cargo-nextest --version 0.9.150`. It is not installed automatically; build, check, format-only, and explicit doctest-only actions do not require it.
 
-Application builds require Python 3.11+ with standard-library `tomllib` to generate license notices. This build-only prerequisite applies to scripts, direct Cargo, tests, checks, and editor analysis in both full and no-firmware modes. Running the packaged application and building only `slimenrf-recording` do not require Python.
+Application builds require Python 3.11+ with standard-library `tomllib` to generate license notices. This build-only prerequisite applies to scripts, direct Cargo, tests, checks, and editor analysis in both full and no-firmware modes. Running the packaged application or building only any of the three internal libraries does not require Python or run the app build script.
 
 Optionally set `SLIMENRF_PYTHON` to one interpreter executable name or path, not a shell command with arguments. For application Cargo builds, a relative path containing a separator resolves from the repository root; a bare executable name uses normal executable search. An invalid or empty explicit selection fails without fallback. Without it, application builds probe `py -3` on Windows, then `python3` and `python`; Linux packaging probes `python3` and `python`. If those candidates fail, either entry point can ask `uv` on `PATH` for an already installed Python 3.11+ interpreter. The lookup ignores projects and virtual environments, configuration and network access; it never downloads Python. Every selected interpreter must pass a version and `tomllib` probe. Make it available in the editor's environment too.
 
-CLI builds keep the default `embed-firmware` feature enabled. If a standalone checkout has no firmware payloads, explicitly add `-NoFirmware` or `--no-firmware` to every CLI build, run, check, and packaging command. For direct Cargo commands, use `--no-default-features`. Full builds require the intended firmware inputs. A no-firmware package does not satisfy full-package acceptance.
+CLI application and workspace builds keep the default `embed-firmware` feature enabled. If a standalone checkout has no firmware payloads, explicitly add `-NoFirmware` or `--no-firmware` to every CLI build, run, check, test, and packaging command that selects the app. For direct Cargo commands, use `--no-default-features`. Full builds require the intended firmware inputs. A no-firmware package does not satisfy full-package acceptance.
 
 The scripts support build, run, test, check, clippy, fmt, and clean. Build defaults to Release. Run, test, check, and clippy default to the development profile. Explicit Debug and Release options are mutually exclusive. By default, build and run select the desktop application, test, check, and clippy cover the workspace, and fmt covers every member. Explicit Cargo package selection takes precedence. The development profile optimizes the application at level 0 and recording and other dependencies at level 1; Cargo's default build override remains unoptimized. Release uses optimization level 2, fat LTO, one codegen unit, and symbol stripping. See [Cargo.toml](../Cargo.toml) for the authoritative settings. Packaging uses the actual Release artifact, never a development build.
 
@@ -65,7 +65,25 @@ cargo nextest run --workspace --all-targets --locked
 cargo test --workspace --doc --locked
 ```
 
-For no-firmware mode, add `--no-default-features` to Clippy, nextest, and doctests. Script test actions run nextest only; use `./build.ps1 -Action test -CargoArguments @('--doc')` or `bash ./build.sh test --cargo-arguments --doc` to run doctests separately with Cargo. The doctest-only action uses Cargo argument semantics. To check only the core, use `cargo nextest run --locked -p slimenrf-recording` and `cargo test --locked --doc -p slimenrf-recording`. The core still needs a C compiler, but not Python, GPUI, hardware interfaces, application YAML, or firmware. External updater fixtures and the full firmware oracle are separate checks that require real additional inputs. Do not count ignored tests as passed.
+For no-firmware mode, add `--no-default-features` to Clippy, nextest, and doctests. Script test actions run nextest only; use `./build.ps1 -Action test -CargoArguments @('--doc')` or `bash ./build.sh test --cargo-arguments --doc` to run doctests separately with Cargo. The doctest-only action uses Cargo argument semantics.
+
+For isolated core work, select a package explicitly; `cargo test` includes its unit tests and doctests, and `cargo doc --no-deps` builds its API documentation:
+
+```text
+cargo check --locked -p slimenrf-recording
+cargo test --locked -p slimenrf-recording
+cargo doc --locked --no-deps -p slimenrf-recording
+
+cargo check --locked -p slimenrf-terminal-core
+cargo test --locked -p slimenrf-terminal-core
+cargo doc --locked --no-deps -p slimenrf-terminal-core
+
+cargo check --locked -p slimenrf-firmware-image
+cargo test --locked -p slimenrf-firmware-image
+cargo doc --locked --no-deps -p slimenrf-firmware-image
+```
+
+To use nextest for one core, select it with `-p`, for example `cargo nextest run --locked -p slimenrf-recording`, and run its doctests separately with `cargo test --locked --doc -p slimenrf-recording`. Recording still needs a C compiler. The terminal and image libraries do not need Python, the app build script, GPUI, hardware interfaces, application YAML, or firmware payloads. These focused commands do not replace workspace coverage in both applicable firmware modes. External updater fixtures and the full firmware oracle are separate checks that require real additional inputs. Do not count ignored tests as passed.
 
 Before creating a `Workbench` GUI fixture, acquire one `ui::test_support::UiTestSession` at the outer test scope. Reuse that session for all fixtures in the same `TestAppContext`. Keep it alive through callbacks and assertions to isolate the process-wide locale.
 
@@ -138,7 +156,7 @@ Keep existing keys when editing text. To add text, follow these steps.
 2. Add the same YAML hierarchy to [locales/en.yml](../locales/en.yml) and [locales/zh-CN.yml](../locales/zh-CN.yml). Each hierarchy segment uses lowercase letters, digits, and underscores, and starts with a letter. Store text in leaf nodes. Do not split the catalogs into feature files.
 3. Keep `%{name}` placeholder names consistent across languages. Preserve meaningful line breaks.
 4. Read ordinary text with `tr("firmware.serial_dfu.enter")`. Use `rust_i18n::t!` when replacing placeholders.
-5. Display command values, device output, device names, and user preset names directly. Do not pass these data to translation functions. To translate recording-core enum errors, map them to keys in the application layer. Do not add a translation dependency to `slimenrf-recording`.
+5. Display command values, device output, device names, and user preset names directly. Do not pass these data to translation functions. If translating core errors, map them to keys in the application layer; do not add translation dependencies to the core libraries.
 6. Rebuild the application. YAML-only changes trigger compilation. You do not need to touch Rust files or clear caches.
 7. Run [quality checks](#checks-and-editor) in full and no-firmware modes. Then switch between English and Simplified Chinese. Check the changed UI, input hints, and open tool windows, and confirm that entered values remain unchanged.
 
@@ -196,11 +214,11 @@ For an approved profile-only `Cargo.toml` change, refresh the frozen input hashe
 python3 scripts/generate_notices.py --refresh-inputs --check
 ```
 
-The semantic fingerprint excludes profile settings; direct dependency changes still require the review below. Do not use a profile-only refresh to bypass dependency or provenance review.
+The semantic fingerprint excludes profile settings; workspace membership and dependency changes still require the review below. Do not use a profile-only refresh to bypass dependency or provenance review.
 
 When Cargo inputs, vendored sources, or license materials change:
 
-1. Review the changed inputs. For dependency changes, capture both locked target graphs with the commands below. Follow normal and build edges from `slimenrf-helper`, excluding dev edges. Mark build and proc-macro paths as compile tools, and preserve the conservative union and feature unification described in the generator header.
+1. Review the changed inputs. For workspace membership or dependency changes, capture both locked target graphs with the commands below, even if third-party versions are unchanged. Follow normal and build edges from `slimenrf-helper`, excluding dev edges. Mark build and proc-macro paths as compile tools, and preserve the conservative union and feature unification described in the generator header.
 
    ```bash
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-pc-windows-msvc

@@ -226,7 +226,7 @@ pub(super) fn plan_uf2_action(
                 }
                 requested_chip = Some(chip);
             }
-            uf2::WritePurpose::Bootloader(requested_chip.expect("nonempty selected volumes"))
+            Uf2ImagePurpose::Bootloader(requested_chip.expect("nonempty selected volumes"))
         }
         ImageCategory::Application => {
             if !image.local && hints.is_empty() {
@@ -248,7 +248,7 @@ pub(super) fn plan_uf2_action(
                     }
                 }
             }
-            uf2::WritePurpose::Application
+            Uf2ImagePurpose::Application
         }
     };
     for volume in &volumes {

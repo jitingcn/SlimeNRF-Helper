@@ -6,8 +6,8 @@ use super::{
 };
 use crate::domain::{DeviceIdentity, Inventory, console_port_allowed};
 use crate::i18n::tr;
-use crate::terminal::TerminalBuffer;
 use parking_lot::Mutex;
+use slimenrf_terminal_core::TerminalBuffer;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};

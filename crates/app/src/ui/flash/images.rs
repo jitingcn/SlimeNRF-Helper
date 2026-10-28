@@ -2,15 +2,15 @@ use super::*;
 
 pub(super) fn configured_opendfu_options(
     configured: Option<&board_catalog::OpenDfuTarget>,
-) -> Result<opendfu::Options, String> {
+) -> Result<secure_dfu::Options, String> {
     match configured {
-        Some(target) => Ok(opendfu::Options {
+        Some(target) => Ok(secure_dfu::Options {
             hw_version: target.hw_version,
             app_version: target.app_version,
             sd_req: parse_sd_req(&target.sd_req)?,
-            ..opendfu::Options::default()
+            ..secure_dfu::Options::default()
         }),
-        None => Ok(opendfu::Options::default()),
+        None => Ok(secure_dfu::Options::default()),
     }
 }
 
@@ -74,9 +74,9 @@ pub(super) fn make_image(
 ) -> Image {
     let extension = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     let validation = match extension.as_str() {
-        "uf2" | "hex" | "bin" => {
-            firmware::parse_image(&name, &bytes).map(|parsed| Some(Arc::new(parsed)))
-        }
+        "uf2" | "hex" | "bin" => firmware::parse_image(&name, &bytes)
+            .map(|parsed| Some(Arc::new(parsed)))
+            .map_err(String::from),
         "zip" => Ok(None),
         _ => Err("Choose UF2, Intel HEX, MCUboot BIN or DFU ZIP firmware".into()),
     };

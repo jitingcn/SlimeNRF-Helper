@@ -1,5 +1,5 @@
 use super::FirmwareInfo;
-use crate::firmware::FirmwareImage;
+use slimenrf_firmware_image::image::FirmwareImage;
 
 pub(super) const QUERY: u8 = 0xf0;
 pub(super) const INFO: u8 = 0xf1;

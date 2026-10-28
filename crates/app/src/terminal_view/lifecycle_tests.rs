@@ -16,7 +16,7 @@ use gpui_kit::{
 };
 
 use super::{TerminalTranscript, TranscriptState, TranscriptViewport, geometry::ViewportAnchor};
-use crate::terminal::{MAX_LINES, TerminalBuffer};
+use slimenrf_terminal_core::{MAX_LINES, TerminalBuffer};
 
 struct TranscriptHarness {
     buffer: TerminalBuffer,

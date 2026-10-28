@@ -542,7 +542,7 @@ fn current_fox_identities_resolve_exact_standard_defaults_and_roles() {
         assert_eq!(preset.bootloader_board.as_deref(), Some(bootloader));
         assert_eq!(
             preset.bootloader_mcu,
-            Some(crate::firmware::Nrf52Chip::Nrf52840)
+            Some(slimenrf_firmware_image::image::Nrf52Chip::Nrf52840)
         );
         assert!(preset.bootloader.is_none(), "{board_id}");
         assert_eq!(preset.targets.len(), 1, "{board_id}");

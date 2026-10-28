@@ -5,6 +5,7 @@ use super::super::{
 };
 use super::{connected, fixture, peer, stopped, until};
 use parking_lot::Mutex;
+use slimenrf_terminal_core::AnsiColor;
 use std::io::{self, Read, Write};
 use std::sync::Arc;
 
@@ -162,10 +163,7 @@ fn thousands_of_one_byte_reads_preserve_text_utf8_and_ansi() {
         assert_eq!(text, "界 plain");
         assert_eq!(styles.len(), 1);
         assert_eq!(styles[0].range, 0..3);
-        assert_eq!(
-            styles[0].style.foreground,
-            crate::terminal::AnsiColor::Indexed(1),
-        );
+        assert_eq!(styles[0].style.foreground, AnsiColor::Indexed(1));
     }
     let text = view.terminal.text();
     let _ = manager.poll();
@@ -248,10 +246,7 @@ fn partial_read_overflow_places_one_gap_before_resumed_utf8_and_ansi() {
         );
         assert_eq!(rows[2].3.len(), 1);
         assert_eq!(rows[2].3[0].range, after_gap.len()..after_gap.len() + 5);
-        assert_eq!(
-            rows[2].3[0].style.foreground,
-            crate::terminal::AnsiColor::Indexed(2),
-        );
+        assert_eq!(rows[2].3[0].style.foreground, AnsiColor::Indexed(2));
         let text = terminal.text();
         let _ = manager.poll();
         assert_eq!(manager.session("gap").unwrap().terminal.text(), text);

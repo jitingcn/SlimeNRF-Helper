@@ -10,7 +10,6 @@ mod tests;
 
 use crate::{
     domain::{ReceiverEndpoint, TrackerLink, normalize_address},
-    firmware::{self, FirmwareImage},
     hid_log::{Source, TracedHid},
     update::{
         ActivationSubmission, OtaPhase, OtaPreparation, Progress, ReceiverActivationReport,
@@ -20,6 +19,7 @@ use crate::{
 use parking_lot::Mutex;
 use progress::Telemetry;
 use protocol::*;
+use slimenrf_firmware_image::image::{self as firmware, FirmwareImage};
 use std::{
     collections::HashSet,
     ffi::CString,
@@ -1053,6 +1053,7 @@ fn flash_validated<T: Transport>(
                     },
                 }),
                 Err(error) => {
+                    let error: String = error.into();
                     for index in indices {
                         results[index].outcome = UpdateOutcome::Failed(error.clone());
                         telemetry.fail(index, &error, session.io.now());

@@ -3,8 +3,8 @@ use super::{
 };
 use crate::domain::{DeviceIdentity, DeviceRole};
 use crate::rssi_scan::{ScanDecoder, ScanSnapshot};
-use crate::terminal::TerminalBuffer;
 use parking_lot::Mutex;
+use slimenrf_terminal_core::TerminalBuffer;
 use std::sync::Arc;
 
 #[derive(Clone)]

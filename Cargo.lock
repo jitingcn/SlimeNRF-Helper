@@ -6794,6 +6794,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "slimenrf-firmware-image"
+version = "0.1.1"
+dependencies = [
+ "crc32fast",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "zip",
+]
+
+[[package]]
 name = "slimenrf-helper"
 version = "0.1.1"
 dependencies = [
@@ -6813,7 +6824,9 @@ dependencies = [
  "serde_yaml_ng",
  "serialport",
  "sha2 0.11.1",
+ "slimenrf-firmware-image",
  "slimenrf-recording",
+ "slimenrf-terminal-core",
  "sys-locale",
  "tempfile",
  "tokio",
@@ -6836,6 +6849,10 @@ dependencies = [
  "tempfile",
  "zip",
 ]
+
+[[package]]
+name = "slimenrf-terminal-core"
+version = "0.1.1"
 
 [[package]]
 name = "slotmap"

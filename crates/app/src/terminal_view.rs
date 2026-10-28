@@ -15,7 +15,7 @@ use gpui_kit::{prelude::*, *};
 
 pub(crate) use keyboard::handle_key_down;
 
-use crate::terminal::{AnsiColor, AnsiStyle, StyleRun, TerminalBuffer};
+use slimenrf_terminal_core::{AnsiColor, AnsiStyle, StyleRun, TerminalBuffer};
 
 const ROW_HEIGHT_REM: f32 = 1.25;
 const REFLOW_LINES: usize = 8;
@@ -1122,9 +1122,9 @@ mod tests {
         FrameCorrection, PresentedFrame, RenderStyle, TranscriptState, indexed_color, styled_run,
         text_runs,
     };
-    use crate::terminal::{AnsiColor, AnsiStyle, MAX_LINES, StyleRun, TerminalBuffer};
     use gpui_kit::base::{TextSelectionContentKey, TextSelectionCoverage};
     use gpui_kit::{Bounds, FontWeight, Hsla, Rgba, ScrollHandle, TextStyle, point, px, rgb, size};
+    use slimenrf_terminal_core::{AnsiColor, AnsiStyle, MAX_LINES, StyleRun, TerminalBuffer};
     use std::rc::Rc;
 
     fn set_geometry(state: &mut TranscriptState, index: usize, seams: &[usize]) {

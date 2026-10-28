@@ -1,5 +1,6 @@
 use super::support::local_image;
 use crate::ui::flash::{Action, FlashState};
+use slimenrf_firmware_image::image::Uf2ImagePurpose;
 
 #[test]
 fn volume_refresh_prunes_selection_invalidates_review_and_preserves_outcomes() {
@@ -46,7 +47,7 @@ fn replacing_a_volume_at_the_same_mount_cannot_reuse_a_review() {
         review: Some(Action::Uf2(
             vec![old],
             local_image("image.uf2"),
-            crate::uf2::WritePurpose::Application,
+            Uf2ImagePurpose::Application,
         )),
         ..FlashState::default()
     };

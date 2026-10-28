@@ -295,7 +295,7 @@ impl BleBatchTransport for &mut BleBatchScript {
         &mut self,
         image: FileImage,
         cancel: &AtomicBool,
-    ) -> Result<ble_ota::Package, String> {
+    ) -> Result<legacy_dfu::Package, String> {
         self.preparations += 1;
         let result = ble_ota::prepare(image.name, image.bytes, cancel).await;
         self.preparation_error = result.as_ref().err().cloned();
@@ -305,7 +305,7 @@ impl BleBatchTransport for &mut BleBatchScript {
     async fn flash(
         &mut self,
         device: &ble_ota::BleDevice,
-        package: &ble_ota::Package,
+        package: &legacy_dfu::Package,
         _: &AtomicBool,
         _: &mut (dyn FnMut(Progress) + Send),
     ) -> Result<(), String> {

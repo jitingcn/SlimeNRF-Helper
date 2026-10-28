@@ -5,9 +5,9 @@ use super::{
 };
 use crate::{
     domain::{ReceiverEndpoint, TrackerLink},
-    firmware::FirmwareImage,
     update::{ActivationSubmission, ReceiverActivationReport, ReceiverAvailability, UpdateOutcome},
 };
+use slimenrf_firmware_image::image::FirmwareImage;
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::{

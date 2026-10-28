@@ -3,6 +3,7 @@ use crate::esb_ota::RECEIVER_ID;
 use crate::ui::flash::{
     FlashState, OtaQueries, ota_assignment_key, ota_target_key, plan_ota_groups, validate_ota_image,
 };
+use slimenrf_firmware_image::image::{Nrf52Chip, Uf2ImagePurpose};
 use std::sync::Arc;
 
 #[test]
@@ -307,7 +308,7 @@ fn catalog_classified_nonstandard_bootloader_freezes_purpose_and_shared_bytes_in
     let bytes = image.bytes.clone();
     let (_directory, volume) = uf2_volume("known");
     let identity = volume.identity.clone();
-    let expected = crate::uf2::WritePurpose::Bootloader(crate::firmware::Nrf52Chip::Nrf52840);
+    let expected = Uf2ImagePurpose::Bootloader(Nrf52Chip::Nrf52840);
     let action = plan_uf2_action(
         Some(&catalog),
         ImageCategory::Bootloader,
@@ -359,7 +360,7 @@ fn reviewed_local_application_keeps_unknown_board_bypass_but_validates_every_vol
     .unwrap();
     assert!(matches!(
         action,
-        Action::Uf2(_, _, crate::uf2::WritePurpose::Application)
+        Action::Uf2(_, _, Uf2ImagePurpose::Application)
     ));
     let mut hinted = image.clone();
     hinted.hints = vec![crate::board_catalog::FirmwareHint {

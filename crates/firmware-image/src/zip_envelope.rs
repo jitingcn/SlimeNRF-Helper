@@ -1,10 +1,100 @@
-use std::io::Cursor;
+//! Bounded ZIP envelope guard shared by firmware package consumers.
+//!
+//! This exposes the workspace's locked `zip` archive type; each consumer must
+//! still apply its own member, path, and expanded-size policy.
 
-use zip::read::{ArchiveOffset, Config};
+use std::{fmt, io::Cursor};
 
-pub(crate) struct Limits {
+use zip::{
+    read::{ArchiveOffset, Config},
+    result::ZipError,
+};
+
+/// The reason a firmware ZIP envelope was rejected.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ErrorKind {
+    /// The envelope or archive is structurally invalid.
+    Malformed,
+    /// The archive uses a format or feature that is not supported.
+    Unsupported,
+    /// The archive exceeds an applicable resource limit.
+    Limit,
+}
+
+/// A firmware ZIP envelope validation or archive parsing error.
+#[derive(Debug)]
+pub struct Error {
+    kind: ErrorKind,
+    detail: ErrorDetail,
+}
+
+#[derive(Debug)]
+enum ErrorDetail {
+    Envelope(&'static str),
+    Zip(ZipError),
+}
+
+impl Error {
+    /// Returns the category of the rejection.
+    pub fn kind(&self) -> ErrorKind {
+        self.kind
+    }
+
+    fn envelope(kind: ErrorKind, message: &'static str) -> Self {
+        Self {
+            kind,
+            detail: ErrorDetail::Envelope(message),
+        }
+    }
+
+    fn zip(error: ZipError) -> Self {
+        let kind = match &error {
+            ZipError::UnsupportedArchive(_)
+            | ZipError::CompressionMethodNotSupported(_)
+            | ZipError::InvalidPassword
+            | ZipError::DecompressedSizeUnknown => ErrorKind::Unsupported,
+            ZipError::DecompressedSizeLimitExceeded { .. } => ErrorKind::Limit,
+            _ => ErrorKind::Malformed,
+        };
+        Self {
+            kind,
+            detail: ErrorDetail::Zip(error),
+        }
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.detail {
+            ErrorDetail::Envelope(message) => formatter.write_str(message),
+            ErrorDetail::Zip(error) => write!(formatter, "Invalid firmware ZIP: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match &self.detail {
+            ErrorDetail::Envelope(_) => None,
+            ErrorDetail::Zip(error) => Some(error),
+        }
+    }
+}
+
+impl From<Error> for String {
+    fn from(error: Error) -> Self {
+        error.to_string()
+    }
+}
+
+/// Upper bounds enforced before ZIP metadata allocation.
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    /// Maximum compressed archive length.
     pub bytes: usize,
+    /// Maximum number of members.
     pub members: usize,
+    /// Maximum central-directory length.
     pub directory: usize,
 }
 
@@ -16,43 +106,76 @@ fn u32_at(bytes: &[u8], offset: usize) -> usize {
     u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) as usize
 }
 
-fn extra_fields(bytes: &[u8], mut field: usize, end: usize) -> Result<(), String> {
+fn extra_fields(bytes: &[u8], mut field: usize, end: usize) -> Result<(), Error> {
     while field < end {
         if field + 4 > end {
-            return Err("Firmware ZIP has malformed extra data".into());
+            return Err(Error::envelope(
+                ErrorKind::Malformed,
+                "Firmware ZIP has malformed extra data",
+            ));
         }
         if u16_at(bytes, field) == 1 {
-            return Err("Firmware ZIP uses unsupported ZIP64 extra data".into());
+            return Err(Error::envelope(
+                ErrorKind::Unsupported,
+                "Firmware ZIP uses unsupported ZIP64 extra data",
+            ));
         }
         field = field
             .checked_add(4 + u16_at(bytes, field + 2))
             .filter(|next| *next <= end)
-            .ok_or("Firmware ZIP has malformed extra data")?;
+            .ok_or_else(|| {
+                Error::envelope(
+                    ErrorKind::Malformed,
+                    "Firmware ZIP has malformed extra data",
+                )
+            })?;
     }
     Ok(())
 }
 
-fn directory(bytes: &[u8], end: usize, limits: &Limits) -> Result<usize, String> {
+fn directory(bytes: &[u8], end: usize, limits: &Limits) -> Result<usize, Error> {
     let count = u16_at(bytes, end + 10);
-    if u16_at(bytes, end + 4) != 0
-        || u16_at(bytes, end + 6) != 0
-        || u16_at(bytes, end + 8) != count
-        || count > limits.members
-        || count == u16::MAX as usize
-    {
-        return Err("Firmware ZIP has too many members or uses split/ZIP64 storage".into());
+    if u16_at(bytes, end + 4) != 0 || u16_at(bytes, end + 6) != 0 || count == u16::MAX as usize {
+        return Err(Error::envelope(
+            ErrorKind::Unsupported,
+            "Firmware ZIP has too many members or uses split/ZIP64 storage",
+        ));
+    }
+    if u16_at(bytes, end + 8) != count {
+        return Err(Error::envelope(
+            ErrorKind::Malformed,
+            "Firmware ZIP has too many members or uses split/ZIP64 storage",
+        ));
+    }
+    if count > limits.members {
+        return Err(Error::envelope(
+            ErrorKind::Limit,
+            "Firmware ZIP has too many members or uses split/ZIP64 storage",
+        ));
     }
     let size = u32_at(bytes, end + 12);
     let start = u32_at(bytes, end + 16);
-    if size > limits.directory || start.checked_add(size) != Some(end) {
-        return Err("Firmware ZIP central directory is invalid or excessive".into());
+    if size > limits.directory {
+        return Err(Error::envelope(
+            ErrorKind::Limit,
+            "Firmware ZIP central directory is invalid or excessive",
+        ));
+    }
+    if start.checked_add(size) != Some(end) {
+        return Err(Error::envelope(
+            ErrorKind::Malformed,
+            "Firmware ZIP central directory is invalid or excessive",
+        ));
     }
     let mut offset = start;
     for _ in 0..count {
         if offset.checked_add(46).is_none_or(|next| next > end)
             || bytes[offset..offset + 4] != *b"PK\x01\x02"
         {
-            return Err("Firmware ZIP has an inconsistent central directory".into());
+            return Err(Error::envelope(
+                ErrorKind::Malformed,
+                "Firmware ZIP has an inconsistent central directory",
+            ));
         }
         let name = u16_at(bytes, offset + 28);
         let extra = u16_at(bytes, offset + 30);
@@ -60,13 +183,21 @@ fn directory(bytes: &[u8], end: usize, limits: &Limits) -> Result<usize, String>
         let next = offset
             .checked_add(46 + name + extra + comment)
             .filter(|next| *next <= end)
-            .ok_or("Firmware ZIP directory entry exceeds its envelope")?;
+            .ok_or_else(|| {
+                Error::envelope(
+                    ErrorKind::Malformed,
+                    "Firmware ZIP directory entry exceeds its envelope",
+                )
+            })?;
         if u16_at(bytes, offset + 34) != 0
             || [20, 24, 42]
                 .into_iter()
                 .any(|field| u32_at(bytes, offset + field) == u32::MAX as usize)
         {
-            return Err("Firmware ZIP uses unsupported split/ZIP64 members".into());
+            return Err(Error::envelope(
+                ErrorKind::Unsupported,
+                "Firmware ZIP uses unsupported split/ZIP64 members",
+            ));
         }
         let extra_start = offset + 46 + name;
         extra_fields(bytes, extra_start, extra_start + extra)?;
@@ -74,33 +205,59 @@ fn directory(bytes: &[u8], end: usize, limits: &Limits) -> Result<usize, String>
         if local.checked_add(30).is_none_or(|next| next > start)
             || bytes[local..local + 4] != *b"PK\x03\x04"
         {
-            return Err("Firmware ZIP has an invalid local member offset".into());
+            return Err(Error::envelope(
+                ErrorKind::Malformed,
+                "Firmware ZIP has an invalid local member offset",
+            ));
         }
         if [18, 22]
             .into_iter()
             .any(|field| u32_at(bytes, local + field) == u32::MAX as usize)
         {
-            return Err("Firmware ZIP uses unsupported ZIP64 local members".into());
+            return Err(Error::envelope(
+                ErrorKind::Unsupported,
+                "Firmware ZIP uses unsupported ZIP64 local members",
+            ));
         }
         let data = local
             .checked_add(30 + u16_at(bytes, local + 26) + u16_at(bytes, local + 28))
             .and_then(|data| data.checked_add(u32_at(bytes, offset + 20)));
         if data.is_none_or(|end| end > start) {
-            return Err("Firmware ZIP member exceeds its data envelope".into());
+            return Err(Error::envelope(
+                ErrorKind::Malformed,
+                "Firmware ZIP member exceeds its data envelope",
+            ));
         }
         let extra_start = local + 30 + u16_at(bytes, local + 26);
         extra_fields(bytes, extra_start, extra_start + u16_at(bytes, local + 28))?;
         offset = next;
     }
     if offset != end {
-        return Err("Firmware ZIP directory member count is inconsistent".into());
+        return Err(Error::envelope(
+            ErrorKind::Malformed,
+            "Firmware ZIP directory member count is inconsistent",
+        ));
     }
     Ok(count)
 }
 
-pub(crate) fn open(bytes: &[u8], limits: Limits) -> Result<zip::ZipArchive<Cursor<&[u8]>>, String> {
-    if bytes.len() < 22 || bytes.len() > limits.bytes {
-        return Err("Firmware ZIP has an invalid or excessive length".into());
+/// Opens a bounded ZIP envelope for further consumer-specific validation.
+///
+/// # Errors
+/// Returns an error when the envelope is malformed, unsupported, exceeds its
+/// limits, or the ZIP parser rejects it.
+pub fn open(bytes: &[u8], limits: Limits) -> Result<zip::ZipArchive<Cursor<&[u8]>>, Error> {
+    if bytes.len() < 22 {
+        return Err(Error::envelope(
+            ErrorKind::Malformed,
+            "Firmware ZIP has an invalid or excessive length",
+        ));
+    }
+    if bytes.len() > limits.bytes {
+        return Err(Error::envelope(
+            ErrorKind::Limit,
+            "Firmware ZIP has an invalid or excessive length",
+        ));
     }
     let end = (bytes.len().saturating_sub(22 + u16::MAX as usize)..=bytes.len() - 22)
         .rev()
@@ -108,7 +265,12 @@ pub(crate) fn open(bytes: &[u8], limits: Limits) -> Result<zip::ZipArchive<Curso
             bytes[offset..offset + 4] == *b"PK\x05\x06"
                 && offset + 22 + u16_at(bytes, offset + 20) == bytes.len()
         })
-        .ok_or("Firmware ZIP has no valid end-of-directory record")?;
+        .ok_or_else(|| {
+            Error::envelope(
+                ErrorKind::Malformed,
+                "Firmware ZIP has no valid end-of-directory record",
+            )
+        })?;
     let count = directory(bytes, end, &limits)?;
 
     // zip 2.x retries earlier EOCDs after directory errors, across the entire file.
@@ -125,7 +287,10 @@ pub(crate) fn open(bytes: &[u8], limits: Limits) -> Result<zip::ZipArchive<Curso
             && offset >= 20
             && bytes[offset - 20..offset - 16] == *b"PK\x06\x07"
         {
-            return Err("Firmware ZIP uses unsupported ZIP64 storage".into());
+            return Err(Error::envelope(
+                ErrorKind::Unsupported,
+                "Firmware ZIP uses unsupported ZIP64 storage",
+            ));
         }
         let reachable = if members == 0 {
             // Zero totals bypass the fixed offset; zip still allocates from the on-disk count.
@@ -135,7 +300,10 @@ pub(crate) fn open(bytes: &[u8], limits: Limits) -> Result<zip::ZipArchive<Curso
                 && bytes[central..central + 4] == *b"PK\x01\x02"
         };
         if reachable && offset != end {
-            return Err("Firmware ZIP has competing end-of-directory records".into());
+            return Err(Error::envelope(
+                ErrorKind::Malformed,
+                "Firmware ZIP has competing end-of-directory records",
+            ));
         }
     }
     let archive = zip::ZipArchive::with_config(
@@ -144,16 +312,20 @@ pub(crate) fn open(bytes: &[u8], limits: Limits) -> Result<zip::ZipArchive<Curso
         },
         Cursor::new(bytes),
     )
-    .map_err(|error| format!("Invalid firmware ZIP: {error}"))?;
+    .map_err(Error::zip)?;
     if archive.len() != count {
-        return Err("Firmware ZIP member count is inconsistent".into());
+        return Err(Error::envelope(
+            ErrorKind::Malformed,
+            "Firmware ZIP member count is inconsistent",
+        ));
     }
     Ok(archive)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Limits, open};
+    use super::{ErrorKind, Limits, open, u16_at, u32_at};
+    use std::error::Error as _;
     use std::io::{Cursor, Read, Write};
 
     fn limits() -> Limits {
@@ -178,6 +350,103 @@ mod tests {
             .unwrap();
         writer.write_all(data).unwrap();
         writer.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn distinguishes_malformed_unsupported_and_limited_envelopes() {
+        let bytes = archive(b"firmware");
+        let end = bytes.len() - 22;
+
+        assert_eq!(
+            open(&[], limits()).unwrap_err().kind(),
+            ErrorKind::Malformed
+        );
+        assert_eq!(
+            open(
+                &bytes,
+                Limits {
+                    bytes: bytes.len() - 1,
+                    ..limits()
+                },
+            )
+            .unwrap_err()
+            .kind(),
+            ErrorKind::Limit
+        );
+        assert_eq!(
+            open(
+                &bytes,
+                Limits {
+                    members: 0,
+                    ..limits()
+                },
+            )
+            .unwrap_err()
+            .kind(),
+            ErrorKind::Limit
+        );
+        assert_eq!(
+            open(
+                &bytes,
+                Limits {
+                    directory: 1,
+                    ..limits()
+                },
+            )
+            .unwrap_err()
+            .kind(),
+            ErrorKind::Limit
+        );
+
+        let mut malformed = bytes.clone();
+        malformed[end + 8..end + 10].copy_from_slice(&2u16.to_le_bytes());
+        assert_eq!(
+            open(&malformed, limits()).unwrap_err().kind(),
+            ErrorKind::Malformed
+        );
+
+        let mut split = bytes.clone();
+        split[end + 4..end + 6].copy_from_slice(&1u16.to_le_bytes());
+        assert_eq!(
+            open(&split, limits()).unwrap_err().kind(),
+            ErrorKind::Unsupported
+        );
+
+        let mut zip64 = bytes;
+        zip64[end + 10..end + 12].copy_from_slice(&u16::MAX.to_le_bytes());
+        assert_eq!(
+            open(&zip64, limits()).unwrap_err().kind(),
+            ErrorKind::Unsupported
+        );
+    }
+
+    #[test]
+    fn zip_parser_failure_preserves_nested_sources() {
+        let mut bytes = archive(b"firmware");
+        let end = bytes.len() - 22;
+        let central = u32_at(&bytes, end + 16);
+        let name_len = u16_at(&bytes, central + 28);
+        let extra_len = u16_at(&bytes, central + 30);
+        let directory_len = u32_at(&bytes, end + 12);
+        let extra_end = central + 46 + name_len + extra_len;
+        bytes[central + 30..central + 32].copy_from_slice(&((extra_len + 4) as u16).to_le_bytes());
+        bytes[end + 12..end + 16].copy_from_slice(&((directory_len + 4) as u32).to_le_bytes());
+        // A framed Unicode path field with no payload passes envelope validation
+        // but the ZIP parser rejects its missing version byte.
+        bytes.splice(extra_end..extra_end, [0x75, 0x70, 0, 0]);
+
+        let error = open(&bytes, limits()).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Malformed);
+        let source = error.source().expect("ZIP parser error should be retained");
+        assert!(matches!(
+            source.downcast_ref::<zip::result::ZipError>(),
+            Some(zip::result::ZipError::Io(_))
+        ));
+        let io_error = source
+            .source()
+            .and_then(|source| source.downcast_ref::<std::io::Error>())
+            .expect("ZIP parser I/O error should be retained");
+        assert_eq!(io_error.kind(), std::io::ErrorKind::UnexpectedEof);
     }
 
     fn repeated_local_extra(pairs: usize) -> Vec<u8> {
@@ -221,7 +490,7 @@ mod tests {
     #[test]
     fn rejects_4096_competing_directories_with_shared_local_extra() {
         let bytes = repeated_local_extra(4096);
-        assert_eq!(
+        assert!(
             open(
                 &bytes,
                 Limits {
@@ -229,9 +498,7 @@ mod tests {
                     ..limits()
                 },
             )
-            .err()
-            .unwrap(),
-            "Firmware ZIP has competing end-of-directory records"
+            .is_err()
         );
     }
 
@@ -244,7 +511,7 @@ mod tests {
         comment[8..10].copy_from_slice(&32_767u16.to_le_bytes());
         bytes[end + 20..end + 22].copy_from_slice(&64u16.to_le_bytes());
         bytes.extend_from_slice(&comment);
-        assert_eq!(
+        assert!(
             open(
                 &bytes,
                 Limits {
@@ -252,9 +519,7 @@ mod tests {
                     ..limits()
                 },
             )
-            .err()
-            .unwrap(),
-            "Firmware ZIP has competing end-of-directory records"
+            .is_err()
         );
     }
 

@@ -298,8 +298,8 @@ mod tests {
         cx: &mut gpui_kit::TestAppContext,
     ) {
         use super::super::{RenderStyle, text_runs};
-        use crate::terminal::TerminalBuffer;
         use gpui_kit::{SharedString, TextStyle, rgb};
+        use slimenrf_terminal_core::TerminalBuffer;
 
         cx.update(|cx| {
             let mut buffer = TerminalBuffer::new();

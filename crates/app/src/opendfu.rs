@@ -2,36 +2,15 @@
 use crate::domain::SerialEndpoint;
 use crate::serial_port::same_port_name;
 use crate::update::Progress;
-use sha2::{Digest, Sha256};
-use std::collections::HashSet;
-use std::io::{self, Cursor, Read, Write};
+use slimenrf_firmware_image::image::MAX_IMAGE_SIZE as MAX_IMAGE;
+use slimenrf_firmware_image::secure_dfu::{Options, parse_images};
+use std::io::{self, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-const MAX_IMAGE: usize = 2 * 1024 * 1024;
-const MAX_INIT: usize = 4096;
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(10);
 const READ_TIMEOUT: Duration = Duration::from_millis(100);
 const WRITE_TIMEOUT: Duration = Duration::from_millis(500);
-
-#[derive(Clone, Debug)]
-pub struct Options {
-    pub hw_version: u32,
-    pub app_version: u32,
-    pub sd_req: Vec<u32>,
-    /// Known bootloader application start. Secure DFU carries no HEX addresses.
-    pub app_base: u32,
-}
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            hw_version: 52,
-            app_version: 1,
-            sd_req: vec![0],
-            app_base: 0x1000,
-        }
-    }
-}
 
 #[derive(Debug)]
 enum Error {
@@ -166,12 +145,6 @@ fn revalidate_bootloader_identity(
     Ok(())
 }
 
-struct Image {
-    name: String,
-    firmware: Vec<u8>,
-    init: Vec<u8>,
-}
-
 pub fn flash_with_options(
     port: &SerialEndpoint,
     name: &str,
@@ -181,14 +154,14 @@ pub fn flash_with_options(
     progress: &mut dyn FnMut(Progress),
 ) -> std::result::Result<(), String> {
     check_cancel(cancel).map_err(|e| e.to_string())?;
-    let images = parse_images(name, bytes, options)?;
-    let total: usize = images.iter().map(|i| i.firmware.len()).sum();
+    let images = parse_images(name, bytes, options).map_err(String::from)?;
+    let total: usize = images.iter().map(|i| i.firmware().len()).sum();
     let mut completed = 0;
     for (index, image) in images.iter().enumerate() {
         check_cancel(cancel).map_err(|e| e.to_string())?;
         report(
             progress,
-            format!("Connecting to OpenDFU: {}", image.name),
+            format!("Connecting to OpenDFU: {}", image.name()),
             completed,
             total,
         );
@@ -228,18 +201,18 @@ pub fn flash_with_options(
         };
         let mut session = Session::new(&mut serial, cancel);
         session.mtu = mtu;
-        session.init(&image.init).map_err(|e| e.to_string())?;
+        session.init(image.init()).map_err(|e| e.to_string())?;
         let disconnected = session
-            .firmware(&image.firmware, &mut |offset| {
+            .firmware(image.firmware(), &mut |offset| {
                 report(
                     progress,
-                    format!("Writing {}", image.name),
+                    format!("Writing {}", image.name()),
                     completed + offset,
                     total,
                 );
             })
             .map_err(|e| e.to_string())?;
-        completed += image.firmware.len();
+        completed += image.firmware().len();
         report(
             progress,
             if disconnected {
@@ -252,304 +225,6 @@ pub fn flash_with_options(
         );
     }
     Ok(())
-}
-
-fn varint(mut value: u32, out: &mut Vec<u8>) {
-    while value >= 128 {
-        out.push((value as u8 & 127) | 128);
-        value >>= 7;
-    }
-    out.push(value as u8);
-}
-fn number(field: u32, value: u32, out: &mut Vec<u8>) {
-    varint(field << 3, out);
-    varint(value, out);
-}
-fn blob(field: u32, bytes: &[u8], out: &mut Vec<u8>) {
-    varint((field << 3) | 2, out);
-    varint(bytes.len() as u32, out);
-    out.extend_from_slice(bytes);
-}
-fn generate_init(data: &[u8], options: &Options) -> Vec<u8> {
-    let mut hash = Vec::with_capacity(36);
-    number(1, 3, &mut hash);
-    let mut digest = Sha256::digest(data);
-    digest.reverse();
-    blob(2, &digest, &mut hash);
-    let mut init = Vec::with_capacity(80);
-    number(1, options.app_version, &mut init);
-    number(2, options.hw_version, &mut init);
-    if !options.sd_req.is_empty() {
-        let mut packed = Vec::with_capacity(options.sd_req.len() * 3);
-        for &sd in &options.sd_req {
-            varint(sd, &mut packed);
-        }
-        blob(3, &packed, &mut init);
-    }
-    number(4, 0, &mut init);
-    number(7, data.len() as u32, &mut init);
-    blob(8, &hash, &mut init);
-    let mut command = Vec::with_capacity(init.len() + 4);
-    number(1, 1, &mut command);
-    blob(2, &init, &mut command);
-    let mut packet = Vec::with_capacity(command.len() + 2);
-    blob(1, &command, &mut packet);
-    packet
-}
-
-// Read only the Secure DFU protobuf fields needed to reject Legacy packets,
-// mismatched package members and malformed sizes before opening any serial port.
-#[derive(Clone, Copy)]
-enum Field<'a> {
-    Number(u64),
-    Bytes(&'a [u8]),
-}
-fn take_varint(bytes: &[u8], pos: &mut usize) -> std::result::Result<u64, String> {
-    let mut result = 0;
-    for shift in (0..70).step_by(7) {
-        let b = *bytes
-            .get(*pos)
-            .ok_or("Truncated Secure DFU init protobuf")?;
-        *pos += 1;
-        if shift == 63 && b > 1 {
-            return Err("Overflow in Secure DFU init protobuf".into());
-        }
-        result |= u64::from(b & 127) << shift;
-        if b & 128 == 0 {
-            return Ok(result);
-        }
-    }
-    Err("Invalid Secure DFU init protobuf varint".into())
-}
-fn fields(bytes: &[u8]) -> std::result::Result<Vec<(u64, Field<'_>)>, String> {
-    let mut pos = 0;
-    let mut result = Vec::new();
-    while pos < bytes.len() {
-        let tag = take_varint(bytes, &mut pos)?;
-        if tag >> 3 == 0 {
-            return Err(
-                "Not a Secure DFU init packet (Legacy BLE ZIP is not supported here)".into(),
-            );
-        }
-        let value = match tag & 7 {
-            0 => Field::Number(take_varint(bytes, &mut pos)?),
-            2 => {
-                let len = usize::try_from(take_varint(bytes, &mut pos)?)
-                    .map_err(|_| "Invalid protobuf length")?;
-                let end = pos
-                    .checked_add(len)
-                    .filter(|&e| e <= bytes.len())
-                    .ok_or("Truncated Secure DFU init protobuf field")?;
-                let data = &bytes[pos..end];
-                pos = end;
-                Field::Bytes(data)
-            }
-            _ => return Err("Unsupported Secure DFU protobuf wire type".into()),
-        };
-        result.push((tag >> 3, value));
-    }
-    Ok(result)
-}
-fn field<'a>(
-    fields: &[(u64, Field<'a>)],
-    key: u64,
-) -> std::result::Result<Option<Field<'a>>, String> {
-    let mut matches = fields.iter().filter(|(k, _)| *k == key);
-    let value = matches.next().map(|(_, v)| *v);
-    if matches.next().is_some() {
-        return Err(format!("Duplicate Secure DFU init field {key}"));
-    }
-    Ok(value)
-}
-fn bytes_field<'a>(f: &[(u64, Field<'a>)], key: u64) -> std::result::Result<&'a [u8], String> {
-    match field(f, key)? {
-        Some(Field::Bytes(v)) => Ok(v),
-        _ => Err(format!("Missing Secure DFU init message {key}")),
-    }
-}
-fn num_field(f: &[(u64, Field<'_>)], key: u64, default: u64) -> std::result::Result<u64, String> {
-    match field(f, key)? {
-        Some(Field::Number(v)) => Ok(v),
-        None => Ok(default),
-        _ => Err(format!("Invalid Secure DFU init integer {key}")),
-    }
-}
-fn validate_init(init: &[u8], firmware: &[u8], kind: &str) -> std::result::Result<(), String> {
-    let root = fields(init)?;
-    let command = match (field(&root, 1)?, field(&root, 2)?) {
-        (Some(Field::Bytes(c)), None) => c,
-        (None, Some(Field::Bytes(s))) => {
-            let signed = fields(s)?;
-            bytes_field(&signed, 1)?
-        }
-        _ => return Err("ZIP requires a Nordic Secure DFU .dat packet, not Legacy BLE DFU".into()),
-    };
-    let command = fields(command)?;
-    if num_field(&command, 1, 0)? != 1 {
-        return Err("Secure DFU packet is not an INIT command".into());
-    }
-    let init = fields(bytes_field(&command, 2)?)?;
-    let expected_type = match kind {
-        "application" => 0,
-        "softdevice" => 1,
-        "bootloader" => 2,
-        "softdevice_bootloader" => 3,
-        _ => unreachable!(),
-    };
-    if num_field(&init, 4, 0)? != expected_type {
-        return Err(format!("Secure DFU init type does not match {kind}"));
-    }
-    let size = num_field(&init, 5, 0)?
-        .checked_add(num_field(&init, 6, 0)?)
-        .and_then(|v| v.checked_add(num_field(&init, 7, 0).ok()?))
-        .ok_or("Secure DFU image size overflow")?;
-    if size != firmware.len() as u64 {
-        return Err("Secure DFU .dat image size does not match .bin".into());
-    }
-    let hash = fields(bytes_field(&init, 8)?)?;
-    let actual = bytes_field(&hash, 2)?;
-    let valid = match num_field(&hash, 1, 0)? {
-        1 => actual == crc32fast::hash(firmware).to_le_bytes(),
-        3 => {
-            let mut expected = Sha256::digest(firmware);
-            expected.reverse();
-            actual == expected.as_slice()
-        }
-        _ => return Err("Secure DFU package must contain a CRC32 or SHA256 image hash".into()),
-    };
-    if !valid {
-        return Err("Secure DFU .dat hash does not match .bin".into());
-    }
-    Ok(())
-}
-fn safe_member(name: &str) -> bool {
-    !name.is_empty()
-        && !name.contains('\\')
-        && !name.contains(':')
-        && !name.starts_with('/')
-        && !name.split('/').any(|p| p == ".." || p == ".")
-}
-fn zip_member(
-    archive: &mut zip::ZipArchive<Cursor<&[u8]>>,
-    name: &str,
-    limit: usize,
-) -> std::result::Result<Vec<u8>, String> {
-    if !safe_member(name) {
-        return Err("Unsafe DFU ZIP member path".into());
-    }
-    let mut member = archive
-        .by_name(name)
-        .map_err(|e| format!("Missing ZIP member {name}: {e}"))?;
-    if member.is_dir() || member.size() == 0 || member.size() > limit as u64 {
-        return Err(format!("DFU ZIP member {name} has invalid size"));
-    }
-    let size = member.size();
-    let mut bytes = Vec::with_capacity(size as usize);
-    (&mut member)
-        .take(size + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|e| format!("Cannot read DFU ZIP member {name}: {e}"))?;
-    if bytes.len() as u64 != size {
-        return Err(format!("DFU ZIP member {name} has an inconsistent size"));
-    }
-    Ok(bytes)
-}
-fn parse_images(
-    name: &str,
-    bytes: &[u8],
-    options: &Options,
-) -> std::result::Result<Vec<Image>, String> {
-    let extension = std::path::Path::new(name)
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
-    if extension.eq_ignore_ascii_case("hex") {
-        let image = crate::firmware::parse_image(name, bytes)?;
-        if image.data.is_empty() || image.data.len() > MAX_IMAGE {
-            return Err("Invalid OpenDFU HEX image size".into());
-        }
-        if image.base_address != options.app_base {
-            return Err(format!(
-                "HEX application begins at {:#x}, but this bootloader is configured for {:#x}; refusing to relocate an addressless Secure DFU image",
-                image.base_address, options.app_base
-            ));
-        }
-        return Ok(vec![Image {
-            name: name.into(),
-            init: generate_init(&image.data, options),
-            firmware: image.data,
-        }]);
-    }
-    if !extension.eq_ignore_ascii_case("zip") {
-        return Err("OpenDFU requires Intel HEX or a Nordic Secure DFU ZIP".into());
-    }
-    if bytes.len() > 16 * 1024 * 1024 {
-        return Err("DFU ZIP exceeds 16 MiB limit".into());
-    }
-    let mut archive = crate::firmware::zip_envelope::open(
-        bytes,
-        crate::firmware::zip_envelope::Limits {
-            bytes: 16 * 1024 * 1024,
-            members: 128,
-            directory: 4 * 1024 * 1024,
-        },
-    )?;
-    let mut seen = HashSet::new();
-    for i in 0..archive.len() {
-        let member = archive
-            .by_index(i)
-            .map_err(|e| format!("Invalid DFU ZIP member: {e}"))?;
-        let name = member
-            .name()
-            .map_err(|e| format!("Cannot decode DFU ZIP member name: {e}"))?;
-        if !safe_member(&name) || !seen.insert(name.into_owned()) {
-            return Err("Unsafe or duplicate DFU ZIP member".into());
-        }
-    }
-    let manifest = zip_member(&mut archive, "manifest.json", 64 * 1024)?;
-    let manifest: serde_json::Value =
-        serde_json::from_slice(&manifest).map_err(|e| format!("Invalid DFU manifest: {e}"))?;
-    let entries = manifest
-        .get("manifest")
-        .unwrap_or(&manifest)
-        .as_object()
-        .ok_or("DFU manifest must be an object")?;
-    if entries.contains_key("softdevice_bootloader")
-        && (entries.contains_key("softdevice") || entries.contains_key("bootloader"))
-    {
-        return Err("DFU ZIP contains conflicting combined and separate system images".into());
-    }
-    let mut images = Vec::new();
-    // System updates must precede an application which depends on the new SD/BL.
-    for kind in [
-        "softdevice_bootloader",
-        "softdevice",
-        "bootloader",
-        "application",
-    ] {
-        if let Some(entry) = entries.get(kind) {
-            let bin = entry
-                .get("bin_file")
-                .and_then(|v| v.as_str())
-                .ok_or("DFU manifest is missing bin_file")?;
-            let dat = entry
-                .get("dat_file")
-                .and_then(|v| v.as_str())
-                .ok_or("DFU manifest is missing dat_file")?;
-            let firmware = zip_member(&mut archive, bin, MAX_IMAGE)?;
-            let init = zip_member(&mut archive, dat, MAX_INIT)?;
-            validate_init(&init, &firmware, kind)?;
-            images.push(Image {
-                name: bin.into(),
-                firmware,
-                init,
-            });
-        }
-    }
-    if images.is_empty() {
-        return Err("No Secure DFU firmware in ZIP".into());
-    }
-    Ok(images)
 }
 
 struct Session<'a, T> {
@@ -1044,13 +719,39 @@ fn strip_ansi(line: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        Error, Options, Session, Transport, bootloader_identity, console_handshake, generate_init,
-        parse_images, revalidate_bootloader_identity, validate_init,
+        Error, Options, Session, Transport, bootloader_identity, console_handshake, parse_images,
+        revalidate_bootloader_identity,
     };
     use crate::domain::{InterfaceDescription, SerialEndpoint, SerialPortKind, UsbInterface};
+    use slimenrf_firmware_image::secure_dfu::Image;
     use std::collections::VecDeque;
-    use std::io::{self, Cursor, Read, Write};
+    use std::io::{self, Read, Write};
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    fn application_image(bytes: &[u8]) -> Image {
+        use std::fmt::Write as _;
+
+        let mut hex = String::new();
+        for (index, chunk) in bytes.chunks(16).enumerate() {
+            let address = 0x1000 + index * 16;
+            let mut record = vec![chunk.len() as u8, (address >> 8) as u8, address as u8, 0];
+            record.extend_from_slice(chunk);
+            let checksum =
+                0u8.wrapping_sub(record.iter().fold(0u8, |sum, &byte| sum.wrapping_add(byte)));
+            record.push(checksum);
+            hex.push(':');
+            for byte in record {
+                write!(&mut hex, "{byte:02X}").unwrap();
+            }
+            hex.push('\n');
+        }
+        hex.push_str(":00000001FF\n");
+        let mut images = parse_images("fixture.hex", hex.as_bytes(), &Options::default()).unwrap();
+        assert_eq!(images.len(), 1);
+        let image = images.pop().unwrap();
+        assert_eq!(image.firmware(), bytes);
+        image
+    }
 
     fn bootloader_endpoint() -> SerialEndpoint {
         SerialEndpoint {
@@ -1345,18 +1046,18 @@ mod tests {
     #[test]
     fn complete_transfer_uses_slip_crc_objects_and_activation() {
         let bytes: Vec<u8> = (0..=255).collect();
-        let init = generate_init(&bytes, &Options::default());
-        validate_init(&init, &bytes, "application").unwrap();
+        let image = application_image(&bytes);
+        let init = image.init();
         let cancel = AtomicBool::new(false);
         let mut boot = Bootloader::new(bytes.len());
         let mut progress = Vec::new();
         {
             let mut session = Session::new(&mut boot, &cancel);
             session.connect().unwrap();
-            session.init(&init).unwrap();
+            session.init(init).unwrap();
             assert!(!session.firmware(&bytes, &mut |n| progress.push(n)).unwrap());
         }
-        assert_eq!(boot.command, init);
+        assert_eq!(boot.command.as_slice(), init);
         assert_eq!(boot.data, bytes);
         assert_eq!(boot.executed, 9);
         assert_eq!(progress.last(), Some(&256));
@@ -1371,7 +1072,8 @@ mod tests {
     #[test]
     fn resumes_init_and_partial_data_without_replaying_committed_prefix() {
         let bytes: Vec<u8> = (0..100).collect();
-        let init = generate_init(&bytes, &Options::default());
+        let image = application_image(&bytes);
+        let init = image.init();
         let mut boot = Bootloader::new(bytes.len());
         boot.command.extend_from_slice(&init[..13]);
         boot.data.extend_from_slice(&bytes[..45]);
@@ -1380,10 +1082,10 @@ mod tests {
         {
             let mut session = Session::new(&mut boot, &cancel);
             session.connect().unwrap();
-            session.init(&init).unwrap();
+            session.init(init).unwrap();
             session.firmware(&bytes, &mut |_| {}).unwrap();
         }
-        assert_eq!(boot.command, init);
+        assert_eq!(boot.command.as_slice(), init);
         assert_eq!(boot.data, bytes);
         let create: Vec<_> = boot.packets.iter().filter(|p| p[0] == 1).collect();
         assert_eq!(create.len(), 2);
@@ -1490,126 +1192,6 @@ mod tests {
             .unwrap();
         assert!(!boot.packets.iter().any(|p| p[0] == 8 || p[0] == 1));
         assert_eq!(boot.executed, 1);
-    }
-
-    #[test]
-    fn secure_init_rejects_legacy_wrong_hash_and_wrong_manifest_kind() {
-        let bytes = vec![4; 100];
-        let init = generate_init(&bytes, &Options::default());
-        assert!(validate_init(&[52, 0, 0, 0, 1, 0], &bytes, "application").is_err());
-        assert!(validate_init(&init, &[5; 100], "application").is_err());
-        assert!(validate_init(&init, &bytes, "bootloader").is_err());
-        assert!(validate_init(&init, &[4; 99], "application").is_err());
-    }
-
-    fn hex_record(address: u16, bytes: &[u8]) -> String {
-        let mut record = vec![bytes.len() as u8, (address >> 8) as u8, address as u8, 0];
-        record.extend_from_slice(bytes);
-        let checksum = 0u8.wrapping_sub(record.iter().fold(0u8, |sum, &b| sum.wrapping_add(b)));
-        record.push(checksum);
-        let encoded: String = record.iter().map(|b| format!("{b:02X}")).collect();
-        format!(":{encoded}\n")
-    }
-
-    #[test]
-    fn hex_drops_mbr_and_never_relocates_an_unknown_application_base() {
-        let app = [0x00, 0x10, 0x00, 0x20, 0x09, 0x10, 0x00, 0x00];
-        let mixed = format!(
-            "{}{}:00000001FF\n",
-            hex_record(0, &[1; 16]),
-            hex_record(0x1000, &app)
-        );
-        let images = parse_images("holyiot.hex", mixed.as_bytes(), &Options::default()).unwrap();
-        assert_eq!(images[0].firmware, app);
-        let crossing = format!(
-            "{}:00000001FF\n",
-            hex_record(0x0ffc, &[1, 2, 3, 4, 5, 6, 7, 8])
-        );
-        assert_eq!(
-            parse_images("crossing.hex", crossing.as_bytes(), &Options::default()).unwrap()[0]
-                .firmware,
-            [5, 6, 7, 8]
-        );
-        let higher = format!("{}:00000001FF\n", hex_record(0x2000, &app));
-        assert!(parse_images("other-base.hex", higher.as_bytes(), &Options::default()).is_err());
-        let known_other_bootloader = Options {
-            app_base: 0x2000,
-            ..Options::default()
-        };
-        assert_eq!(
-            parse_images("known-base.hex", higher.as_bytes(), &known_other_bootloader).unwrap()[0]
-                .firmware,
-            app
-        );
-    }
-
-    #[test]
-    fn init_packet_matches_nordic_protobuf_sha256_vector() {
-        // SHA256("abc"), reversed per Nordic dfu-cc.proto; hw52/fw1/sd0.
-        let expected = [
-            0x0a, 0x35, 0x08, 0x01, 0x12, 0x31, 0x08, 0x01, 0x10, 0x34, 0x1a, 0x01, 0x00, 0x20,
-            0x00, 0x38, 0x03, 0x42, 0x24, 0x08, 0x03, 0x12, 0x20, 0xad, 0x15, 0x00, 0xf2, 0x61,
-            0xff, 0x10, 0xb4, 0x9c, 0x7a, 0x17, 0x96, 0xa3, 0x61, 0x03, 0xb0, 0x23, 0x22, 0xae,
-            0x5d, 0xde, 0x40, 0x41, 0x41, 0xea, 0xcf, 0x01, 0x8f, 0xbf, 0x16, 0x78, 0xba,
-        ];
-        assert_eq!(generate_init(b"abc", &Options::default()), expected);
-    }
-
-    fn package(bin: &[u8], dat: &[u8], bin_name: &str) -> Vec<u8> {
-        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
-        let options = zip::write::SimpleFileOptions::default();
-        writer.start_file("manifest.json", options).unwrap();
-        let manifest = serde_json::json!({"manifest": {"application": {"bin_file": bin_name, "dat_file": "app.dat"}}});
-        writer.write_all(manifest.to_string().as_bytes()).unwrap();
-        writer.start_file(bin_name, options).unwrap();
-        writer.write_all(bin).unwrap();
-        writer.start_file("app.dat", options).unwrap();
-        writer.write_all(dat).unwrap();
-        writer.finish().unwrap().into_inner()
-    }
-
-    #[test]
-    fn secure_zip_extracts_real_members_and_rejects_traversal_or_legacy_init() {
-        let bin = vec![0xdb; 128];
-        let options = Options::default();
-        let init = generate_init(&bin, &options);
-        let bytes = package(&bin, &init, "app.bin");
-        let parsed = parse_images("firmware.zip", &bytes, &options).unwrap();
-        assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].firmware, bin);
-        assert_eq!(parsed[0].init, init);
-        assert!(
-            parse_images(
-                "legacy.zip",
-                &package(&bin, &[52, 0, 0, 0, 1, 0], "app.bin"),
-                &options
-            )
-            .is_err()
-        );
-        assert!(parse_images("unsafe.zip", &package(&bin, &init, "../app.bin"), &options).is_err());
-    }
-
-    #[test]
-    fn secure_zip_rejects_unsafe_envelopes_and_false_member_sizes() {
-        let options = Options::default();
-        let bin = [1, 2, 3, 4];
-        let bytes = package(&bin, &generate_init(&bin, &options), "app.bin");
-        let end = bytes.len() - 22;
-        for (field, value) in [(8, 129u16), (10, 129), (4, 1), (6, 1), (10, u16::MAX)] {
-            let mut malformed = bytes.clone();
-            malformed[end + field..end + field + 2].copy_from_slice(&value.to_le_bytes());
-            assert!(parse_images("secure.zip", &malformed, &options).is_err());
-        }
-        let central = u32::from_le_bytes(bytes[end + 16..end + 20].try_into().unwrap()) as usize;
-        let local =
-            u32::from_le_bytes(bytes[central + 42..central + 46].try_into().unwrap()) as usize;
-        let size = u32::from_le_bytes(bytes[central + 24..central + 28].try_into().unwrap());
-        for declared in [0, size - 1, size + 1] {
-            let mut malformed = bytes.clone();
-            malformed[local + 22..local + 26].copy_from_slice(&declared.to_le_bytes());
-            malformed[central + 24..central + 28].copy_from_slice(&declared.to_le_bytes());
-            assert!(parse_images("secure.zip", &malformed, &options).is_err());
-        }
     }
 
     #[test]

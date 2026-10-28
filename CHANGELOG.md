@@ -16,6 +16,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Changed
 
 - The root is now a virtual Cargo workspace, with the desktop application's source and build support in `crates/app` alongside the existing recording core. Root development commands and resource path semantics are unchanged.
+- The terminal model and firmware-image parsing and content validation are isolated in internal workspace libraries. GUI presentation, hardware access, device authorization, and application build resources remain in the desktop app; the new libraries can be built and tested without its Python-based build. This is an internal boundary change, not a new user-facing feature.
 - Developer test scripts use cargo-nextest, with doctests available as a separate action; quality scripts run both. Windows MSVC builds use the Rust toolchain's bundled LLD linker, and Linux builds can opt into mold.
 - Release builds use optimization level 2, fat LTO, one codegen unit, and symbol stripping.
 - Main, license notices, RSSI analysis, and temperature calibration analysis windows now use theme-aware GPUI Kit title bars instead of system title-bar styling, while preserving window controls and shutdown cleanup.

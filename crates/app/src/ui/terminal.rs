@@ -33,6 +33,7 @@ use gpui_kit::{
     Focusable as _,
     base::{Scrollbar, ScrollbarAxis, TestSupportExt as _, TextSelection, TextSelectionHandle},
 };
+use slimenrf_terminal_core::CommandHistory;
 use std::{cell::RefCell, path::PathBuf, rc::Rc, sync::Arc};
 
 pub(super) struct TerminalSession {
@@ -49,7 +50,7 @@ pub(super) struct TerminalSession {
     pub(super) status: Option<String>,
     _subscription: Subscription,
     pub(super) pending: Option<TerminalConnect>,
-    history: crate::terminal::CommandHistory,
+    history: CommandHistory,
     export: TerminalExport,
     export_status: Option<Result<std::path::PathBuf, String>>,
 }
@@ -270,7 +271,7 @@ impl Workbench {
                     status: None,
                     _subscription: subscription,
                     pending: None,
-                    history: crate::terminal::CommandHistory::default(),
+                    history: CommandHistory::default(),
                     export: TerminalExport::default(),
                     export_status: None,
                 },

@@ -25,9 +25,12 @@ SOURCE_FILES = ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
                 "LICENSE-MIT", "LICENSE-APACHE",
                 "scripts/generate_notices.py", "scripts/notices-inputs.json",
                 "crates/app/Cargo.toml", "crates/app/build.rs",
-                "crates/recording/Cargo.toml", "crates/recording/build.rs")
+                "crates/firmware-image/Cargo.toml",
+                "crates/recording/Cargo.toml", "crates/recording/build.rs",
+                "crates/terminal-core/Cargo.toml")
 SOURCE_TREES = ("crates/app/src", "crates/app/build_support", "locales",
-                "crates/recording/src", "crates/recording/vendor/vqf")
+                "crates/firmware-image/src", "crates/recording/src", "crates/recording/vendor/vqf",
+                "crates/terminal-core/src")
 EXCLUDED = {"target", "dist", ".git", ".flatpak-builder", "__pycache__", ".cache"}
 RUST_DIST = "https://static.rust-lang.org/dist"
 RUST_PREFIX = "/app/lib/slimenrf-build-rust"

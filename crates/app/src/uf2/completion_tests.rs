@@ -1,8 +1,9 @@
 use super::{
-    CopyFile, CopyOutcome, Uf2Volume, WritePurpose, authorization_tests::updater, inspect_volume,
-    reboot_with, tests::payload, write_with,
+    CopyFile, CopyOutcome, Uf2Volume, authorization_tests::updater, inspect_volume, reboot_with,
+    tests::payload, write_with,
 };
-use crate::{firmware::Nrf52Chip, update::Uf2FinalizationStage};
+use crate::update::Uf2FinalizationStage;
+use slimenrf_firmware_image::image::{Nrf52Chip, Uf2ImagePurpose};
 use std::{
     cell::Cell,
     fs::{self, File},
@@ -112,7 +113,7 @@ fn successful_short_writes_run_real_copy_flush_and_sync() {
         &volume,
         "firmware.uf2",
         &bytes,
-        WritePurpose::Application,
+        Uf2ImagePurpose::Application,
         &AtomicBool::new(false),
         &mut |next| progress.push(next),
         writer(Fault::None, 7, &calls),
@@ -140,13 +141,13 @@ fn successful_short_writes_run_real_copy_flush_and_sync() {
 #[test]
 fn only_full_host_writes_then_device_disappearance_leave_confirmation_pending() {
     for (purpose, bytes) in [
-        (WritePurpose::Application, payload(200)),
+        (Uf2ImagePurpose::Application, payload(200)),
         (
-            WritePurpose::Bootloader(Nrf52Chip::Nrf52833),
+            Uf2ImagePurpose::Bootloader(Nrf52Chip::Nrf52833),
             updater(Nrf52Chip::Nrf52833),
         ),
         (
-            WritePurpose::Bootloader(Nrf52Chip::Nrf52840),
+            Uf2ImagePurpose::Bootloader(Nrf52Chip::Nrf52840),
             updater(Nrf52Chip::Nrf52840),
         ),
     ] {
@@ -231,7 +232,7 @@ fn storage_errors_remain_failures_even_after_all_bytes_were_accepted() {
                 &volume,
                 "firmware.uf2",
                 &bytes,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &AtomicBool::new(false),
                 &mut |_| {},
                 writer(fault, 19, &calls),
@@ -259,7 +260,7 @@ fn short_write_disappearance_and_write_zero_are_failures_without_finalization() 
                 &volume,
                 "firmware.uf2",
                 &bytes,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &AtomicBool::new(false),
                 &mut |_| {},
                 writer(Fault::WriteAfter(limit, code), 11, &calls),
@@ -278,7 +279,7 @@ fn short_write_disappearance_and_write_zero_are_failures_without_finalization() 
                 &volume,
                 "firmware.uf2",
                 &bytes,
-                WritePurpose::Application,
+                Uf2ImagePurpose::Application,
                 &AtomicBool::new(false),
                 &mut |_| {},
             )
@@ -299,7 +300,7 @@ fn cancellation_before_create_between_chunks_and_before_finalize_is_not_pending(
             &volume,
             "firmware.uf2",
             &bytes,
-            WritePurpose::Application,
+            Uf2ImagePurpose::Application,
             &cancel,
             &mut |next| {
                 if cancel_after == Some(next.completed) {
@@ -332,7 +333,7 @@ fn replaced_identity_before_remaining_chunks_never_reaches_finalization() {
         &volume,
         "firmware.uf2",
         &bytes,
-        WritePurpose::Application,
+        Uf2ImagePurpose::Application,
         &AtomicBool::new(false),
         &mut |next| {
             if next.completed > 0 {
@@ -412,7 +413,7 @@ fn destination_and_frozen_chip_guards_run_before_injected_copy_io() {
             &volume,
             name,
             &bytes,
-            WritePurpose::Application,
+            Uf2ImagePurpose::Application,
             &AtomicBool::new(false),
             &mut |_| {},
             |_: File| -> File { panic!("invalid destination reached copy IO: {name}") },
@@ -429,7 +430,7 @@ fn destination_and_frozen_chip_guards_run_before_injected_copy_io() {
         &volume,
         "wrong-chip.uf2",
         &bootloader,
-        WritePurpose::Bootloader(Nrf52Chip::Nrf52840),
+        Uf2ImagePurpose::Bootloader(Nrf52Chip::Nrf52840),
         &AtomicBool::new(false),
         &mut |_| {},
         |_: File| -> File { panic!("wrong MCU reached copy IO") },
@@ -446,7 +447,7 @@ fn destination_and_frozen_chip_guards_run_before_injected_copy_io() {
         &volume,
         "replacement.uf2",
         &bytes,
-        WritePurpose::Application,
+        Uf2ImagePurpose::Application,
         &AtomicBool::new(false),
         &mut |_| {},
         |_: File| -> File { panic!("replaced volume reached copy IO") },

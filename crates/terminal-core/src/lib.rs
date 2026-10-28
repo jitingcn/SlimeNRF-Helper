@@ -1,13 +1,38 @@
+//! Bounded, streaming terminal scrollback and command history without device or UI dependencies.
+//!
+//! [`TerminalBuffer`] retains UTF-8 text and SGR styles across input chunks.
+//! Its borrowed rows let a presentation update changed lines without copying the
+//! whole transcript; selection state and connection identity belong to the caller.
+//! [`CommandHistory`] records accepted submissions, not completed device execution.
+//!
+//! ```
+//! use slimenrf_terminal_core::{AnsiColor, TerminalBuffer};
+//!
+//! let mut terminal = TerminalBuffer::new();
+//! terminal.push(b"\x1b[31mred\x1b[0m\nplain");
+//! let mut rows = terminal.rows();
+//! let (_, _, text, styles, newline) = rows.next().expect("first row");
+//! assert_eq!(text, "red");
+//! assert_eq!(styles[0].style.foreground, AnsiColor::Indexed(1));
+//! assert!(newline);
+//! assert_eq!(rows.next().map(|row| row.2), Some("plain"));
+//! ```
+
 use std::collections::VecDeque;
 
+/// Maximum retained rows, including the current row.
 pub const MAX_LINES: usize = 1_000;
+/// Maximum UTF-8 bytes in a retained row, including the clipping marker.
 pub const MAX_LINE_BYTES: usize = 8_192;
 const CLIPPED: &str = " … [line clipped]";
 
 const MAX_COMMAND_HISTORY: usize = 100;
 
-/// Per-port submitted commands and a transient navigation draft.
-#[derive(Default)]
+/// Accepted commands and the transient draft for one caller-owned session.
+///
+/// At most 100 nonempty commands are retained; consecutive duplicates are
+/// stored once. A successful submission does not imply device execution.
+#[derive(Debug, Default)]
 pub struct CommandHistory {
     commands: VecDeque<String>,
     position: Option<usize>,
@@ -15,7 +40,10 @@ pub struct CommandHistory {
 }
 
 impl CommandHistory {
-    /// A connection attempt or rejected submission must never enter history.
+    /// Records a nonempty command if its submission was accepted.
+    ///
+    /// An error or empty command leaves history and navigation state unchanged.
+    /// Pass the submission result, not the later device execution result.
     pub fn record_submission<T, E>(&mut self, command: &str, result: &Result<T, E>) {
         if result.is_err() || command.is_empty() {
             return;
@@ -30,6 +58,12 @@ impl CommandHistory {
         self.draft.clear();
     }
 
+    /// Moves toward older or newer commands, preserving the current draft.
+    ///
+    /// Pass `true` for older and `false` for newer. Moving older after editing
+    /// a recalled command saves the edited text as the new draft; moving newer
+    /// in that state leaves navigation and returns `None`. Returns `None` when
+    /// no command is available in the requested direction.
     pub fn navigate(&mut self, older: bool, current: &str) -> Option<String> {
         // Editing a recalled command begins a new draft rather than losing it.
         if self
@@ -64,26 +98,39 @@ impl CommandHistory {
     }
 }
 
+/// A terminal foreground or background color selected by SGR.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum AnsiColor {
+pub enum AnsiColor {
+    /// The presentation's default foreground or background.
     #[default]
     Default,
+    /// An ANSI palette index in the range 0–255.
     Indexed(u8),
+    /// A true-color red, green and blue triplet.
     Rgb(u8, u8, u8),
 }
 
+/// SGR attributes applied to a range of displayed text.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct AnsiStyle {
+pub struct AnsiStyle {
+    /// Foreground color before inverse-video presentation.
     pub foreground: AnsiColor,
+    /// Background color before inverse-video presentation.
     pub background: AnsiColor,
+    /// Bold intensity is enabled.
     pub bold: bool,
+    /// Dim intensity is enabled.
     pub dim: bool,
+    /// Foreground and background are presented inversely.
     pub inverse: bool,
 }
 
+/// A nondefault style covering a UTF-8 byte range within one borrowed row.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct StyleRun {
+pub struct StyleRun {
+    /// Half-open byte range at character boundaries in the row text.
     pub range: std::ops::Range<usize>,
+    /// SGR attributes for this range.
     pub style: AnsiStyle,
 }
 
@@ -293,7 +340,7 @@ fn replace_style(
     true
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 enum Escape {
     #[default]
     Ground,
@@ -308,8 +355,12 @@ enum Escape {
     },
 }
 
-/// Bounded plain-text scrollback with byte-indexed SGR styling. Other ANSI
-/// sequences are discarded; carriage return overwrites the current line.
+/// Bounded scrollback with streaming UTF-8 decoding and byte-indexed SGR styling.
+///
+/// ANSI sequences other than supported SGR attributes are discarded, and a
+/// carriage return overwrites the current row. Excess rows are removed from the
+/// front, while an oversized row is clipped to [`MAX_LINE_BYTES`].
+#[derive(Debug)]
 pub struct TerminalBuffer {
     lines: VecDeque<String>,
     line_revisions: VecDeque<u64>,
@@ -337,6 +388,7 @@ impl Default for TerminalBuffer {
 }
 
 impl TerminalBuffer {
+    /// Creates an empty transcript with one empty current row.
     pub fn new() -> Self {
         let mut lines = VecDeque::new();
         lines.push_back(String::new());
@@ -360,12 +412,18 @@ impl TerminalBuffer {
         }
     }
 
+    /// Processes another input chunk, retaining incomplete UTF-8 and ANSI state.
     pub fn push(&mut self, bytes: &[u8]) {
         for &byte in bytes {
             self.byte(byte);
         }
     }
 
+    /// Ends a stream and resets ANSI state.
+    ///
+    /// An incomplete UTF-8 character produces a replacement character, subject
+    /// to the row limit. Retained text is kept and later input starts in the
+    /// default style.
     pub fn finish(&mut self) {
         if self.utf8_len != 0 {
             self.utf8_len = 0;
@@ -378,6 +436,7 @@ impl TerminalBuffer {
         self.csi_invalid = false;
     }
 
+    /// Clears retained text and parser state, invalidating previous row identities.
     pub fn clear(&mut self) {
         let revision = self.revision.wrapping_add(1);
         let selection_epoch = self.selection_epoch.wrapping_add(1);
@@ -388,19 +447,32 @@ impl TerminalBuffer {
         self.first_line_id = first_line_id;
     }
 
+    /// Returns a wrapping change token for the retained text and its styling.
+    ///
+    /// ANSI-only input without a visible change does not increment this token.
     pub fn revision(&self) -> u64 {
         self.revision
     }
 
-    /// A selection remains valid only within the same connection generation and epoch.
-    /// Unlike the revision, ordinary appended output does not change this value.
+    /// Returns a wrapping token invalidating retained text offsets when changed.
+    ///
+    /// Appending without trimming or clipping does not change the epoch.
+    /// Replacing existing text, trimming, clipping, or clearing can change it.
+    /// Selection identity also needs the caller's connection generation, not
+    /// this token alone.
     pub fn selection_epoch(&self) -> u64 {
         self.selection_epoch
     }
 
-    /// Stable row identities and revisions allow visible consumers to copy only
-    /// changed rows. The final row has no separator, even when it is empty.
-    pub(crate) fn rows(&self) -> impl Iterator<Item = (u64, u64, &str, &[StyleRun], bool)> {
+    /// Iterates borrowed rows without copying transcript text or styles.
+    ///
+    /// Each tuple is `(line_id, row_revision, text, styles, has_newline)`.
+    /// Line IDs and row revisions are wrapping tokens for matching retained
+    /// rows and detecting changes. A row revision changes when its text,
+    /// styling, or newline changes. Style ranges are ordered, nonoverlapping
+    /// UTF-8 byte ranges; gaps use the default [`AnsiStyle`]. The final row has
+    /// no newline separator, even when it is empty.
+    pub fn rows(&self) -> impl Iterator<Item = (u64, u64, &str, &[StyleRun], bool)> {
         self.lines
             .iter()
             .zip(&self.line_revisions)
@@ -417,6 +489,7 @@ impl TerminalBuffer {
             })
     }
 
+    /// Allocates a plain-text snapshot, joining retained rows with newlines.
     pub fn text(&self) -> String {
         let size =
             self.lines.iter().map(String::len).sum::<usize>() + self.lines.len().saturating_sub(1);

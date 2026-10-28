@@ -1,10 +1,12 @@
 {
   "schema": 1,
   "input_sha256": {
-    "Cargo.lock": "cf39043a837b809195ebf7c6d02bb9f20f6230c3895ce6a2f01aee9c0f72b0d6",
-    "Cargo.toml": "80557c77c32adff7f4716d609df749bdd1410f7a336ccfd89c7d15f0a984d10c",
-    "crates/app/Cargo.toml": "5d99d6b1788d863674044d1cfc3f369b1bf5d602788152daaf30f835e9b8f593",
+    "Cargo.lock": "be8c79b3f5c08ebbe087c8d152bea84c318197d15f30eb21b6f901a19af689de",
+    "Cargo.toml": "06f448088d808826356fde7b658e282cd7eb72d9e5129a97237df22373bca6f4",
+    "crates/app/Cargo.toml": "79cfa890a082eaf2ff50eb207b4ed870c37a521027a583cf43a2b630a93a8772",
+    "crates/firmware-image/Cargo.toml": "f47e5c8e0f6cd625d914a9ee3896acca87c6c3241e16666464543aa491a69031",
     "crates/recording/Cargo.toml": "b97713b3affd1a84902192a86bf200055526fde9e93d848e9a7a21eef1c95b68",
+    "crates/terminal-core/Cargo.toml": "c04f89a559ce26e38c06cc87b744b38441afcac52e9f22ed9a9a7db3c7d88671",
     "crates/recording/vendor/vqf/cmsis/include/arm_math.h": "86b5daafdeeedecd7977f00c8001620003b46bd121d4942f04b72746d2634a97",
     "crates/recording/vendor/vqf/cmsis/include/sqrt_f32.h": "cd1cd5e3dbe322a738abd344b4de3ff872f7d4e20c21d87814720783a82be20e",
     "crates/recording/vendor/vqf/cmsis/LICENSE": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
@@ -21,9 +23,11 @@
     "LICENSE-MIT": "984757f3c9a84f012b07ae89dc82cf9f9a711bdd61bca51c1e7c24c2173a0778"
   },
   "manifest_semantic_sha256": {
-    "Cargo.toml": "7b9d5a0de0ea72d09aa18b8ed72b400ad609fe07f0812a1191cf4c8f399765be",
-    "crates/app/Cargo.toml": "329f2d2e13264c828f8cde53afb791b2fc6088eba858e5144724278e36030dba",
-    "crates/recording/Cargo.toml": "cd7867af705526b66357d2cc21f1551d4ab22758cdea105526124fdbc7c21f6d"
+    "Cargo.toml": "08f40b254b3ccfb4eb9472a5e86f43fc5a3a12b8a53013f067d3700c57b22473",
+    "crates/app/Cargo.toml": "89c526b95c36d86662b93e9299106fc31204b8013c1b85fc154bf2580aab1064",
+    "crates/firmware-image/Cargo.toml": "c67a5cdc0d0993054e44fed2bd6e059ff2ba76caab8c7f09debd27647b1df784",
+    "crates/recording/Cargo.toml": "cd7867af705526b66357d2cc21f1551d4ab22758cdea105526124fdbc7c21f6d",
+    "crates/terminal-core/Cargo.toml": "666dbf7fe2eaf6c469fe49304c945658d75176249b6448ce5430829d7bb62c9c"
   },
   "capture": {
     "targets": [

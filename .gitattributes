@@ -5,7 +5,9 @@
 /Cargo.toml text eol=lf
 /Cargo.lock text eol=lf
 /crates/app/Cargo.toml text eol=lf
+/crates/firmware-image/Cargo.toml text eol=lf
 /crates/recording/Cargo.toml text eol=lf
+/crates/terminal-core/Cargo.toml text eol=lf
 /LICENSE-MIT text eol=lf
 /LICENSE-APACHE text eol=lf
 /scripts/notices-inputs.json text eol=lf

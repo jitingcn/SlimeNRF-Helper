@@ -15,7 +15,9 @@ default = ["embed-firmware"]
 embed-firmware = []
 
 [dependencies]
+slimenrf-firmware-image = { path = "../firmware-image" }
 slimenrf-recording = { path = "../recording" }
+slimenrf-terminal-core = { path = "../terminal-core" }
 gpui-kit = { version = "=0.8.1", features = ["gpui-fast"] }
 serialport = { version = "4.8", features = ["usbportinfo-interface"] }
 hidapi = { version = "2.6", default-features = false, features = ["windows-native", "linux-native"] }
@@ -26,9 +28,9 @@ sys-locale = "0.3"
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
-crc32fast = "1"
+crc32fast.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-sha2 = "0.11"
+sha2.workspace = true
 serde_yaml.workspace = true
 zip.workspace = true
 reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
@@ -44,7 +46,7 @@ unicode-width = { version = "=0.2.2", default-features = false }
 gpui-kit = { version = "=0.8.1", features = ["gpui-fast", "test-support"] }
 
 [build-dependencies]
-sha2 = "0.11"
+sha2.workspace = true
 serde_yaml.workspace = true
 zip.workspace = true
 

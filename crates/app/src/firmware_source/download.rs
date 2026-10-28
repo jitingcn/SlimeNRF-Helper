@@ -163,14 +163,15 @@ pub(super) fn bounded_archive<'a>(
     cancel: &AtomicBool,
 ) -> Result<zip::ZipArchive<Cursor<&'a [u8]>>, String> {
     cancelled(cancel)?;
-    let mut archive = crate::firmware::zip_envelope::open(
+    let mut archive = slimenrf_firmware_image::zip_envelope::open(
         bytes,
-        crate::firmware::zip_envelope::Limits {
+        slimenrf_firmware_image::zip_envelope::Limits {
             bytes: MAX_DOWNLOAD,
             members: MAX_MEMBERS,
             directory: 4 * 1024 * 1024,
         },
-    )?;
+    )
+    .map_err(String::from)?;
     let mut names = HashSet::new();
     let mut expanded = 0u64;
     for index in 0..archive.len() {

@@ -4,7 +4,7 @@
 
 [首页](../README.zh-CN.md) · [开发步骤](DEVELOPMENT.zh-CN.md) · [协议契约](PROTOCOLS.zh-CN.md)
 
-一个产品、一个桌面可执行文件、一个小型 Cargo workspace。根目录是虚拟 workspace；`crates/app` 中的 `slimenrf-helper` 是装配点和默认成员；内部库 `crates/recording`（`slimenrf-recording`）拥有可独立消费的记录与回放内核，不独立发布。应用源码、构建脚本和构建支持位于 `crates/app`；共享配置、翻译、脚本、资源和 workspace 配置保留在仓库根目录。模块划分按依赖与资源所有权，不按页面或文件长度；不建立动态 DLL 插件系统或旧路径转发层。强制工程规则以[根 AGENTS](../AGENTS.md)和[内核 AGENTS](../crates/recording/AGENTS.md)为准。
+一个产品、一个桌面可执行文件、一个小型 Cargo workspace。根目录是虚拟 workspace；`crates/app` 中的 `slimenrf-helper` 是装配点和默认成员。内部库包括负责记录与回放的 `crates/recording`（`slimenrf-recording`）、仅依赖标准库的终端模型 `crates/terminal-core`（`slimenrf-terminal-core`），以及负责镜像解析与内容校验的 `crates/firmware-image`（`slimenrf-firmware-image`）。记录内核可独立消费，但不独立发布。应用源码、构建脚本和构建支持位于 `crates/app`；共享配置、翻译、脚本、资源和 workspace 配置保留在仓库根目录。模块划分按依赖与资源所有权，不按页面或文件长度；不建立动态 DLL 插件系统或旧路径转发层。强制工程规则以[根 AGENTS](../AGENTS.md)和[记录内核 AGENTS](../crates/recording/AGENTS.md)为准。
 
 ## 依赖方向与模块
 
@@ -13,6 +13,8 @@ flowchart TD
 	UI[GPUI 表示层] --> App[应用编排：准入、冻结计划、任务调度、资源移交]
 	App --> Device[设备与协议服务]
 	App --> Core[slimenrf-recording]
+	App --> Terminal[slimenrf-terminal-core]
+	App --> Image[slimenrf-firmware-image]
 ```
 
 下表中除显式标明包的路径外，模块路径均相对于 `crates/app/src`。
@@ -26,7 +28,7 @@ flowchart TD
 |`discovery`|被动枚举与原生接口元数据读取、接收器主 HID 的唯一被动读取者及 HID 租约|
 |`receiver_events`|共享 `Watch` 驱动，负责事件能力检查、订阅、续期与有界停止；被动发现和独占校准 worker 分别提供过滤条件、事件掩码与订阅意图|
 |`sessions`|串口连接、区分接口的恢复身份、基于当前清单的控制台准入、控制线、工作线程、有界写入和显示队列、关闭完成、会话代次、串口租约，以及经过租约验证且仅可消费一次的 `ReservedConsoleSource` 移交|
-|`terminal` / `terminal_view`|流式 ANSI 与 UTF-8、有界回看与命令历史、按字节保存的文本选择，以及用于可选自动换行的显示行缓存|
+|`terminal_view`|GPUI 终端表示、按字节选择文本、显示行缓存、滚动与可选自动换行|
 |`rssi_scan`|有界 RSSI 控制台表解析、源元数据与稀疏实测快照；不访问设备或依赖 UI|
 |`commands` / `operations`|单一命令目录、参数、风险、角色与路由授权；固定批量目标及逐目标结果|
 |`shortcuts` / `settings/shortcuts`|经过验证的有序卡片数据与有界事务存储，独立于偏好和设备授权|
@@ -39,9 +41,9 @@ flowchart TD
 |`calibration` / `calibration/{direct,wireless,worker}`|证据模型与 reducer、完整控制台响应、接收器事件关联及私有原生校准 worker；分开保留发送、应用、存储、观察生命周期与用户确认|
 |`ui/calibration` / `ui/calibration/render` / `ui/calibration/tests`|指引状态与动作、绘制及 UI 行为测试；Workbench 跨页面保留应用会话|
 |`firmware_update`|执行已准入的冻结数据请求，复核身份、调度传输，返回非本地化结构化结果与进度|
-|`uf2` / `opendfu` / `esb_ota` / `ble_ota`|真实卷发现与复制，以及各更新协议|
+|`uf2` / `opendfu` / `esb_ota` / `ble_ota`|设备授权、真实卷发现与复制，以及各更新协议|
 |`board_catalog` / `remote_config`|外部与内置配置、精确映射与远程来源配置|
-|`bundled_resources` / `firmware` / `firmware_source`|独立资源身份与有界完整性读取；镜像解析；HTTP、目录与下载|
+|`bundled_resources` / `firmware_source`|独立资源身份与有界完整性读取；HTTP、目录与下载|
 |`update::Job`|有界进度、取消请求、异步或阻塞 worker 的保留与 join|
 |`app_runtime`|持续驱动 Tokio I/O runtime、共享 HTTP client、惰性跨操作 BLE backend|
 |`hid_log`|原始记录、有界非阻塞订阅、文件格式、写线程与按需解析|
@@ -49,8 +51,14 @@ flowchart TD
 |`ui/settings_page`|保留设置搜索、类型化分类、分组锚点、控件焦点与分组布局，复用已有偏好更新和保存路径|
 |`ui/page_scroll`|页面滚动容器、视口边缘滚动条与页面导航键，不持有表单或设备状态|
 |`crates/recording`|记录、协议、标准化、交换格式、校准与回放数学、分析、预设读写|
+|`crates/terminal-core`|仅依赖标准库的流式 ANSI 与 UTF-8 模型、有界回看与命令历史、语义样式及选择失效标记|
+|`crates/firmware-image`|UF2、Intel HEX 与 MCUboot 镜像解析、Legacy 和 Secure DFU 包解析、共享 ZIP 封装检查、内容校验及目标准备，不访问设备|
 
-记录内核的 `capture/{protocol,normalize,format}` 不访问设备。`replay` 拥有分段计算、安全 FFI，`analysis` 负责可用性与 A/B，`presets` 接收调用者显式存储路径。数值 C/CMSIS 源、许可及 native build 属于库的 `vendor/vqf` 和 `build.rs`。应用的 `build.rs` 处理应用配置与固件资源，调用现有 Python 生成器生成版权材料，并跟踪翻译目录的变更。版权材料生成仅在应用构建时需要 Python 3.11+，只构建内核或运行应用时不需要。内核不依赖 GPUI、Tokio、HID/串口、桌面目录、翻译或应用配置。
+终端内核持有模型数据；`terminal_view` 和 UI 保留表示与交互。固件镜像内核只检查镜像内容，不访问硬件或运行时。镜像、Legacy 和 Secure DFU 及共享 ZIP 封装错误均提供可检查的失败类别并保留嵌套错误来源；应用仅在表示或执行边界将其转换为文本。内容校验不能授权设备写入，也不能证明镜像真实性。应用保留资源、传输、设备授权、冻结写入用途、挂载与设备身份检查，以及操作生命周期。
+
+记录内核的 `capture/{protocol,normalize,format}` 不访问设备。`replay` 拥有分段计算、安全 FFI，`analysis` 负责可用性与 A/B，`presets` 接收调用者显式存储路径。数值 C/CMSIS 源、许可及 native build 属于库的 `vendor/vqf` 和 `build.rs`。记录内核不依赖 GPUI、Tokio、HID/串口、桌面目录、翻译或应用配置。
+
+应用的 `build.rs` 处理应用配置与固件资源，调用现有 Python 生成器生成版权材料，并跟踪翻译目录的变更。完整和无固件应用构建均需要 Python 3.11+；只构建任一内核或运行应用时不需要。终端和镜像库均不运行应用构建脚本，也不依赖 GPUI 或硬件接口。
 
 `board_catalog/loading/bounded_yaml` 限制输入大小，并在类型化解析过程中共享展开文本、节点数和深度上限。别名展开、映射键和忽略字段均计入同一组限制，在 schema visitor 保留值之前检查。普通别名仍受支持，具体上限见[解析器常量](../crates/app/src/board_catalog/loading/bounded_yaml.rs)。
 
