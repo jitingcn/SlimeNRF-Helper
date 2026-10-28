@@ -9,8 +9,8 @@ use std::{cell::RefCell, collections::VecDeque, ops::Range, rc::Rc};
 
 use geometry::{LayoutKey, LineGeometry, RowAffinity, ViewportAnchor, line_at_y, visible_lines};
 use gpui_kit::base::{
-    TextSelectionContentKey, TextSelectionCoverage, TextSelectionHandle, TextSelectionRegistration,
-    TextSelectionRun,
+    TextSelection, TextSelectionContentKey, TextSelectionCoverage, TextSelectionHandle,
+    TextSelectionRegistration, TextSelectionRun,
 };
 use gpui_kit::{prelude::*, *};
 
@@ -514,6 +514,7 @@ impl TranscriptState {
         self.keyboard_caret = false;
     }
 
+    #[cfg(any(debug_assertions, test))]
     pub(crate) fn is_empty(&self) -> bool {
         self.byte_len == 0
     }
@@ -1180,6 +1181,14 @@ impl Element for TerminalTranscript {
         window: &mut Window,
         cx: &mut App,
     ) {
+        // Native window moves and resizes can consume the mouse-up. End Root's
+        // drag before its bubble-phase move, preserving the last held endpoint.
+        window.on_mouse_event(|event: &MouseMoveEvent, phase, window, cx| {
+            if phase.capture() && !event.dragging() {
+                TextSelection::end(window, cx);
+            }
+        });
+
         let mut state = self.state.borrow_mut();
         self.selection.update_runs(&state.runs, cx);
         state.project(&self.selection, cx);

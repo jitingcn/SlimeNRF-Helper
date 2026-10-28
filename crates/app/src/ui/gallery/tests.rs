@@ -4,8 +4,9 @@ use crate::{
     ui::test_support::UiTestSession,
 };
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, Bounds, Entity, ScrollDelta, TestAppContext, WindowBounds,
-    WindowOptions, point, px, size, test::TestWindowExt as _,
+    AnyWindowHandle, AppContext as _, Bounds, ClipboardItem, Entity, KeyBinding, MouseButton,
+    ScrollDelta, TestAppContext, WindowBounds, WindowOptions, point, px, size,
+    test::{TestEventExt as _, TestWindowExt as _},
 };
 use slimenrf_terminal_core::MAX_LINES;
 
@@ -306,4 +307,240 @@ fn keyboard_opens_terminal_and_controls_change_the_real_bounded_transcript(
         assert!(window.find("gallery-transcript-scroll").visible());
     })
     .expect("exercise gallery terminal");
+}
+
+const SELECTION_OUTPUT: &str =
+    "[25] Added synthetic output: long content for wrapping and scrolling. 中文 🦀\n";
+
+fn selection_fixture(cx: &mut TestAppContext) -> Fixture {
+    cx.update(|cx| {
+        cx.set_reduce_motion(true);
+        cx.bind_keys([KeyBinding::new(
+            if cfg!(target_os = "macos") {
+                "cmd-c"
+            } else {
+                "ctrl-c"
+            },
+            gpui_kit::component::input::Copy,
+            Some("TerminalTranscript"),
+        )]);
+    });
+    let fixture = fixture(cx);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.click("gallery-scene-terminal", cx);
+        window.click("gallery-terminal-clear", cx);
+        window.click("gallery-terminal-append", cx);
+        assert_eq!(
+            fixture.gallery.read(cx).terminal.buffer.text(),
+            SELECTION_OUTPUT
+        );
+    })
+    .expect("prepare one synthetic transcript line");
+    settle_terminal(cx, &fixture, "selection fixture");
+    fixture
+}
+
+fn selected_text(cx: &mut TestAppContext, fixture: &Fixture) -> Option<String> {
+    cx.update(|cx| {
+        fixture
+            .gallery
+            .read(cx)
+            .terminal
+            .state
+            .borrow()
+            .selected_text()
+    })
+}
+
+#[gpui_kit::test]
+fn terminal_lost_release_titlebar_resize_hover_then_new_drag_copies(cx: &mut TestAppContext) {
+    let _session = UiTestSession::new(cx);
+    let fixture = selection_fixture(cx);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let titlebar = window.find("title-bar").bounds();
+        let position = point(titlebar.left() + px(100.), titlebar.center().y);
+        assert!(!fixture.gallery.read(cx).terminal.focus.is_focused(window));
+        assert!(fixture.gallery.read(cx).terminal.follow);
+        window.pointer_move(position, None, cx);
+        window.pointer_down(position, MouseButton::Left, cx);
+    })
+    .expect("press the real gallery title bar");
+
+    // Model an OS move/resize loop consuming the corresponding mouse-up.
+    cx.simulate_window_resize(fixture.handle, size(px(840.), px(700.)));
+    settle_terminal(cx, &fixture, "title bar resize");
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let bounds = window.find("gallery-transcript-scroll").bounds();
+        let row = point(
+            bounds.left() + px(10.),
+            bounds.top() + window.rem_size() * 0.625,
+        );
+        window.pointer_move(row, None, cx);
+        window.pointer_move(point(row.x + px(140.), row.y), None, cx);
+        assert!(
+            !fixture.gallery.read(cx).terminal.focus.is_focused(window),
+            "button-free hover must not focus the transcript"
+        );
+        assert!(
+            fixture.gallery.read(cx).terminal.follow,
+            "button-free hover must not pause Follow"
+        );
+    })
+    .expect("hover the resized transcript without a button");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_text(cx, &fixture),
+        None,
+        "a missed title-bar release must not select transcript bytes on hover"
+    );
+
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let bounds = window.find("gallery-transcript-scroll").bounds();
+        let start = point(
+            bounds.left() + px(10.),
+            bounds.top() + window.rem_size() * 0.625,
+        );
+        let end = point(start.x + px(40.), bounds.top() + window.rem_size() * 8.);
+        window.pointer_move(start, None, cx);
+        window.pointer_down(start, MouseButton::Left, cx);
+        window.pointer_move(end, Some(MouseButton::Left), cx);
+        window.pointer_up(end, MouseButton::Left, cx);
+    })
+    .expect("complete a new ordinary transcript drag");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_text(cx, &fixture).as_deref(),
+        Some(SELECTION_OUTPUT),
+        "the next ordinary drag must select the intended UTF-8 text"
+    );
+    cx.update_window(fixture.handle, |_, window, cx| {
+        cx.write_to_clipboard(ClipboardItem::new_string("unchanged".into()));
+        window.press("secondary-c", cx);
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some(SELECTION_OUTPUT.into()),
+            "Copy must use the new drag's selected bytes"
+        );
+    })
+    .expect("copy the new transcript selection");
+}
+
+#[gpui_kit::test]
+fn terminal_lost_release_freezes_last_held_endpoint_through_hover_and_copy(
+    cx: &mut TestAppContext,
+) {
+    let _session = UiTestSession::new(cx);
+    let fixture = selection_fixture(cx);
+    let (held, hover) = cx
+        .update_window(fixture.handle, |_, window, cx| {
+            let bounds = window.find("gallery-transcript-scroll").bounds();
+            let start = point(
+                bounds.left() + px(10.),
+                bounds.top() + window.rem_size() * 0.625,
+            );
+            let held = point(start.x + px(60.), start.y);
+            let hover = point(start.x + px(220.), start.y);
+            window.pointer_move(start, None, cx);
+            window.pointer_down(start, MouseButton::Left, cx);
+            window.pointer_move(held, Some(MouseButton::Left), cx);
+            (held, hover)
+        })
+        .expect("start a genuine transcript selection");
+    cx.run_until_parked();
+    let selected = selected_text(cx, &fixture).expect("held drag selects text");
+    assert!(
+        selected.len() >= 4 && SELECTION_OUTPUT.contains(&selected),
+        "the held endpoint must select a nonempty portion of the fixture: {selected:?}"
+    );
+
+    // There is deliberately no MouseUp between the held drag and the hover.
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.pointer_move(hover, None, cx);
+    })
+    .expect("move after the lost release");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_text(cx, &fixture).as_deref(),
+        Some(selected.as_str()),
+        "the first button-free move must freeze the last held endpoint"
+    );
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.pointer_move(point(held.x + px(300.), held.y), None, cx);
+    })
+    .expect("hover farther across the transcript");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_text(cx, &fixture).as_deref(),
+        Some(selected.as_str()),
+        "later hovers must retain the completed selection"
+    );
+    cx.update_window(fixture.handle, |_, window, cx| {
+        cx.write_to_clipboard(ClipboardItem::new_string("unchanged".into()));
+        window.press("secondary-c", cx);
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some(selected.clone()),
+            "a drag completed by lost-release recovery remains copyable"
+        );
+    })
+    .expect("copy the frozen selection");
+}
+
+#[gpui_kit::test]
+fn terminal_lost_release_guard_keeps_held_drag_working_outside_transcript(cx: &mut TestAppContext) {
+    let _session = UiTestSession::new(cx);
+    let fixture = selection_fixture(cx);
+    let outside = cx
+        .update_window(fixture.handle, |_, window, cx| {
+            let bounds = window.find("gallery-transcript-scroll").bounds();
+            let start = point(
+                bounds.left() + px(10.),
+                bounds.top() + window.rem_size() * 0.625,
+            );
+            let inside = point(start.x + px(60.), start.y);
+            let outside = point(bounds.right() + px(2.), start.y);
+            window.pointer_move(start, None, cx);
+            window.pointer_down(start, MouseButton::Left, cx);
+            window.pointer_move(inside, Some(MouseButton::Left), cx);
+            outside
+        })
+        .expect("start the held drag inside the transcript");
+    cx.run_until_parked();
+    let inside = selected_text(cx, &fixture).expect("inside drag selects text");
+
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.pointer_move(outside, Some(MouseButton::Left), cx);
+    })
+    .expect("continue holding beyond the transcript boundary");
+    cx.run_until_parked();
+    let extended = selected_text(cx, &fixture).expect("outside drag keeps a selection");
+    assert!(
+        extended.starts_with(&inside) && extended.len() > inside.len(),
+        "a held outside drag must extend {inside:?}, got {extended:?}"
+    );
+    assert!(
+        SELECTION_OUTPUT.contains(&extended),
+        "outside drag must select the fixture's actual text: {extended:?}"
+    );
+    cx.update_window(fixture.handle, |_, window, cx| {
+        window.pointer_up(outside, MouseButton::Left, cx);
+        let bounds = window.find("gallery-transcript-scroll").bounds();
+        window.pointer_move(bounds.center(), None, cx);
+    })
+    .expect("release the outside drag and hover");
+    cx.run_until_parked();
+    assert_eq!(
+        selected_text(cx, &fixture).as_deref(),
+        Some(extended.as_str()),
+        "normal release and later hover must preserve the outside drag"
+    );
+    cx.update_window(fixture.handle, |_, window, cx| {
+        cx.write_to_clipboard(ClipboardItem::new_string("unchanged".into()));
+        window.press("secondary-c", cx);
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some(extended.clone())
+        );
+    })
+    .expect("copy the outside drag selection");
 }

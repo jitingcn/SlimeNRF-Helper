@@ -35,6 +35,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 
+- Moving the pointer after moving or resizing the window no longer unexpectedly selects terminal text; an existing selection is preserved.
 - Resuming terminal Follow immediately shows the latest line even without new output, while preserving deliberate scrolling and selection.
 - Tracker cards retain equal widths at fractional display scaling, and their content no longer shifts when activity changes.
 - Settings navigation remains scrollable and keyboard-accessible when the available window height is reduced or interface text is enlarged.
