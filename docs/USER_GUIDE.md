@@ -378,7 +378,7 @@ In **Settings**, select **View licenses and notices** to read the bundled origin
 
 Use the right scrollbar to move through the document. For long lines, use the bottom scrollbar. The viewer preserves the original line breaks.
 
-Compilation generates the embedded `THIRD_PARTY_NOTICES.txt`; Python is not needed to run the application. AppImage also carries this file under `usr/share/licenses/slimenrf-helper` inside its AppDir, and Flatpak installs it under `/app/share/licenses/slimenrf-helper`. To generate a separate copy from the tracked sources, see the [notice-maintenance procedure](DEVELOPMENT.md#license-notices).
+Compilation generates the embedded `THIRD_PARTY_NOTICES.txt` with the shared Rust notice library; Python is not needed to build or run the application. AppImage also carries this file under `usr/share/licenses/slimenrf-helper` inside its AppDir, and Flatpak installs it under `/app/share/licenses/slimenrf-helper`. To generate a separate copy from the tracked sources, see the [notice-maintenance procedure](DEVELOPMENT.md#license-notices).
 
 <a id="app-updates"></a>
 ## Check for application updates

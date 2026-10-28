@@ -1,0 +1,37 @@
+[package]
+name = "slimenrf-tools"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Internal build, packaging, and source maintenance tools"
+
+[lints]
+workspace = true
+
+[features]
+default = ["cli"]
+cli = ["dep:csv", "dep:libc", "dep:libloading", "dep:markup5ever", "dep:regex", "dep:reqwest", "dep:serde_yaml"]
+
+[[bin]]
+name = "slimenrf-tools"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[dependencies]
+base64 = "0.22"
+encoding_rs = "0.8"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+same-file = "1"
+tempfile.workspace = true
+csv = { version = "1", optional = true }
+toml = "1.1.8"
+libc = { version = "0.2", optional = true }
+libloading = { version = "0.8", optional = true }
+markup5ever = { version = "0.12.1", optional = true }
+regex = { version = "1", optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls"], optional = true }
+serde_yaml = { workspace = true, optional = true }

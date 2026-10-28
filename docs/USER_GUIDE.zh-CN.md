@@ -376,7 +376,7 @@ GitHub 令牌可选：启动前在进程环境设置 `GH_TOKEN` 或 `GITHUB_TOKE
 
 拖动右侧滚动条浏览全文。遇到长行时，拖动底部滚动条查看右侧内容。阅读窗口保留原文换行。
 
-内嵌的 `THIRD_PARTY_NOTICES.txt` 在编译时生成，运行应用不需要 Python。AppImage 还在 AppDir 内的 `usr/share/licenses/slimenrf-helper` 携带此文件，Flatpak 将其安装到 `/app/share/licenses/slimenrf-helper`。从已跟踪来源生成独立副本的方法见[版权材料维护流程](DEVELOPMENT.zh-CN.md#license-notices)。
+编译时使用共享 Rust 版权材料库生成内嵌的 `THIRD_PARTY_NOTICES.txt`；构建和运行应用均不需要 Python。AppImage 还在 AppDir 内的 `usr/share/licenses/slimenrf-helper` 携带此文件，Flatpak 将其安装到 `/app/share/licenses/slimenrf-helper`。从已跟踪来源生成独立副本的方法见[版权材料维护流程](DEVELOPMENT.zh-CN.md#license-notices)。
 
 <a id="app-updates"></a>
 ## 检查应用更新

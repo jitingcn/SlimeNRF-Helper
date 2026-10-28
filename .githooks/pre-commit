@@ -30,7 +30,6 @@ git -C "$root" diff --cached --quiet --diff-filter=ACMRD -- \
     ":(literal)quality.sh" \
     ":(literal)package.sh" \
     ":(glob)scripts/*.sh" \
-    ":(glob)scripts/package*.py" \
     ":(glob).githooks/*" \
     ":(glob).vscode/*.json" || status=$?
 case "$status" in

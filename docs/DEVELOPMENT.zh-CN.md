@@ -6,7 +6,7 @@
 
 以下命令均从仓库根目录执行。工程规则以[根 AGENTS](../AGENTS.md)和[记录内核 AGENTS](../crates/recording/AGENTS.md)为准；本页维护操作步骤，不保存历史测试数量或工作站测量。
 
-根清单是虚拟 workspace。默认桌面应用及其源码、构建支持位于 `crates/app`；内部库包括 `crates/recording`（`slimenrf-recording`）、`crates/terminal-core`（`slimenrf-terminal-core`）和 `crates/firmware-image`（`slimenrf-firmware-image`）。终端内核仅依赖标准库；固件镜像内核解析并校验镜像内容，不访问硬件或运行时。GPUI 表示、资源、设备授权、传输和生命周期仍归应用所有。共享配置、翻译、脚本、锁文件、工具链和输出目录仍保留在仓库根目录。
+根清单是虚拟 workspace。默认桌面应用及其源码、构建支持位于 `crates/app`；内部库包括 `crates/recording`（`slimenrf-recording`）、`crates/terminal-core`（`slimenrf-terminal-core`）和 `crates/firmware-image`（`slimenrf-firmware-image`）。终端内核仅依赖标准库；固件镜像内核解析并校验镜像内容，不访问硬件或运行时。`crates/tools`（`slimenrf-tools`）提供共享 Rust 版权材料库和独立维护 CLI；应用构建只使用关闭 CLI feature 的库。GPUI 表示、资源、设备授权、传输和生命周期仍归应用所有。共享配置、翻译、脚本、锁文件、工具链和输出目录仍保留在仓库根目录。
 
 命令、行为或链接变更时，同步更新默认英文文档及其同目录的 `.zh-CN.md` 对应文档。导航和跨文档链接保持当前语言。
 
@@ -16,9 +16,7 @@
 
 脚本 test 操作和非纯格式质量检查需要安装 cargo-nextest：`cargo install --locked cargo-nextest --version 0.9.150`。脚本不会自动安装；build、check、纯格式和显式的纯 doctest 操作不需要它。
 
-应用构建需要 Python 3.11+ 及标准库 `tomllib`，用于生成版权材料。这是仅构建时需要的工具，适用于完整和无固件模式下的脚本、直接 Cargo、测试、检查与编辑器分析。运行打包后的应用或只构建任一内部库不需要 Python，构建内核也不运行应用构建脚本。
-
-可选的 `SLIMENRF_PYTHON` 只接受一个解释器可执行文件名或路径，不接受带参数的 shell 命令。应用 Cargo 构建中，含路径分隔符的相对路径以仓库根目录为基准解析；单独的可执行文件名按正常可执行文件搜索规则查找。显式选择无效或为空时直接失败，不回退。未设置时，应用构建在 Windows 上先探测 `py -3`，再探测 `python3` 和 `python`；Linux 打包探测 `python3` 和 `python`。这些候选均失败时，两种入口都可通过 `PATH` 上的 `uv` 查找已安装的 Python 3.11+。查找忽略项目、虚拟环境、配置和网络，绝不下载 Python。每个选中的解释器都须通过版本及 `tomllib` 探测；编辑器环境也必须能使用该解释器。
+应用构建、脚本、直接 Cargo 检查与测试、编辑器分析、打包、CI 和独立 oracle 均不需要 Python。构建脚本和打包共用同一个 Rust 版权材料生成器；维护工具通过独立的 `slimenrf-tools` 包运行。下文各流程所需的原生及外部输入仍不可省略。
 
 CLI 应用及 workspace 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷时，所有选择应用的 CLI 构建、运行、检查、测试和打包命令明确加 `-NoFirmware` 或 `--no-firmware`，直接 Cargo 用 `--no-default-features`。完整构建必须提供预期固件，不能用无固件包代替完整包验收。
 
@@ -71,6 +69,14 @@ cargo test --workspace --doc --locked
 
 无固件模式为 Clippy、nextest 和 doctest 添加 `--no-default-features`。脚本 test 操作只运行 nextest；使用 `./build.ps1 -Action test -CargoArguments @('--doc')` 或 `bash ./build.sh test --cargo-arguments --doc` 单独通过 Cargo 运行 doctest。纯 doctest 操作使用 Cargo 参数语义。
 
+轻量维护 CLI 及其测试也可在没有 GPUI 或固件输入时单独运行。公开检查及 hook 测试需要 Git；运行平台专用 hook 测试还需要原生 shell（Windows 使用 PowerShell）：
+
+```text
+cargo nextest run --locked -p slimenrf-tools
+```
+
+无固件 workspace 门槛之外还须显式运行此工具测试：`--workspace --no-default-features` 同时会关闭工具包默认的 CLI feature。
+
 单独处理内核时可明确选择包；`cargo test` 包含其单元测试和 doctest，`cargo doc --no-deps` 构建其 API 文档：
 
 ```text
@@ -87,7 +93,7 @@ cargo test --locked -p slimenrf-firmware-image
 cargo doc --locked --no-deps -p slimenrf-firmware-image
 ```
 
-如对单个内核使用 nextest，以 `-p` 选择，例如 `cargo nextest run --locked -p slimenrf-recording`，并用 `cargo test --locked --doc -p slimenrf-recording` 单独运行 doctest。记录内核仍需 C 编译器。终端和镜像库不需要 Python、应用构建脚本、GPUI、硬件接口、应用 YAML 或固件载荷。这些定向命令不替代适用的完整和无固件 workspace 覆盖。外部 updater fixture 与完整固件 oracle 为有真实额外输入的独立检查，不把 ignored 当通过。
+如对单个内核使用 nextest，以 `-p` 选择，例如 `cargo nextest run --locked -p slimenrf-recording`，并用 `cargo test --locked --doc -p slimenrf-recording` 单独运行 doctest。记录内核仍需 C 编译器。终端和镜像库不需要应用构建脚本、GPUI、硬件接口、应用 YAML 或固件载荷。这些定向命令不替代适用的完整和无固件 workspace 覆盖。外部 updater fixture 与完整固件 oracle 为有真实额外输入的独立检查，不把 ignored 当通过。
 
 创建 `Workbench` GUI 测试 fixture 前，在测试函数的最外层创建一个 `ui::test_support::UiTestSession`。同一 `TestAppContext` 的所有 fixture 共用这个会话。让会话保持到回调和断言结束，以隔离进程级语言状态。
 
@@ -181,11 +187,11 @@ Controls 场景提供可选择的合成卡片、短/长内容和动态详情；T
 <a id="public-preflight"></a>
 ## 发布源码前检查
 
-[公开检查器](../scripts/check-public.py)需要 Git 和 Python 3.10+。应用必须有自己的 Git 根目录，可以是独立仓库或常规 linked worktree，不能借用父仓库。Windows 若安装的解释器命令是 `python`，且版本符合要求，可用它替换以下命令中的 `python3`。
+[公开检查器](../crates/tools/src/public.rs)需要 Git 和已固定的 Rust 工具链。应用必须有自己的 Git 根目录，可以是独立仓库或常规 linked worktree，不能借用父仓库。
 
 ```bash
-python3 scripts/check-public.py
-python3 -B -m unittest discover -s scripts -p 'test_check_public.py'
+cargo run --locked -p slimenrf-tools -- check-public
+cargo nextest run --locked -p slimenrf-tools public::tests
 ```
 
 检查器列出已跟踪文件、未被忽略的未跟踪文件，以及匹配忽略规则但仍被跟踪的文件。它检查工作树内容，不检查暂存字节或 Git 历史。禁止公开的路径只报告，不读取其内容。每个文本文件最多读取 8 MiB，使用 UTF-8，可带 BOM。二进制、无法解码、超限、不可读或其他未经审查的候选会使检查失败，符号链接和 reparse point 也会被拒绝。
@@ -195,34 +201,26 @@ python3 -B -m unittest discover -s scripts -p 'test_check_public.py'
 <a id="license-notices"></a>
 ## 维护版权材料
 
-[generate_notices.py](../scripts/generate_notices.py)使用 Python 3.11+ 及标准库 `tomllib`。先校验已跟踪输入与文本生成，不读取或写入生成文档，再运行其测试：
+[Rust 版权材料生成器](../crates/tools/src/notices.rs)由应用构建脚本、打包和维护 CLI 共用。先校验已跟踪输入与文本生成，不读取或写入生成文档，再运行工具测试：
 
 ```bash
-python3 scripts/generate_notices.py --check
-python3 -B -m unittest discover -s scripts -p 'test_generate_notices.py'
+cargo run --locked -p slimenrf-tools -- notices --check
+cargo nextest run --locked -p slimenrf-tools
 ```
 
-解释器发现提供隔离的子进程测试，需配置 Rust 工具链和本机链接器来编译小型 Rust 测试程序；Linux 还会测试 `package.sh`。Windows 请在 x64 Visual Studio 开发人员 shell 中运行，并将 `python3` 换成自己的 Python 可执行文件：
-
-```bash
-python3 -B -m unittest discover -s scripts -p 'test_python_discovery.py'
-```
-
-Windows 上，探测测试程序必须与受控的探测可执行文件放在同一目录：可执行文件所在目录的查找优先于 `PATH`，仅修改 `PATH` 或工作目录不能隔离已安装的 Python 启动器。回归测试包含一个竞争的宿主启动器。
-
-[scripts/notices-inputs.json](../scripts/notices-inputs.json)冻结经审查的可移植包元数据、目标依赖图、原始版权文本字节、来源和 SHA-256 哈希。这些输入、来源记录和仓库许可证源文件仍纳入版本控制。生成器核对输入哈希、锁定包校验和，以及包条目对冻结依赖图的覆盖情况。它离线确定性生成 `THIRD_PARTY_NOTICES.txt`，不需要 Cargo、registry 缓存或网络，也不会发现依赖或收集许可证文本。
+[scripts/notices-inputs.json](../scripts/notices-inputs.json)冻结经审查的可移植包元数据、目标依赖图、原始版权文本字节、来源和 SHA-256 哈希。这些输入、来源记录和仓库许可证源文件仍纳入版本控制。生成器核对输入哈希、锁定包校验和，以及包条目对冻结依赖图的覆盖情况。它仅从本地输入确定性生成 `THIRD_PARTY_NOTICES.txt`，不调用 Cargo、registry 缓存或网络，也不会发现依赖或收集许可证文本。`cargo run` 命令会先构建 CLI，可能需要 Cargo 可获取依赖；已构建的 CLI 可离线生成。
 
 对于已批准的仅涉及 `Cargo.toml` profile 设置的变更，可刷新冻结输入哈希并校验结果：
 
 ```bash
-python3 scripts/generate_notices.py --refresh-inputs --check
+cargo run --locked -p slimenrf-tools -- notices --refresh-inputs --check
 ```
 
 语义指纹不包含 profile 设置；workspace 成员及依赖变更仍须按下述流程审查。不得借仅 profile 刷新绕过依赖或来源审查。
 
 Cargo 输入、vendor 源码或许可材料变更时：
 
-1. 审查变更输入。workspace 成员或依赖变更时，即使第三方版本不变，也用以下命令获取两个锁定目标依赖图。从 `slimenrf-helper` 沿 normal 和 build 边追踪，排除 dev 边。将 build 和 proc-macro 路径标为编译工具，保留生成器文件头说明的保守并集与 feature 合并。
+1. 审查变更输入。workspace 成员或依赖变更时，即使第三方版本不变，也用以下命令获取两个锁定目标依赖图。从 `slimenrf-helper` 沿 normal 和 build 边追踪，排除 dev 边。将 build 和 proc-macro 路径标为编译工具，保留已审查清单与生成器说明的保守并集和 feature 合并。
 
    ```bash
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-pc-windows-msvc
@@ -233,15 +231,15 @@ Cargo 输入、vendor 源码或许可材料变更时：
 3. 在公开源码清单之外生成本地审查副本。审查变化后，再次运行 `--check` 和生成器测试：
 
    ```bash
-   python3 scripts/generate_notices.py --output .local/THIRD_PARTY_NOTICES.txt
-   python3 scripts/generate_notices.py --check --output .local/THIRD_PARTY_NOTICES.txt
+   cargo run --locked -p slimenrf-tools -- notices --output .local/THIRD_PARTY_NOTICES.txt
+   cargo run --locked -p slimenrf-tools -- notices --check --output .local/THIRD_PARTY_NOTICES.txt
    ```
 
 写入必须显式指定 `--output` 路径。单独使用 `--check` 只校验输入与文本生成，不需要输出文件。加上 `--output` 时，它逐字节比较指定产物，绝不重写文件。
 
-`crates/app` 中的应用构建脚本在完整和无固件模式下调用同一个生成器，写入 `OUT_DIR/THIRD_PARTY_NOTICES.txt` 并嵌入这些字节。应用以 Cargo `PROFILE=debug` 构建时启用 `--development`：版权输入过期不阻断 debug 构建、运行或测试，但 Cargo 会给出警告，版权页面显示 `DEVELOPMENT LICENSE REVIEW PENDING`，而不是过期的清单。仍然需要 Python 3.11+。`--development` 不能与 `--check` 同用；release 构建、打包和 `--check` 仍严格要求输入经过审查且保持最新。
+`crates/app` 中的应用构建脚本在完整和无固件模式下直接调用同一个 Rust 库，写入 `OUT_DIR/THIRD_PARTY_NOTICES.txt` 并嵌入这些字节。应用以 Cargo `PROFILE=debug` 构建时，版权材料校验、生成或刷新提交失败不阻断 debug 构建、运行或测试：Cargo 会给出警告，版权页面显示 `DEVELOPMENT LICENSE REVIEW PENDING`，而不是过期的清单。输出文件系统错误仍会使构建失败。CLI 的 `--development` 模式同样写入待审查提示，不能与 `--check` 同用；release 和其他非 debug 构建、打包及 `--check` 仍严格要求输入经过审查且保持最新。
 
-Cargo 跟踪生成器、冻结输入及仓库来源文件。生成文档不纳入版本控制，不要提交根目录副本或在 Rust 中重复实现生成器。AppImage 和 Flatpak 打包用同一个生成器产生安装副本。AppImage 将 `LICENSE-MIT`、`LICENSE-APACHE` 和 `THIRD_PARTY_NOTICES.txt` 安装到 AppDir 内的 `usr/share/licenses/slimenrf-helper`，Flatpak 将同样文件安装到 `/app/share/licenses/slimenrf-helper`。
+Cargo 逐项跟踪生成器、冻结输入及仓库来源文件。生成文档不纳入版本控制，不要提交根目录副本或重复实现生成器。AppImage 和 Flatpak 打包用同一个库产生安装副本。AppImage 将 `LICENSE-MIT`、`LICENSE-APACHE` 和 `THIRD_PARTY_NOTICES.txt` 安装到 AppDir 内的 `usr/share/licenses/slimenrf-helper`，Flatpak 将同样文件安装到 `/app/share/licenses/slimenrf-helper`。
 
 按版权文档说明，另行保证 MPL-2.0 覆盖源码可获取。每次发布保留校验和一致的精确源码归档，或提供等效的稳定位置。修改覆盖文件后，提供实际修改的源码并更新说明。生成版权文档不代表取得固件或最终产物所含原生库、DLL、运行时和工具链材料的再分发权，每次发布仍需审查。
 
@@ -268,18 +266,16 @@ Cargo 跟踪生成器、冻结输入及仓库来源文件。生成文档不纳�
 
 需要 C/C++、Clang/libclang、CMake、pkg-config、udev、D-Bus、xkbcommon/X11、Wayland、X11/XCB、fontconfig/FreeType；Rust 用本机 rustup 工具链，不注入 Windows target/CRT。
 
-构建前确保选定的 Python 为 3.11+。发行版的 `python3` 包可能更旧，例如 Ubuntu 22.04。需要时另行安装受支持的解释器，并用 `SLIMENRF_PYTHON` 选择。
-
 ```bash
 # Arch
 sudo pacman -S --needed base-devel clang cmake pkgconf systemd-libs dbus \
   libxkbcommon libxkbcommon-x11 wayland libx11 libxcb fontconfig freetype2 \
-  vulkan-icd-loader python
+  vulkan-icd-loader
 # Debian / Ubuntu
 sudo apt update
 sudo apt install build-essential clang cmake pkg-config libudev-dev libdbus-1-dev \
   libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev libx11-xcb-dev \
-  libxcb1-dev libfontconfig1-dev libfreetype6-dev libvulkan1 python3
+  libxcb1-dev libfontconfig1-dev libfreetype6-dev libvulkan1
 
 bash ./build.sh run --no-firmware
 bash ./build.sh check --no-firmware
@@ -291,7 +287,7 @@ bash ./package.sh --no-firmware
 
 完整 CI 依赖清单以 [workflow](../.github/workflows/ci.yml) 为准，上游参考见 [GPUI Kit 安装说明](https://gpui-kit.com/docs/installation)。运行需实际 X11/Wayland、Vulkan GPU 驱动/ICD、用户 D-Bus 与字体；可安装 DejaVu/Noto/CJK 字体。文件选择器需 `xdg-desktop-portal` 和对应桌面 backend（精简会话可用 gtk backend）；BLE 需 BlueZ/适配器。设备权限、真实 UF2 挂载与 WSL 边界见[用户指南](USER_GUIDE.zh-CN.md#linux-devices)。
 
-附加 Cargo 参数用 `--cargo-arguments`，例如 `bash ./build.sh test --cargo-arguments -p slimenrf-recording`。`package.sh` 默认 ELF。它选择 `SLIMENRF_PYTHON` 或 `python3`，检查 Python 3.11+ 及 `tomllib`，并导出选定的可执行文件，让 Cargo 与打包使用同一解释器。Python 打包工具通过 `sys.executable` 调用版权材料生成器。打包根据 Cargo JSON 选择实际 Release 应用 ELF，按版本与 ELF 架构命名，无固件加后缀。同名冲突须明确 `--force`。ELF 并非静态通用包，应在计划支持的最旧 glibc 基线构建，再到目标发行版验收。
+附加 Cargo 参数用 `--cargo-arguments`，例如 `bash ./build.sh test --cargo-arguments -p slimenrf-recording`。`package.sh` 默认 ELF，使用 Rust 打包工具。打包根据 Cargo JSON 选择实际 Release 应用 ELF，按版本与 ELF 架构命名，无固件加后缀。同名冲突须明确 `--force`。ELF 并非静态通用包，应在计划支持的最旧 glibc 基线构建，再到目标发行版验收。
 
 原生缓存默认 target；`CARGO_TARGET_DIR` 相对仓库根目录，显式 `--target-dir` 优先。不要混用 Windows/Linux/SDK 编译缓存；WSL 可将唯一 Linux 缓存放在 `$HOME/.cache/slimenrf-helper/target`，编辑器与脚本共用。
 
@@ -309,7 +305,7 @@ cargo --config .cargo/mold.toml build --no-default-features
 
 ### AppImage
 
-除原生依赖还需 curl、`file`、`desktop-file-utils`；[packager](../scripts/package_appimage.py) 固定 linuxdeploy/appimagetool 版本及 SHA-256，执行前校验，不接受可变 latest。x86-64 一次性准备：
+除原生依赖还需 curl、`file`、`desktop-file-utils`；[packager](../crates/tools/src/packaging/appimage.rs) 固定 linuxdeploy/appimagetool 版本及 SHA-256，执行前校验，不接受可变 latest。x86-64 一次性准备：
 
 ```bash
 mkdir -p "$HOME/.cache/slimenrf-helper/appimage-tools/1-alpha-20251107-1" \
@@ -327,7 +323,7 @@ bash ./package.sh --format appimage --no-firmware
 <a id="flatpak"></a>
 ### Flatpak
 
-Flatpak 是可选的本地源码包，不是 host ELF 包装。需要 flatpak、flatpak-builder 和宿主 Python 3.11+。完整包从 YAML 解析固件根目录还需在该解释器中安装 python-yaml 或 python3-yaml，显式 `SLIMENRF_FIRMWARE_ROOT` 可省去这一额外 Python 依赖。
+Flatpak 是可选的本地源码包，不是 host ELF 包装。需要 flatpak 和 flatpak-builder。完整包仍须提供预期固件输入；其 YAML 配置由 Rust 打包工具解析。
 
 ```bash
 flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -337,9 +333,9 @@ flatpak install --user ./dist/slimenrf-helper-0.1.1-linux-x86_64-no-firmware.fla
 flatpak run io.github.jitingcn.SlimeNRFHelper
 ```
 
-[构建入口](../scripts/package_flatpak.py) 从同一 Rust pin 及官方发行清单产生 SHA 校验的构建专用 rustc/cargo/std 模块，在禁网 SDK 中 `--offline --locked` 编译，版本或架构缺失直接失败，不回退 SDK 编译器；导出前清理工具链。完整和无固件包使用同一应用 ID，安装相互替换。
+[构建入口](../crates/tools/src/packaging/flatpak.rs)从同一 Rust pin 及官方发行清单产生 SHA 校验的构建专用 rustc/cargo/std 模块，在禁网 SDK 中 `--offline --locked` 编译，版本或架构缺失直接失败，不回退 SDK 编译器；导出前清理工具链。完整和无固件包使用同一应用 ID，安装相互替换。
 
-SDK 构建使用 SDK 自己的 `python3`，要求 Python 3.11+ 及 `tomllib`，不使用宿主的 `SLIMENRF_PYTHON` 路径或宿主 uv 发现。它从暂存的已跟踪输入离线生成内嵌及安装文档。Python 仅用于构建，不是应用运行依赖。
+SDK 构建通过同一个 Rust 库从暂存的已跟踪输入离线生成内嵌及安装版权材料。此构建的宿主和 SDK 均不需要 Python。
 
 这是宽权限兼容包，不是严格沙箱。为 hidraw/tty/BLE/任意原生 UF2 挂载授予设备、host 文件、只读 udev、BlueZ 指定总线、网络及图形权限，仍受宿主 ACL 和块设备身份检查约束。特殊路径和热插拔传播需目标机验收，不能弱化 UF2 检查。bundle 不含运行时，首次安装可能下载，不是离线单文件；当前未申请 Flathub 上架。[权限](https://docs.flatpak.org/en/latest/sandbox-permissions.html)与 [bundle 限制](https://docs.flatpak.org/en/latest/single-file-bundles.html)以官方文档为准。
 
@@ -347,7 +343,7 @@ SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架�
 
 ## CI 与发布门槛
 
-[Native no-firmware CI](../.github/workflows/ci.yml) 在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业检查公开边界、冻结的版权输入和发布说明生成，并运行对应的 Python 测试。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。两者打包前都运行隔离的解释器发现测试和维护的质量入口；Linux 发现测试还会测试 `package.sh`。
+[Native no-firmware CI](../.github/workflows/ci.yml)在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括预发布准备测试），并检查公开边界和冻结的版权输入。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。Windows 还运行工具测试以覆盖原生 hook；两者打包前都运行维护的质量入口。
 
 Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage。两个文件均不含固件，文件名包含 Cargo 版本，并作为 Actions artifact 保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。
 
@@ -407,11 +403,11 @@ SLIMENRF_UPDATER_FIXTURES="$PWD/.local/updater-fixtures" cargo test --locked --n
 <a id="firmware-oracle"></a>
 ## 独立固件 oracle
 
-来源与数值边界见[协议说明](PROTOCOLS.zh-CN.md#numerics)。普通 `cargo test --locked -p slimenrf-recording` 使用提交的冻结外部检查点，不依赖开发者 checkout/WSL/SDK。完整逐事件测试默认忽略，先在有 Python 3/GCC 的 Linux/WSL 用真实固件（含对应 vqf-c）与完整 CMSIS SDK 生成 trace：
+来源与数值边界见[协议说明](PROTOCOLS.zh-CN.md#numerics)。普通 `cargo test --locked -p slimenrf-recording` 使用提交的冻结外部检查点，不依赖开发者 checkout/WSL/SDK。完整逐事件测试默认忽略，先在有 Rust 工具链和 GCC 的 Linux/WSL 用真实固件（含对应 vqf-c）与完整 CMSIS SDK 生成 trace：
 
 ```bash
 mkdir -p .local
-python3 crates/recording/src/replay/reference_oracle.py \
+cargo run --locked -p slimenrf-tools -- reference-oracle \
   --firmware /path/to/SlimeVR-Tracker-nRF \
   --cmsis-dsp /path/to/sdk/modules/lib/cmsis-dsp \
   --output .local/replay-oracle.csv
@@ -419,7 +415,7 @@ export SLIME_REPLAY_ORACLE="$(pwd)/.local/replay-oracle.csv"
 cargo test --locked -p slimenrf-recording replay::tests::firmware_reference_trace -- --ignored --nocapture
 ```
 
-生成器提取实际 wrapper/温度 MLS，链接外部引擎与 SDK 标量源，不链接被测 `replay_bridge.c`；同时输出 provenance 源码/trace 哈希与逻辑根参数，不发布本机绝对来源目录。省略 `--cmsis-dsp` 可生成 portable 基线，`--compare baseline.csv` 对照指定 trace。
+生成器提取实际 wrapper/温度 MLS，链接外部引擎与 SDK 标量源，不链接被测 `replay_bridge.c`；同时输出 provenance 源码/trace 哈希与逻辑根参数，不发布本机绝对来源目录。省略 `--cmsis-dsp` 可生成 portable 基线，`--compare baseline.csv` 对照指定 trace。外部 SDK 需要的历史 C 编译器宏 `__GNUC_PYTHON__` 不是 Python 解释器依赖。
 
 WSL 生成、Windows 测试必须访问同一文件；可用 `wslpath -w "$(realpath .local/replay-oracle.csv)"` 转换，不能用另一 checkout 的同名文件。配置好 Windows 原生环境后：
 

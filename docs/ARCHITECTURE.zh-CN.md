@@ -6,6 +6,8 @@
 
 一个产品、一个桌面可执行文件、一个小型 Cargo workspace。根目录是虚拟 workspace；`crates/app` 中的 `slimenrf-helper` 是装配点和默认成员。内部库包括负责记录与回放的 `crates/recording`（`slimenrf-recording`）、仅依赖标准库的终端模型 `crates/terminal-core`（`slimenrf-terminal-core`），以及负责镜像解析与内容校验的 `crates/firmware-image`（`slimenrf-firmware-image`）。记录内核可独立消费，但不独立发布。应用源码、构建脚本和构建支持位于 `crates/app`；共享配置、翻译、脚本、资源和 workspace 配置保留在仓库根目录。模块划分按依赖与资源所有权，不按页面或文件长度；不建立动态 DLL 插件系统或旧路径转发层。强制工程规则以[根 AGENTS](../AGENTS.md)和[记录内核 AGENTS](../crates/recording/AGENTS.md)为准。
 
+内部 `crates/tools` 包（`slimenrf-tools`）持有共享 Rust 版权材料库及独立的维护 CLI，负责源码检查、发布准备、打包和独立固件 oracle。应用构建脚本只使用关闭 CLI feature 的版权材料库；工具不是桌面应用的运行时依赖。
+
 ## 依赖方向与模块
 
 ```mermaid
@@ -55,6 +57,7 @@ flowchart TD
 |`crates/recording`|记录、协议、标准化、交换格式、校准与回放数学、分析、预设读写|
 |`crates/terminal-core`|仅依赖标准库的流式 ANSI 与 UTF-8 模型、有界回看与命令历史、语义样式及选择失效标记|
 |`crates/firmware-image`|UF2、Intel HEX 与 MCUboot 镜像解析、Legacy 和 Secure DFU 包解析、共享 ZIP 封装检查、内容校验及目标准备，不访问设备|
+|`crates/tools`|共享冻结输入的版权材料生成器，以及用于源码公开检查、发布准备、打包和独立固件 oracle 的可选 CLI|
 
 更新交互策略集中在 `ui/app_update` 与导航／设置外壳：检查版本不锁定导航，下载中及就绪后锁定，并提供取消入口。业务模块不持有更新专用的准入标记或忙状态查询接口。重启只检查已有的固件更新、采集及校准活动状态，随后同步进入正常退出流程。退出载荷保留明确的已下载更新意图，等待已接受的工作 join 后才准备并提交安装；普通退出则丢弃下载。
 
@@ -64,7 +67,7 @@ flowchart TD
 
 记录内核的 `capture/{protocol,normalize,format}` 不访问设备。`replay` 拥有分段计算、安全 FFI，`analysis` 负责可用性与 A/B，`presets` 接收调用者显式存储路径。数值 C/CMSIS 源、许可及 native build 属于库的 `vendor/vqf` 和 `build.rs`。记录内核不依赖 GPUI、Tokio、HID/串口、桌面目录、翻译或应用配置。
 
-应用的 `build.rs` 处理应用配置与固件资源，调用现有 Python 生成器生成版权材料，并跟踪翻译目录的变更。完整和无固件应用构建均需要 Python 3.11+；只构建任一内核或运行应用时不需要。终端和镜像库均不运行应用构建脚本，也不依赖 GPUI 或硬件接口。
+应用的 `build.rs` 处理应用配置与固件资源，直接通过共享 Rust 库生成版权材料，并跟踪翻译目录的变更。完整和无固件构建、打包及运行应用均不需要 Python。debug 构建在版权材料需要审查时显示待审查提示，而不是嵌入过期材料；release 构建和打包严格要求已审查的最新输入。终端和镜像库均不运行应用构建脚本，也不依赖 GPUI 或硬件接口。
 
 `board_catalog/loading/bounded_yaml` 限制输入大小，并在类型化解析过程中共享展开文本、节点数和深度上限。别名展开、映射键和忽略字段均计入同一组限制，在 schema visitor 保留值之前检查。普通别名仍受支持，具体上限见[解析器常量](../crates/app/src/board_catalog/loading/bounded_yaml.rs)。
 

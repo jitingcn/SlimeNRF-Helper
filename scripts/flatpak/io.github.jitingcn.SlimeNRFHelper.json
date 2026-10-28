@@ -26,17 +26,16 @@
           "CARGO_NET_OFFLINE": "true",
           "CARGO_INCREMENTAL": "0",
           "RUSTC": "/app/lib/slimenrf-build-rust/bin/rustc",
-          "SLIMENRF_PYTHON": "python3",
           "SLIMENRF_CONFIG_PATH": "slimenrf-helper.yaml",
           "SLIMENRF_FIRMWARE_ROOT": "flatpak-firmwares"
         }
       },
       "build-commands": [
-        "python3 -c 'import sys; sys.version_info >= (3, 11) or sys.exit(\"Flatpak SDK builds require Python 3.11+\"); import tomllib' && /app/lib/slimenrf-build-rust/bin/cargo build --offline --locked --release --package slimenrf-helper",
+        "/app/lib/slimenrf-build-rust/bin/cargo build --offline --locked --release --package slimenrf-helper",
         "install -Dm755 \"$CARGO_TARGET_DIR/release/slimenrf-helper\" /app/bin/slimenrf-helper",
         "install -Dm644 LICENSE-MIT /app/share/licenses/slimenrf-helper/LICENSE-MIT",
         "install -Dm644 LICENSE-APACHE /app/share/licenses/slimenrf-helper/LICENSE-APACHE",
-        "python3 scripts/generate_notices.py --output /app/share/licenses/slimenrf-helper/THIRD_PARTY_NOTICES.txt",
+        "/app/lib/slimenrf-build-rust/bin/cargo run --offline --locked --release -p slimenrf-tools --bin slimenrf-tools -- notices --root . --output /app/share/licenses/slimenrf-helper/THIRD_PARTY_NOTICES.txt",
         "install -Dm644 io.github.jitingcn.SlimeNRFHelper.desktop /app/share/applications/io.github.jitingcn.SlimeNRFHelper.desktop",
         "install -Dm644 io.github.jitingcn.SlimeNRFHelper.svg /app/share/icons/hicolor/scalable/apps/io.github.jitingcn.SlimeNRFHelper.svg"
       ],

@@ -6,6 +6,8 @@
 
 The project has one product, one desktop executable, and a small Cargo workspace. The root is a virtual workspace; `crates/app` contains the `slimenrf-helper` composition point and is the default member. The internal libraries are `crates/recording` (`slimenrf-recording`) for recording and replay, `crates/terminal-core` (`slimenrf-terminal-core`) for the std-only terminal model, and `crates/firmware-image` (`slimenrf-firmware-image`) for image parsing and content validation. The recording core can be consumed independently but is not released separately. App source, build script and build support live under `crates/app`; shared configuration, translations, scripts, assets and workspace settings remain at the repository root. Module boundaries follow dependencies and resource ownership, not pages or file length. There is no dynamic DLL plugin system or forwarding layer for old paths. The [root AGENTS](../AGENTS.md) and [recording-core AGENTS](../crates/recording/AGENTS.md) define the mandatory engineering rules.
 
+The internal `crates/tools` package (`slimenrf-tools`) owns the shared Rust notice library and the separate maintenance CLI for source checks, release preparation, packaging, and the independent firmware oracle. The app build script uses only the notice library with CLI features disabled; tooling is not a desktop runtime dependency.
+
 ## Dependency direction and modules
 
 ```mermaid
@@ -55,6 +57,7 @@ Unless a package is named explicitly, module paths below are relative to `crates
 | `crates/recording` | Recording, protocols, normalization, interchange formats, calibration and replay math, analysis, and preset I/O. |
 | `crates/terminal-core` | Std-only streaming ANSI and UTF-8 model, bounded scrollback and command history, semantic styles, and selection invalidation. |
 | `crates/firmware-image` | UF2, Intel HEX, and MCUboot image parsing, Legacy and Secure DFU package parsing, shared ZIP envelope checks, content validation, and target preparation without device access. |
+| `crates/tools` | Shared frozen-input notice rendering and an optional CLI for source publication, release preparation, packaging, and the independent firmware oracle. |
 
 Update interaction policy stays in `ui/app_update` and the navigation/settings shell: checking does not lock navigation; downloading and a ready update do, with cancellation available. Feature owners do not carry update-specific admission flags or busy-query interfaces. Restart checks the existing firmware, capture, and calibration activity state, then synchronously enters the normal shutdown owner. The shutdown payload retains an explicit downloaded-update intent and prepares/commits installation only after accepted work joins; an ordinary quit discards the download instead.
 
@@ -64,7 +67,7 @@ The terminal core holds model data; `terminal_view` and the UI retain presentati
 
 The recording core's `capture/{protocol,normalize,format}` modules do not access devices. `replay` owns segmented computation and safe FFI. `analysis` owns availability and A/B analysis. `presets` takes an explicit storage path from its caller. Numerical C and CMSIS sources, licenses, and the native build belong to the library's `vendor/vqf` and `build.rs`. The recording core does not depend on GPUI, Tokio, HID or serial access, desktop directories, translations, or application configuration.
 
-The app's `build.rs` handles application configuration and firmware resources, generates license notices with the existing Python renderer, and tracks changes to the translation directory. Python 3.11+ is required for application builds in both firmware modes, not when building only any of the three libraries or running the application. Neither the terminal nor image library runs the application build script or depends on GPUI or hardware interfaces.
+The app's `build.rs` handles application configuration and firmware resources, generates license notices directly through the shared Rust library, and tracks changes to the translation directory. Neither full nor no-firmware builds, packaging, or running the application require Python. Debug builds report pending notice review instead of embedding stale notices; release builds and packaging require current reviewed inputs. Neither the terminal nor image library runs the application build script or depends on GPUI or hardware interfaces.
 
 `board_catalog/loading/bounded_yaml` bounds input size and shares expanded text, node, and depth limits across the typed parse. Alias expansion, mapping keys, and ignored fields consume the same limits before schema visitors retain values. Ordinary aliases remain supported. The [parser constants](../crates/app/src/board_catalog/loading/bounded_yaml.rs) define the limits.
 

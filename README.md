@@ -39,7 +39,7 @@ The [user guide](docs/USER_GUIDE.md#firmware-updates) describes each update meth
 
 ## License
 
-Application-owned code and assets are available under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE), at your option. Dependencies, vendored code, third-party assets, and external firmware retain their own terms. The application generates and embeds `THIRD_PARTY_NOTICES.txt` during compilation; the generated file is not tracked. Read the retained notices and source-availability instructions offline in **Settings > View licenses and notices**, or follow the [notice-maintenance procedure](docs/DEVELOPMENT.md#license-notices).
+Application-owned code and assets are available under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE), at your option. Dependencies, vendored code, third-party assets, and external firmware retain their own terms. The application generates and embeds `THIRD_PARTY_NOTICES.txt` during compilation using the shared Rust notice library; the generated file is not tracked. Read the retained notices and source-availability instructions offline in **Settings > View licenses and notices**, or follow the [notice-maintenance procedure](docs/DEVELOPMENT.md#license-notices).
 
 ## Documentation
 

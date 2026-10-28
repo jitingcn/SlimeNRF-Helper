@@ -28,4 +28,4 @@ cargo test -p slimenrf-recording --all-targets --locked
 
 For public API, manifest or build changes, also compile/run a temporary external consumer without desktop/config/firmware prerequisites, and exercise actual recording/replay APIs. Remove the temporary consumer and its build artifacts afterward. Run desktop consumers through the workspace gate when the contract changes. Library `cfg(test)` internals are not available to the consuming application's unit tests; test numerical details here and UI behavior in the desktop.
 
-See [the development guide's oracle procedure](../../docs/DEVELOPMENT.md#firmware-oracle) and `src/replay/reference_oracle.py` for full-trace validation; do not duplicate or invent an alternative numerical oracle.
+See [the development guide's oracle procedure](../../docs/DEVELOPMENT.md#firmware-oracle) and `crates/tools/src/reference_oracle.rs` for full-trace validation; do not duplicate or invent an alternative numerical oracle.

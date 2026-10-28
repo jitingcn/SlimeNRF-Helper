@@ -486,8 +486,8 @@ fn native_feature_toggles_reach_the_c_filter() {
     assert!(result.profile.contains("custom VQF"));
 }
 
-// Input recipe from the independent external reference_oracle.py. Python computes
-// temperature in f64 before ctypes converts it once to f32; preserve that order.
+// Input recipe from the independent external reference oracle. Compute temperature
+// in f64 before converting it once to f32, preserving the reference order.
 fn oracle_sample(case: usize, index: usize) -> Sample {
     let gyro = match case {
         0 => [0.; 3],
@@ -654,13 +654,12 @@ fn frozen_external_firmware_checkpoints() {
     );
 }
 
-/// Independent full regeneration command and provenance are in reference_oracle.py.
+/// Independent full regeneration command and provenance are in the development guide.
 /// Never derive golden outputs from the production replay bridge under test.
 #[test]
 #[ignore = "requires actual-reference firmware trace via SLIME_REPLAY_ORACLE"]
 fn firmware_reference_trace() {
-    let path = std::env::var("SLIME_REPLAY_ORACLE").expect(
-        "Run crates/recording/src/replay/reference_oracle.py first and set SLIME_REPLAY_ORACLE",
-    );
+    let path = std::env::var("SLIME_REPLAY_ORACLE")
+        .expect("Run the slimenrf-tools reference-oracle command and set SLIME_REPLAY_ORACLE");
     compare_oracle(oracle_rows(&std::fs::read_to_string(path).unwrap()), true);
 }

@@ -15,22 +15,47 @@ jobs:
   source:
     name: Source hygiene and license notices
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - name: Check out standalone repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Check publication boundaries, release preparation and frozen notices
+      - name: Install repository-pinned Rust toolchain
         run: |
-          python3 -B -m unittest discover -s scripts -p 'test_check_public.py'
-          python3 -B -m unittest discover -s scripts -p 'test_generate_notices.py'
-          python3 -B -m unittest discover -s scripts -p 'test_prepare_prerelease.py'
-          python3 -B -m unittest discover -s scripts -p 'test_packaging_workspace.py'
-          python3 -B -m unittest discover -s scripts -p 'test_git_hook.py'
-          python3 -B scripts/check-public.py
-          python3 -B scripts/generate_notices.py --check
+          # Rustup reads rust-toolchain.toml and installs its profile/components.
+          rustc --version --verbose
+          cargo --version
+
+      - name: Install checksum-pinned cargo-nextest
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/cargo-nextest-0.9.150.tar.gz"
+          tools="$RUNNER_TEMP/cargo-nextest-0.9.150"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.150/cargo-nextest-0.9.150-x86_64-unknown-linux-gnu.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' 'b0959bc64232974224cf9fb22c915845398c0e8668fa7831eb5b43fb1eef781f' "$archive" | sha256sum --check -
+          mkdir -p "$tools"
+          tar -xzf "$archive" -C "$tools" cargo-nextest
+          test -x "$tools/cargo-nextest"
+          printf '%s\n' "$tools" >> "$GITHUB_PATH"
+
+      - name: Cache source tool dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: '. -> target'
+          key: ubuntu-24.04-x64-tools
+          cache-bin: false
+
+      - name: Test source tools without building the application
+        run: cargo nextest run --locked -p slimenrf-tools
+
+      - name: Check publication boundaries and frozen notices
+        run: |
+          cargo run --quiet --locked -p slimenrf-tools -- check-public
+          cargo run --quiet --locked -p slimenrf-tools -- notices --check
 
   windows:
     name: Windows x64 / no firmware
@@ -45,19 +70,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - name: Install build-time Python
-        id: python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.13'
-
-      - name: Select Python for native Cargo and packaging
-        env:
-          SELECTED_PYTHON: ${{ steps.python.outputs.python-path }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          & $env:SELECTED_PYTHON -c "import sys; sys.version_info >= (3, 11) or sys.exit('Python 3.11+ is required.'); import tomllib; print('SLIMENRF_PYTHON=' + sys.executable)" >> $env:GITHUB_ENV
 
       - name: Install repository-pinned Rust toolchain
         run: |
@@ -86,21 +98,19 @@ jobs:
           }
           $tools >> $env:GITHUB_PATH
 
-      - name: Test isolated Python discovery on Windows
-        run: |
-          . ./scripts/environment.ps1
-          Initialize-SlimeNRFBuildEnvironment
-          & $env:SLIMENRF_PYTHON -B -m unittest discover -s scripts -p 'test_python_discovery.py'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $env:SLIMENRF_PYTHON -B -m unittest discover -s scripts -p 'test_git_hook.py'
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Cache native Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: '. -> target'
           key: windows-2022-x64-no-firmware
           cache-bin: false
+
+      - name: Test source tools on Windows
+        run: |
+          . ./scripts/environment.ps1
+          Initialize-SlimeNRFBuildEnvironment
+          cargo nextest run --locked -p slimenrf-tools --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Check formatting, strict workspace Clippy, tests and doctests
         run: powershell -NoProfile -ExecutionPolicy Bypass -File ./quality.ps1 -NoFirmware
@@ -146,20 +156,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install build-time Python
-        id: python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.13'
-
-      - name: Select Python for native Cargo and packaging
-        env:
-          SELECTED_PYTHON: ${{ steps.python.outputs.python-path }}
-        run: |
-          "$SELECTED_PYTHON" -c \
-            'import sys; sys.version_info >= (3, 11) or sys.exit("Python 3.11+ is required."); import tomllib; print("SLIMENRF_PYTHON=" + sys.executable)' \
-            >> "$GITHUB_ENV"
-
       - name: Install native build and AppImage dependencies
         run: |
           sudo apt-get update
@@ -190,9 +186,6 @@ jobs:
           test -x "$tools/cargo-nextest"
           printf '%s\n' "$tools" >> "$GITHUB_PATH"
 
-      - name: Test isolated Python discovery and packaging on Linux
-        run: '"$SLIMENRF_PYTHON" -B -m unittest discover -s scripts -p ''test_python_discovery.py'''
-
       - name: Cache native Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -205,7 +198,7 @@ jobs:
 
       - name: Download checksum-pinned AppImage tools
         run: |
-          # Exact releases and cache layout from scripts/package_appimage.py.
+          # Exact releases and cache layout from the AppImage packager.
           # The packager verifies SHA-256 before executing either tool and uses
           # appimagetool's embedded runtime, not a mutable runtime download.
           tools="${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/appimage-tools"
@@ -249,7 +242,7 @@ jobs:
       startsWith(github.ref, 'refs/tags/v') &&
       !github.event.deleted
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: write
     concurrency:
@@ -267,12 +260,25 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
+      - name: Install repository-pinned Rust toolchain
+        run: |
+          # Rustup reads rust-toolchain.toml and installs its profile/components.
+          rustc --version --verbose
+          cargo --version
+
+      - name: Cache source tool dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: '. -> target'
+          key: ubuntu-24.04-x64-tools
+          cache-bin: false
+
       - name: Prepare exact-version changelog notes
         id: release
         run: |
           set -euo pipefail
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
-          version="$(python3 -B scripts/prepare-prerelease.py \
+          version="$(cargo run --quiet --locked -p slimenrf-tools -- prepare-prerelease \
             --tag "$RELEASE_TAG" \
             --repository "$GITHUB_REPOSITORY" \
             --commit "$GITHUB_SHA" \

@@ -1,12 +1,13 @@
 {
   "schema": 1,
   "input_sha256": {
-    "Cargo.lock": "865630af3b858309564efab076e917154d6778e87bda5e15c3aba6731e2b0f9a",
-    "Cargo.toml": "06f448088d808826356fde7b658e282cd7eb72d9e5129a97237df22373bca6f4",
-    "crates/app/Cargo.toml": "9c63eb1e946e22e91b8dfc1097e6f6f0a99c9e603c3197b28df4b5ac62638923",
+    "Cargo.lock": "404405dc1a6f5281a59808ab8d4a9c73db64cb97bfa9425f4a1829d48077217a",
+    "Cargo.toml": "b2c25aa3981b986207c0e764ca7354a2ee42385d156e3dfe4803199ad30d62ed",
+    "crates/app/Cargo.toml": "068beeba1d3b6a2e352c45b52931b4656822390e13dfdb9c8fb35cc491b01698",
     "crates/firmware-image/Cargo.toml": "f47e5c8e0f6cd625d914a9ee3896acca87c6c3241e16666464543aa491a69031",
     "crates/recording/Cargo.toml": "b97713b3affd1a84902192a86bf200055526fde9e93d848e9a7a21eef1c95b68",
     "crates/terminal-core/Cargo.toml": "c04f89a559ce26e38c06cc87b744b38441afcac52e9f22ed9a9a7db3c7d88671",
+    "crates/tools/Cargo.toml": "8267e2f441ec26465dabca8af2e9f2b6be9dec053edd4e25d2181a9938f486ca",
     "crates/recording/vendor/vqf/cmsis/include/arm_math.h": "86b5daafdeeedecd7977f00c8001620003b46bd121d4942f04b72746d2634a97",
     "crates/recording/vendor/vqf/cmsis/include/sqrt_f32.h": "cd1cd5e3dbe322a738abd344b4de3ff872f7d4e20c21d87814720783a82be20e",
     "crates/recording/vendor/vqf/cmsis/LICENSE": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
@@ -23,17 +24,18 @@
     "LICENSE-MIT": "984757f3c9a84f012b07ae89dc82cf9f9a711bdd61bca51c1e7c24c2173a0778"
   },
   "manifest_semantic_sha256": {
-    "Cargo.toml": "08f40b254b3ccfb4eb9472a5e86f43fc5a3a12b8a53013f067d3700c57b22473",
-    "crates/app/Cargo.toml": "2a52537d4aa943acb50ca5be7477235b39245deb22c8864ea796e7e7e69b3e69",
+    "Cargo.toml": "a338a5156874634b4ddec5bf2761fd0ccb49295e0e3229d1e243c1778fa3f9b6",
+    "crates/app/Cargo.toml": "e71fd1ce6d27b9eb9287dfcba59b2fd6aa3a7c0881e4e780e51189e44de0570c",
     "crates/firmware-image/Cargo.toml": "c67a5cdc0d0993054e44fed2bd6e059ff2ba76caab8c7f09debd27647b1df784",
     "crates/recording/Cargo.toml": "cd7867af705526b66357d2cc21f1551d4ab22758cdea105526124fdbc7c21f6d",
-    "crates/terminal-core/Cargo.toml": "666dbf7fe2eaf6c469fe49304c945658d75176249b6448ce5430829d7bb62c9c"
+    "crates/terminal-core/Cargo.toml": "666dbf7fe2eaf6c469fe49304c945658d75176249b6448ce5430829d7bb62c9c",
+    "crates/tools/Cargo.toml": "dc607cc1a3d77596aff8be467ba35ba2381ea3c758461b5276caba18e89add7b"
   },
   "capture": {
     "targets": [
       {
         "target": "x86_64-pc-windows-msvc",
-        "external": 546
+        "external": 547
       },
       {
         "target": "x86_64-unknown-linux-gnu",
@@ -288,6 +290,7 @@
         "kurbo@0.13.1",
         "lebe@0.5.3",
         "libc@0.2.191",
+        "libloading@0.8.9",
         "libm@0.2.16",
         "link-section@0.19.3",
         "linktime-proc-macro@0.2.3",
@@ -2277,10 +2280,12 @@
       "source_commit": "9969a29ccd1fe298e2df7346849c0095ba303a64",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -2521,10 +2526,12 @@
       "source_commit": "9df497501436596d4da77109217806b3af7f56cb",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -2552,10 +2559,12 @@
       "source_commit": "9df497501436596d4da77109217806b3af7f56cb",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -2660,10 +2669,12 @@
       "source_commit": "e14400697453bcc85997119b874bc03d9601d0af",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -2890,10 +2901,12 @@
       "source_commit": "80ce9b545acb0bd42150695fc351889cac1d8eb4",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -3396,10 +3409,12 @@
       "source_commit": "76c0fbb54ed4336caf9d2311658a2f4a5627c21d",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -3571,10 +3586,12 @@
       "source_commit": "6b236b758a0279f64d777797514813b2cb572c8b",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -4264,10 +4281,12 @@
       "source_commit": "a0a3c9e4b493c216fb6d8284c9ac918444ba67f3",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -4294,10 +4313,12 @@
       "source_commit": "4a3997e91d668ea1d8595bdef15625a77cf2308a",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -5217,7 +5238,8 @@
           "code_candidate"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -5396,7 +5418,8 @@
       "source_commit": "7a1cc2c69ebde6cb3442809213db3fe19a2cb0ba",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
           "code_candidate",
@@ -5730,10 +5753,12 @@
       "source_commit": "4b4784ebfd3332dc61f0640764d6f1140e03a9ab",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -5900,10 +5925,12 @@
       "source_commit": "91377f48bf35011d042aa5abef9e7f2a0a625aaa",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -5978,10 +6005,12 @@
       "source_commit": "594e25bef5a87d9d70c93bf27e40538de13e3b10",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -6003,10 +6032,12 @@
       "source_commit": "705e6b5c0f06535b1aac1cb1989a172b3d45be8c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -6073,10 +6104,12 @@
       "source_commit": "705e6b5c0f06535b1aac1cb1989a172b3d45be8c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -6135,10 +6168,12 @@
       "source_commit": "705e6b5c0f06535b1aac1cb1989a172b3d45be8c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -6233,10 +6268,12 @@
       "source_commit": "705e6b5c0f06535b1aac1cb1989a172b3d45be8c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -6266,10 +6303,12 @@
       "source_commit": "705e6b5c0f06535b1aac1cb1989a172b3d45be8c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -6297,10 +6336,12 @@
       "source_commit": "705e6b5c0f06535b1aac1cb1989a172b3d45be8c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -7635,10 +7676,12 @@
       "source_commit": "b0e890842ac16d3c76836fd4fcc06421acb15fa7",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8018,10 +8061,12 @@
       "source_commit": "07838bd97b714b95bd783cd695ebf211b67545c4",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8046,10 +8091,12 @@
       "source_commit": "2fb78de9c875c364b7eb1a1a117acc3b83ffb13a",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8070,10 +8117,12 @@
       "source_commit": "e559023f67e3fad6ecc3ee91307be178e0f13626",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8101,10 +8150,12 @@
       "source_commit": "9f29e79f9832dbd0ae5220acb17c1866745bdecd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8159,10 +8210,12 @@
       "source_commit": "ce45b6b0dfdf238f9058b89feb1e3b8eaebbc5b0",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8201,10 +8254,12 @@
       "source_commit": "23a868965964c1d6bb1b94f30ba4c420a4bebe7c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8241,10 +8296,12 @@
       "source_commit": "7f67699ce32d717081deb7018b4da7d679277ac0",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8298,10 +8355,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8322,10 +8381,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8350,10 +8411,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8378,10 +8441,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8402,10 +8467,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8430,10 +8497,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8454,10 +8523,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8482,10 +8553,12 @@
       "source_commit": "91377f48bf35011d042aa5abef9e7f2a0a625aaa",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8515,10 +8588,12 @@
       "source_commit": "1d9782f32c9e29218542b4a9411a82b35ec5c8cb",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -8964,10 +9039,12 @@
       "source_commit": "13c5c5873c02127679b1e8e64b538e4e36942640",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -9408,11 +9485,16 @@
       "repository": "https://github.com/nagisa/rust_libloading/",
       "source_commit": "f4ec9e702de2d0778bccff8525dc44e4cacac2d1",
       "target_roles": {
+        "x86_64-pc-windows-msvc": [
+          "compile_tool"
+        ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
+        "x86_64-pc-windows-msvc": [],
         "x86_64-unknown-linux-gnu": []
       },
       "notices": [
@@ -9581,7 +9663,8 @@
       "source_commit": "0e2918cf3e366d9c923d4ca05f169b49d826db56",
       "target_roles": {
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -9617,10 +9700,12 @@
       "source_commit": "a14f2dad852be26bad277ae704abf27a15cbfed1",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -9662,10 +9747,12 @@
       "source_commit": "d7828fff7b5d6327ae608e82db45f888b344449a",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -9756,10 +9843,12 @@
       "source_commit": null,
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -9957,10 +10046,12 @@
       "source_commit": null,
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -10014,10 +10105,12 @@
       "source_commit": "9089fc7ad88aa2021a9e1222769a80d0976736bc",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -10313,10 +10406,12 @@
       "source_commit": "79d1417c94e3a45c8bdd796e5422e22e8c488086",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -10483,10 +10578,12 @@
       "source_commit": "4b3fa6e0b6d728ed2018690e087a440dd29e7d06",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -11224,7 +11321,8 @@
       "source_commit": "f5964f9e8994251dea150d3e82fcabca8433731c",
       "target_roles": {
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -11338,10 +11436,12 @@
       "source_commit": "d7828fff7b5d6327ae608e82db45f888b344449a",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -11369,10 +11469,12 @@
       "source_commit": "d7828fff7b5d6327ae608e82db45f888b344449a",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -11516,10 +11618,12 @@
       "source_commit": "91377f48bf35011d042aa5abef9e7f2a0a625aaa",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -11549,10 +11653,12 @@
       "source_commit": "9b679189639fec8d449cd2f1759fad5dc0ef38db",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -11802,10 +11908,12 @@
       "source_commit": "3bdf763446aa78f90e3bdac1ef583e014832ab4c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -12094,10 +12202,12 @@
       "source_commit": "a14f2dad852be26bad277ae704abf27a15cbfed1",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -12155,10 +12265,12 @@
       "source_commit": null,
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -12579,10 +12691,12 @@
       "source_commit": "8192ed399a26a6e8f0aba43d10ec8badaa5b905e",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -12614,10 +12728,12 @@
       "source_commit": "8192ed399a26a6e8f0aba43d10ec8badaa5b905e",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -12643,10 +12759,12 @@
       "source_commit": "eaec0db4bcb698f76df736d89938743c88a2ad5f",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -12714,10 +12832,12 @@
       "source_commit": "9e7d328f60d6372ae22927f37d1a816fc980f25e",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -12999,10 +13119,12 @@
       "source_commit": "cc285e994b4dc236f138fafe2a59377ef63cdcfa",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -13578,10 +13700,12 @@
       "source_commit": "de55373434f07f42926599dbb5a88550d8e55112",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -13589,12 +13713,14 @@
           "__rustls",
           "__rustls-aws-lc-rs",
           "__tls",
+          "blocking",
           "rustls"
         ],
         "x86_64-unknown-linux-gnu": [
           "__rustls",
           "__rustls-aws-lc-rs",
           "__tls",
+          "blocking",
           "rustls"
         ]
       },
@@ -13717,10 +13843,12 @@
       "source_commit": "2723abbca9e83347d82b056d5b239c6604f786df",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -14079,10 +14207,12 @@
       "source_commit": "c13e7ccca705e6255387a2ebc6dca142d6881621",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -14138,7 +14268,8 @@
           "code_candidate"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -14189,10 +14320,12 @@
       "source_commit": "4bcc4bb91d0b0bdffa49a9b3c85bb0fc03d49899",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -14216,10 +14349,12 @@
       "source_commit": "e29ad15465126acc089b39611bcec85e27ce0817",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -14253,10 +14388,12 @@
       "source_commit": "252e25161a91af476cbea620e29d277592d27ec7",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -14278,10 +14415,12 @@
       "source_commit": "8ecdcc76f56b68fda67a6adf7976f5eed5006a4c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -14312,10 +14451,12 @@
       "source_commit": "f04804fa13341a9b1dc02b5d1dd8a746f2c4b7fb",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -14492,7 +14633,8 @@
       "source_commit": "91c925d987e6b1180bfb21fb29959ab3677adc8a",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -15552,10 +15694,12 @@
       "source_commit": "a1e4346070a48c936d808de75191dee5d01e433c",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -15703,10 +15847,12 @@
       "source_commit": "239dd83a4ced08e514d2c38942aab99791119f0d",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -15941,10 +16087,12 @@
       "source_commit": "b92f7eb3ff504034ec58c0154f9a9b053e23da4f",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16057,10 +16205,12 @@
       "source_commit": "5457b5448b021d1da101ababbb854e6657233943",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16292,10 +16442,12 @@
       "source_commit": "55413956c36aeab47feb8c04d1b7a044d6df336a",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16459,10 +16611,12 @@
       "source_commit": "5c8fa12eb584931b4f1bccfde87eb72fbfa7dc61",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16490,10 +16644,12 @@
       "source_commit": "f882b602039a56dd00927461ed9631c6259ed67f",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16612,10 +16768,12 @@
       "source_commit": "b1827ee06f81a7d7f954e676771e19a97f9f8e3b",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16769,10 +16927,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16797,10 +16957,12 @@
       "source_commit": "e343bbbb5a6594c9d57de718e6f232e6c0115dcb",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16829,10 +16991,12 @@
       "source_commit": "8aebb7c9556ea8024c1b974b84a4a6f2e306889a",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16898,10 +17062,12 @@
       "source_commit": "5ec9e6b8d5a7111fe9cd35a637bd8b4e4eb1e483",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -16932,10 +17098,12 @@
       "source_commit": "b53b2001ed2ccfd9b87e32a0c6da1a1eebdc80b8",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -17283,10 +17451,12 @@
       "source_commit": "1d082ef7bdb6d80a2964698804a46c338b4c6a99",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -17315,10 +17485,12 @@
       "source_commit": "fec9e559e276ba9609f939d3b0d2e4fa0504de6f",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -17339,10 +17511,12 @@
       "source_commit": "646804d77eebf072dac180cb5e1256b9ee7e0229",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -17363,10 +17537,12 @@
       "source_commit": "4b0a6b0e688bd177eb2c9c97f5268dd9703c66fc",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -17429,10 +17605,12 @@
       "source_commit": "10a9e838a35e6ded79d66af246be2ee05417136d",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -17460,10 +17638,12 @@
       "source_commit": "2d55f6faf9be83e7e4634129fb96813241aac2b8",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -17535,10 +17715,12 @@
       "source_commit": "fd160ecd9105e8afcc43dbea450a0ef6e5128cce",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -18094,10 +18276,12 @@
       "source_commit": "89c8b8415f692d3803d183fc5fbf9ec08a6adcf4",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -18118,10 +18302,12 @@
       "source_commit": "d6ea13c5f8e7e6e627f6390161b3e185bda5e5ce",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -18222,10 +18408,12 @@
       "source_commit": "9b4165786edaea2ef9cf48f75756537eacf7f20d",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -18247,10 +18435,12 @@
       "source_commit": "6b604ea2365bd535fb66eb4bfe92a9e00e333090",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -18483,10 +18673,12 @@
       "source_commit": "322291ce5a87c72ecfd83d383d0d7f5245cf72c6",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -20334,10 +20526,12 @@
       "source_commit": "a14f2dad852be26bad277ae704abf27a15cbfed1",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -20748,10 +20942,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -21124,10 +21320,12 @@
       "source_commit": "e9575f7e4b5aeddfeeb87ada5d3e715950e8233e",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -21152,10 +21350,12 @@
       "source_commit": "34a6ebcb9b920ec7ae5809e470fce94fe7c0cb55",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -21212,10 +21412,12 @@
       "source_commit": "a14f2dad852be26bad277ae704abf27a15cbfed1",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {
@@ -21266,10 +21468,12 @@
       "source_commit": "031d9e89f6a3fd26a14491e090729d46094328fd",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ],
         "x86_64-unknown-linux-gnu": [
-          "code_candidate"
+          "code_candidate",
+          "compile_tool"
         ]
       },
       "target_features": {

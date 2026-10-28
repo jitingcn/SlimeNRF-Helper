@@ -4,6 +4,7 @@ members = [
     "crates/firmware-image",
     "crates/recording",
     "crates/terminal-core",
+    "crates/tools",
 ]
 default-members = ["crates/app"]
 resolver = "3"

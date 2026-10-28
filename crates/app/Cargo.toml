@@ -47,6 +47,7 @@ unicode-width = { version = "=0.2.2", default-features = false }
 gpui-kit = { version = "=0.8.1", features = ["gpui-fast", "test-support"] }
 
 [build-dependencies]
+slimenrf-tools = { path = "../tools", default-features = false }
 sha2.workspace = true
 serde_yaml.workspace = true
 zip.workspace = true

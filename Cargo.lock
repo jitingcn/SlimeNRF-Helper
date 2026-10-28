@@ -6006,7 +6006,9 @@ checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
 dependencies = [
  "base64 0.23.1",
  "bytes",
+ "futures-channel",
  "futures-core",
+ "futures-util",
  "http",
  "http-body",
  "http-body-util",
@@ -6828,6 +6830,7 @@ dependencies = [
  "slimenrf-firmware-image",
  "slimenrf-recording",
  "slimenrf-terminal-core",
+ "slimenrf-tools",
  "sys-locale",
  "tempfile",
  "tokio",
@@ -6854,6 +6857,27 @@ dependencies = [
 [[package]]
 name = "slimenrf-terminal-core"
 version = "0.1.1"
+
+[[package]]
+name = "slimenrf-tools"
+version = "0.1.1"
+dependencies = [
+ "base64 0.22.1",
+ "csv",
+ "encoding_rs",
+ "libc",
+ "libloading",
+ "markup5ever",
+ "regex",
+ "reqwest",
+ "same-file",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "sha2 0.11.1",
+ "tempfile",
+ "toml 1.1.8+spec-1.1.0",
+]
 
 [[package]]
 name = "slotmap"

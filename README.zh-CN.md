@@ -39,7 +39,7 @@ CI 包内置默认配置，但不包含固件载荷。完整构建包含随包�
 
 ## 许可证
 
-应用自有代码与资源采用 [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)，由你选择。依赖、vendor 代码、第三方资源及外部固件保留各自条款。应用在编译时生成并嵌入 `THIRD_PARTY_NOTICES.txt`，生成文件不纳入版本控制。在**设置 > 查看许可证与声明**中离线阅读版权材料与源码获取说明，或参阅[版权材料维护流程](docs/DEVELOPMENT.zh-CN.md#license-notices)。
+应用自有代码与资源采用 [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE)，由你选择。依赖、vendor 代码、第三方资源及外部固件保留各自条款。应用在编译时使用共享 Rust 版权材料库生成并嵌入 `THIRD_PARTY_NOTICES.txt`，生成文件不纳入版本控制。在**设置 > 查看许可证与声明**中离线阅读版权材料与源码获取说明，或参阅[版权材料维护流程](docs/DEVELOPMENT.zh-CN.md#license-notices)。
 
 ## 文档
 

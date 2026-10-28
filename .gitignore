@@ -31,7 +31,7 @@
 *.jks
 *.keystore
 
-# Python packaging helpers and local tooling.
+# Local tooling and editor caches.
 __pycache__/
 *.py[cod]
 .venv/
