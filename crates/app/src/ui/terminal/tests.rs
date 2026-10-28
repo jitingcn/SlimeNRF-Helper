@@ -849,3 +849,243 @@ fn transcript_keyboard_selection_reaches_the_existing_copy_owner_without_sending
         );
     });
 }
+
+fn terminal_test_endpoint(port: &str) -> SerialEndpoint {
+    SerialEndpoint {
+        port_name: port.into(),
+        label: port.into(),
+        manufacturer: None,
+        product: None,
+        kind: crate::domain::SerialPortKind::Usb,
+        serial_number: Some(format!("TEST-{port}")),
+        vid: Some(0xcafe),
+        pid: Some(1),
+        usb_interface: None,
+    }
+}
+
+#[gpui_kit::test]
+fn send_all_tracks_admitted_connected_sessions_without_reserving_footer_space(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::sessions::test_support::{
+        display_manager, display_session_state, display_test_session,
+    };
+    use gpui_kit::{
+        AppContext as _, Bounds, WindowBounds, WindowOptions, px, size, test::TestWindowExt as _,
+    };
+
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let executor = runtime.executor();
+    let mut manager = display_manager();
+    let _display_a = display_test_session(&mut manager, "A");
+    let _display_b = display_test_session(&mut manager, "B");
+    display_session_state(&mut manager, "A", ConnectionState::Disconnected);
+    display_session_state(&mut manager, "B", ConnectionState::Disconnected);
+    let (window, workspace) = cx.update(|cx| {
+        gpui_kit::open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    Default::default(),
+                    size(px(800.), px(600.)),
+                ))),
+                ..Default::default()
+            },
+            cx,
+            |window, cx| {
+                let workbench = cx.new(|cx| {
+                    let mut this = offline_workbench(window, cx, manager, executor);
+                    this.inventory.ports = ["A", "B", "not-open"]
+                        .into_iter()
+                        .map(terminal_test_endpoint)
+                        .collect();
+                    this.selected.insert("port:not-open".into());
+                    this.sync_tabs(window, cx);
+                    this
+                });
+                cx.new(|_| TerminalWorkspace(workbench))
+            },
+        )
+        .unwrap()
+    });
+    let workbench = cx.update(|cx| workspace.read(cx).0.clone());
+    let input_id = workbench.read_with(cx, |this, _| this.terminals["A"].input.entity_id());
+    let check = |cx: &mut gpui_kit::TestAppContext, shown: bool| {
+        cx.update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            let send = window.find("terminal-send").bounds();
+            let input = window.find(("input", input_id)).bounds();
+            let clear = window.find("terminal-clear").bounds();
+            assert!(input.right() <= send.left());
+            assert!(clear.top() >= input.bottom());
+            assert!(
+                clear.top() - input.bottom() <= window.rem_size(),
+                "the existing toolbar must follow the input without an extra row",
+            );
+            match window.try_find("terminal-send-all") {
+                Some(all) => {
+                    assert!(shown);
+                    assert_eq!(all.disabled(), Some(true));
+                    let all = all.bounds();
+                    assert!(all.top() >= send.bottom());
+                    assert!((all.right() - send.right()).abs() <= px(1.));
+                    assert!((all.top() - clear.top()).abs() <= px(1.));
+                }
+                None => assert!(!shown),
+            }
+        })
+        .unwrap();
+    };
+
+    check(cx, false);
+    workbench.update(cx, |this, cx| {
+        display_session_state(&mut this.manager, "A", ConnectionState::Connecting);
+        cx.notify();
+    });
+    check(cx, false);
+    workbench.update(cx, |this, cx| {
+        display_session_state(&mut this.manager, "A", ConnectionState::Connected);
+        display_session_state(&mut this.manager, "B", ConnectionState::Connecting);
+        cx.notify();
+    });
+    check(cx, false);
+    workbench.update(cx, |this, cx| {
+        display_session_state(&mut this.manager, "B", ConnectionState::Connected);
+        cx.notify();
+    });
+    check(cx, true);
+
+    workbench.update(cx, |this, cx| {
+        let endpoint = this
+            .inventory
+            .ports
+            .iter_mut()
+            .find(|endpoint| endpoint.port_name == "B")
+            .unwrap();
+        endpoint.vid = Some(0x1209);
+        endpoint.pid = Some(0x7690);
+        endpoint.usb_interface = Some(crate::domain::UsbInterface {
+            number: Some(2),
+            description: crate::domain::InterfaceDescription::Value("SlimeNRF Raw Data CDC".into()),
+        });
+        cx.notify();
+    });
+    check(cx, false);
+    workbench.update(cx, |this, cx| {
+        *this
+            .inventory
+            .ports
+            .iter_mut()
+            .find(|endpoint| endpoint.port_name == "B")
+            .unwrap() = terminal_test_endpoint("B");
+        cx.notify();
+    });
+    check(cx, true);
+    cx.simulate_window_resize(window, size(px(420.), px(600.)));
+    check(cx, true);
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let all = window.find("terminal-send-all").bounds();
+        let clear = window.find("terminal-clear").bounds();
+        let wrap = window.find("terminal-wrap").bounds();
+        assert!(
+            wrap.top() > clear.top(),
+            "the toolbar should wrap at narrow widths"
+        );
+        assert!(wrap.right() <= all.left());
+    })
+    .unwrap();
+
+    workbench.update(cx, |this, cx| {
+        display_session_state(&mut this.manager, "B", ConnectionState::Closing);
+        cx.notify();
+    });
+    check(cx, false);
+    workbench.update(cx, |this, cx| {
+        display_session_state(&mut this.manager, "A", ConnectionState::Faulted);
+        display_session_state(&mut this.manager, "B", ConnectionState::Disconnected);
+        cx.notify();
+    });
+    check(cx, false);
+}
+
+#[gpui_kit::test]
+fn terminal_send_pointer_enter_history_and_send_all_use_real_command_routes(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::sessions::test_support::{connected, peer, stopped, until};
+    use gpui_kit::{VisualContext as _, test::TestWindowExt as _};
+    use std::io::Read as _;
+
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let (workbench, cx, _runtime, listener) = terminal_fixture(cx);
+    workbench.update(cx, |this, _| {
+        this.inventory.ports = ["A", "B"].into_iter().map(terminal_test_endpoint).collect();
+        this.manager.connect("A").unwrap();
+    });
+    let mut peer_a = peer(&listener);
+    workbench.update(cx, |this, _| {
+        connected(&mut this.manager, "A");
+        this.manager.connect("B").unwrap();
+    });
+    let mut peer_b = peer(&listener);
+    workbench.update(cx, |this, _| connected(&mut this.manager, "B"));
+    let workspace = cx.new_window_entity(|window, cx| {
+        let focus = workbench.read(cx).page_focus.clone();
+        focus.focus(window, cx);
+        TerminalWorkspace(workbench.clone())
+    });
+    cx.replace_root_view(|window, cx| gpui_kit::base::Root::new(workspace, window, cx));
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+    let input_id = workbench.read_with(cx, |this, _| this.terminals["A"].input.entity_id());
+
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert!(window.is_window_active());
+        window.click(("input", input_id), cx);
+        window.input("help", cx);
+        window.click("terminal-send", cx);
+    });
+    let mut command = [0; 5];
+    peer_a.read_exact(&mut command).unwrap();
+    assert_eq!(&command, b"help\n");
+    cx.update(|window, cx| {
+        window.click(("input", input_id), cx);
+        window.input("info", cx);
+        window.press("enter", cx);
+    });
+    cx.run_until_parked();
+    peer_a.read_exact(&mut command).unwrap();
+    assert_eq!(&command, b"info\n");
+
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        window.click(("input", input_id), cx);
+        window.press("up", cx);
+        assert_eq!(window.find(("input", input_id)).value(), Some("info"));
+        window.press("up", cx);
+        assert_eq!(window.find(("input", input_id)).value(), Some("help"));
+        window.press("down", cx);
+        assert_eq!(window.find(("input", input_id)).value(), Some("info"));
+        window.press("down", cx);
+        assert_eq!(window.find(("input", input_id)).value(), Some(""));
+        window.input("meow", cx);
+        window.click("terminal-send-all", cx);
+    });
+    peer_a.read_exact(&mut command).unwrap();
+    assert_eq!(&command, b"meow\n");
+    peer_b.read_exact(&mut command).unwrap();
+    assert_eq!(&command, b"meow\n");
+    workbench.update(cx, |this, _| {
+        assert_eq!(this.terminal_command_runs().count(), 1);
+        until(|| this.manager.writes_idle("A") && this.manager.writes_idle("B"));
+        this.manager.disconnect("A").unwrap();
+        this.manager.disconnect("B").unwrap();
+        stopped(&mut this.manager, "A");
+        stopped(&mut this.manager, "B");
+    });
+    drop(workbench);
+    drop(_ui_session);
+}

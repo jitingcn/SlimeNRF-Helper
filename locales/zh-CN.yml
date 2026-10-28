@@ -758,7 +758,6 @@ devices:
     wired_title: "有线设备"
   serial:
     role:
-      console: "命令控制台"
       raw_data: "仅用于原始数据采集"
       unavailable: "控制台不可用"
   serial_kind:

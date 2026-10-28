@@ -273,6 +273,27 @@ impl Workbench {
         }
     }
 
+    pub(super) fn has_multiple_terminal_send_targets(&self) -> bool {
+        self.manager
+            .sessions()
+            .filter(|session| session.state == ConnectionState::Connected)
+            .filter(|session| {
+                let (endpoint, receiver) = connected_command_endpoint(session, &self.inventory);
+                connected_command_exclusion(
+                    &self.manager,
+                    &self.inventory,
+                    session,
+                    endpoint,
+                    receiver,
+                    |endpoint, receiver| self.custom_endpoint_check(endpoint, receiver),
+                )
+                .is_none()
+            })
+            .take(2)
+            .count()
+            == 2
+    }
+
     pub(in crate::ui) fn saved_command_targets(
         &self,
         mode: TargetMode,
@@ -811,6 +832,47 @@ fn validate_target_identity(
     Ok(())
 }
 
+fn connected_command_endpoint<'a>(
+    session: &crate::sessions::SessionView,
+    inventory: &'a crate::domain::Inventory,
+) -> (Option<&'a SerialEndpoint>, Option<&'a ReceiverEndpoint>) {
+    let endpoint = inventory
+        .ports
+        .iter()
+        .find(|endpoint| endpoint.port_name == session.port);
+    let receiver = endpoint.and_then(|endpoint| {
+        inventory.receivers.iter().find(|receiver| {
+            receiver_port(receiver, inventory)
+                .is_some_and(|port| same_serial_endpoint(Some(endpoint), Some(port)))
+        })
+    });
+    (endpoint, receiver)
+}
+
+fn connected_command_exclusion(
+    manager: &crate::sessions::SessionManager,
+    inventory: &crate::domain::Inventory,
+    session: &crate::sessions::SessionView,
+    endpoint: Option<&SerialEndpoint>,
+    receiver: Option<&ReceiverEndpoint>,
+    admission: impl FnOnce(&SerialEndpoint, Option<&ReceiverEndpoint>) -> Result<(), String>,
+) -> Option<String> {
+    if session.state != ConnectionState::Connected {
+        Some(tr("serial.batch.error.not_connected"))
+    } else {
+        endpoint
+            .ok_or_else(|| tr("commands.preparation.error.target_unavailable"))
+            .and_then(|endpoint| {
+                validate_target_identity(endpoint, receiver, inventory)?;
+                if manager.command_port_reserved(&session.port) {
+                    return Err(tr("firmware.error.port_updating"));
+                }
+                admission(endpoint, receiver)
+            })
+            .err()
+    }
+}
+
 fn connected_command_targets(
     manager: &crate::sessions::SessionManager,
     inventory: &crate::domain::Inventory,
@@ -819,30 +881,15 @@ fn connected_command_targets(
     manager
         .sessions()
         .map(|session| {
-            let endpoint = inventory
-                .ports
-                .iter()
-                .find(|endpoint| endpoint.port_name == session.port);
-            let receiver = endpoint.and_then(|endpoint| {
-                inventory.receivers.iter().find(|receiver| {
-                    receiver_port(receiver, inventory)
-                        .is_some_and(|port| same_serial_endpoint(Some(endpoint), Some(port)))
-                })
-            });
-            let exclusion = if session.state != ConnectionState::Connected {
-                Some(tr("serial.batch.error.not_connected"))
-            } else {
-                endpoint
-                    .ok_or_else(|| tr("commands.preparation.error.target_unavailable"))
-                    .and_then(|endpoint| {
-                        validate_target_identity(endpoint, receiver, inventory)?;
-                        if manager.command_port_reserved(&session.port) {
-                            return Err(tr("firmware.error.port_updating"));
-                        }
-                        admission(endpoint, receiver)
-                    })
-                    .err()
-            };
+            let (endpoint, receiver) = connected_command_endpoint(session, inventory);
+            let exclusion = connected_command_exclusion(
+                manager,
+                inventory,
+                session,
+                endpoint,
+                receiver,
+                &mut admission,
+            );
             CommandTargetChoice {
                 key: session.port.clone(),
                 label: endpoint

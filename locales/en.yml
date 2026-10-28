@@ -758,7 +758,6 @@ devices:
     wired_title: "Wired devices"
   serial:
     role:
-      console: "Command console"
       raw_data: "Raw data capture only"
       unavailable: "Console unavailable"
   serial_kind:

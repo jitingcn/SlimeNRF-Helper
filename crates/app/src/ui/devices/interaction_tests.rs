@@ -3,7 +3,10 @@ use crate::{
     app_runtime::{AppRuntime, Executor},
     device_registry::{DeviceKey, DeviceRecord, DeviceRegistry, ReportedMetadata},
     discovery::ReceiverMonitor,
-    domain::{ReceiverEndpoint, TrackerLink},
+    domain::{
+        InterfaceDescription, ReceiverEndpoint, SerialEndpoint, SerialPortKind, TrackerLink,
+        UsbInterface,
+    },
     ui::command_panel::CommandFocus,
 };
 use gpui_kit::{
@@ -18,6 +21,10 @@ const LONG_RECEIVER: &str =
 const LONG_NICKNAME: &str = "Synthetic tracker nickname with a deliberately long display label";
 const FIRST_ADDRESS: &str = "010203040506";
 const SLOTS: [u8; 7] = [0, 1, 2, 3, 4, 5, 6];
+const LONG_SERIAL: &str =
+    "SYNTHETIC-SERIAL-THIS-IS-DELIBERATELY-MUCH-LONGER-THAN-A-NARROW-RECEIVER-HEADER";
+const CONSOLE: &str = "fixture-console";
+const RAW_DATA: &str = "fixture-raw-data";
 
 struct RosterHarness {
     workbench: Entity<Workbench>,
@@ -314,6 +321,274 @@ fn assert_grid_geometry(window: &Window, slots: [u8; 7], columns: usize) {
             );
         }
     }
+}
+
+fn set_receiver_serial(fixture: &mut Fixture, cx: &mut TestAppContext, serial: Option<&str>) {
+    fixture.receiver.serial_number = serial.map(str::to_owned);
+    fixture.workbench.update(cx, |this, cx| {
+        let trackers = std::mem::take(
+            &mut this
+                .monitor
+                .fixture_observation_mut(&fixture.receiver)
+                .trackers,
+        );
+        this.inventory.receivers[0] = fixture.receiver.clone();
+        this.monitor = ReceiverMonitor::fixture(fixture.receiver.clone(), 0, FIRST_ADDRESS, true);
+        this.monitor
+            .fixture_observation_mut(&fixture.receiver)
+            .trackers = trackers;
+        cx.notify();
+    });
+}
+
+fn assert_metadata_within_viewport(window: &Window, expected_online: usize, expected_total: usize) {
+    let count = window.find(format!("receiver-count:{RECEIVER}"));
+    let heading = window.find(format!("receiver-focus:{RECEIVER}"));
+    let action = window.find(format!("all-trackers:{RECEIVER}"));
+    let expected = rust_i18n::t!(
+        "devices.receiver.tracker_count",
+        online = expected_online,
+        total = expected_total
+    )
+    .to_string();
+    assert_eq!(count.label(), Some(expected.as_str()));
+    for (name, element) in [
+        ("count", &count),
+        ("heading", &heading),
+        ("action", &action),
+    ] {
+        assert!(
+            element.visible()
+                && element.bounds().size.width > px(0.)
+                && element.bounds().left() >= px(0.)
+                && element.bounds().right() <= window.viewport_size().width,
+            "{name} must remain visible within the viewport: {:?}",
+            element.bounds(),
+        );
+    }
+    assert!(
+        count.bounds().top() >= heading.bounds().bottom()
+            && count.bounds().top() >= action.bounds().bottom(),
+        "receiver metadata must remain below the name and action row",
+    );
+}
+
+#[gpui_kit::test]
+fn receiver_metadata_wraps_without_losing_counts_at_large_zoom_in_both_locales(
+    cx: &mut TestAppContext,
+) {
+    let runtime = AppRuntime::new().expect("create isolated I/O runtime");
+    let directory = tempfile::tempdir().expect("create private preferences directory");
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let mut fixture = Fixture::new(
+        cx,
+        runtime.executor(),
+        directory.path().join("preferences.json"),
+    );
+    cx.simulate_window_scale_factor_change(fixture.window, 1.25);
+
+    for language in [
+        crate::settings::Language::English,
+        crate::settings::Language::SimplifiedChinese,
+    ] {
+        cx.update(|cx| {
+            let preferences = fixture.workbench.update(cx, |this, _| {
+                this.preferences.language = language;
+                this.preferences.clone()
+            });
+            crate::ui::theme::apply(&preferences, cx);
+            gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
+        });
+        set_receiver_serial(&mut fixture, cx, Some("SYNTHETIC-1234"));
+        cx.simulate_window_resize(fixture.window, size(px(520.), px(1200.)));
+        settle_roster(cx, &fixture);
+        cx.update_window(fixture.window, |_, window, _| {
+            assert_eq!(window.rem_size(), px(20.));
+            assert_eq!(window.scale_factor(), 1.25);
+            assert_metadata_within_viewport(window, 2, 4);
+            let serial = window.find(format!("receiver-serial:{RECEIVER}"));
+            let count = window.find(format!("receiver-count:{RECEIVER}"));
+            assert_eq!(serial.label(), Some("SYNTHETIC-1234"));
+            assert!(
+                serial.visible()
+                    && serial.bounds().top() == count.bounds().top()
+                    && serial.bounds().right() <= count.bounds().left(),
+                "short serial and count must share a row at a normal device-pane width",
+            );
+        })
+        .expect("inspect receiver metadata at a normal device-pane width");
+
+        set_receiver_serial(&mut fixture, cx, Some(LONG_SERIAL));
+        cx.simulate_window_resize(fixture.window, size(px(360.), px(1200.)));
+        settle_roster(cx, &fixture);
+        cx.update_window(fixture.window, |_, window, _| {
+            assert_metadata_within_viewport(window, 2, 4);
+            let serial = window.find(format!("receiver-serial:{RECEIVER}"));
+            let count = window.find(format!("receiver-count:{RECEIVER}"));
+            assert_eq!(serial.label(), Some(LONG_SERIAL));
+            assert!(
+                serial.visible()
+                    && serial.bounds().size.width > px(0.)
+                    && serial.bounds().left() >= px(0.)
+                    && serial.bounds().right() <= window.viewport_size().width
+                    && count.bounds().top() >= serial.bounds().bottom(),
+                "long serial and count must wrap without overlapping or escaping the viewport",
+            );
+        })
+        .expect("inspect narrow receiver metadata");
+
+        fixture.workbench.update(cx, |this, cx| {
+            this.monitor
+                .fixture_observation_mut(&fixture.receiver)
+                .trackers[1]
+                .online = false;
+            cx.notify();
+        });
+        settle_roster(cx, &fixture);
+        cx.update_window(fixture.window, |_, window, _| {
+            assert_metadata_within_viewport(window, 1, 4);
+        })
+        .expect("inspect the updated selectable count");
+
+        set_receiver_serial(&mut fixture, cx, None);
+        settle_roster(cx, &fixture);
+        cx.update_window(fixture.window, |_, window, _| {
+            assert!(
+                window
+                    .try_find(format!("receiver-serial:{RECEIVER}"))
+                    .is_none()
+            );
+            assert_metadata_within_viewport(window, 1, 4);
+            assert!(
+                window
+                    .find(format!("receiver-missing-console:{RECEIVER}"))
+                    .visible()
+            );
+        })
+        .expect("inspect receiver metadata without a serial");
+
+        fixture.workbench.update(cx, |this, cx| {
+            this.monitor
+                .fixture_observation_mut(&fixture.receiver)
+                .trackers[1]
+                .online = true;
+            cx.notify();
+        });
+    }
+}
+
+#[gpui_kit::test]
+fn associated_console_and_raw_data_remain_separate_and_operable(cx: &mut TestAppContext) {
+    let runtime = AppRuntime::new().expect("create isolated I/O runtime");
+    let directory = tempfile::tempdir().expect("create private preferences directory");
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let fixture = Fixture::new(
+        cx,
+        runtime.executor(),
+        directory.path().join("preferences.json"),
+    );
+    fixture.workbench.update(cx, |this, cx| {
+        let console = SerialEndpoint {
+            port_name: CONSOLE.into(),
+            label: "Synthetic console".into(),
+            manufacturer: None,
+            product: None,
+            kind: SerialPortKind::Usb,
+            serial_number: fixture.receiver.serial_number.clone(),
+            vid: Some(0x1209),
+            pid: Some(0x7690),
+            usb_interface: None,
+        };
+        let raw_data = SerialEndpoint {
+            port_name: RAW_DATA.into(),
+            label: "Synthetic raw data".into(),
+            usb_interface: Some(UsbInterface {
+                number: Some(2),
+                description: InterfaceDescription::Value("SlimeNRF Raw Data CDC".into()),
+            }),
+            ..console.clone()
+        };
+        this.inventory.ports.extend([console, raw_data]);
+        cx.notify();
+    });
+    cx.simulate_window_resize(fixture.window, size(px(1000.), px(1200.)));
+    settle_roster(cx, &fixture);
+    cx.update_window(fixture.window, |_, window, cx| {
+        let count = window.find(format!("receiver-count:{RECEIVER}"));
+        let console = window.find(format!("port-focus:{RECEIVER}:{CONSOLE}"));
+        let raw_data = window.find(format!("non-console-port:{RECEIVER}:{RAW_DATA}"));
+        assert!(console.visible() && raw_data.visible());
+        assert!(
+            console.bounds().top() >= count.bounds().bottom()
+                && console.bounds().top() - count.bounds().bottom() <= window.rem_size() * 1.75,
+            "the associated console row must directly follow receiver metadata",
+        );
+        assert!(
+            raw_data.bounds().top() >= console.bounds().bottom(),
+            "raw data remains a distinct row after the command console",
+        );
+        assert!(
+            window
+                .try_find(format!("receiver-missing-console:{RECEIVER}"))
+                .is_none()
+        );
+        assert!(
+            window
+                .try_find(format!("port-focus:{RECEIVER}:{RAW_DATA}"))
+                .is_none()
+        );
+        assert!(
+            window
+                .try_find(format!("port-focus:direct:{CONSOLE}"))
+                .is_none()
+        );
+        assert!(
+            window
+                .try_find(format!("port-focus:direct:{RAW_DATA}"))
+                .is_none()
+        );
+        window.click(format!("check:port:{CONSOLE}"), cx);
+        assert_eq!(
+            window.find(format!("check:port:{CONSOLE}")).checked(),
+            Some(true),
+        );
+        window.click(format!("port-focus:{RECEIVER}:{CONSOLE}"), cx);
+    })
+    .expect("operate the synthetic associated console without connecting");
+    fixture.workbench.read_with(cx, |this, _| {
+        assert_eq!(
+            this.command_focus,
+            Some(CommandFocus::Serial(CONSOLE.into())),
+        );
+        assert!(this.selected.contains(&format!("port:{CONSOLE}")));
+        assert_eq!(this.manager.sessions().count(), 0);
+    });
+
+    fixture.workbench.update(cx, |this, cx| {
+        this.inventory
+            .ports
+            .retain(|port| port.port_name != CONSOLE);
+        cx.notify();
+    });
+    settle_roster(cx, &fixture);
+    cx.update_window(fixture.window, |_, window, _| {
+        assert!(
+            window
+                .find(format!("receiver-missing-console:{RECEIVER}"))
+                .visible()
+        );
+        assert!(
+            window
+                .find(format!("non-console-port:{RECEIVER}:{RAW_DATA}"))
+                .visible()
+        );
+        assert!(
+            window
+                .try_find(format!("port-focus:{RECEIVER}:{CONSOLE}"))
+                .is_none()
+        );
+    })
+    .expect("inspect the missing-console and raw-data paths");
 }
 
 #[gpui_kit::test]

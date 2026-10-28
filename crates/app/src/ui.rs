@@ -69,9 +69,9 @@ use crate::{
 
 actions!(slimenrf_helper, [Quit]);
 
-// Keep component defaults and embed only the extra sidebar glyphs.
+// Keep component defaults and embed additional application glyphs.
 gpui::assets::icon_assets!(
-    SidebarIconAssets,
+    ExtraIconAssets,
     [
         Wifi,
         Activity,
@@ -86,7 +86,10 @@ gpui::assets::icon_assets!(
         Plug,
         Usb,
         ArrowLeft,
-        Pencil
+        Pencil,
+        List,
+        ListX,
+        CornerDownLeft
     ]
 );
 
@@ -94,7 +97,7 @@ struct AppAssets;
 
 impl AssetSource for AppAssets {
     fn load(&self, path: &str) -> gpui::Result<Option<std::borrow::Cow<'static, [u8]>>> {
-        match SidebarIconAssets.load(path)? {
+        match ExtraIconAssets.load(path)? {
             Some(bytes) => Ok(Some(bytes)),
             None => gpui::assets::Assets.load(path),
         }
@@ -102,7 +105,7 @@ impl AssetSource for AppAssets {
 
     fn list(&self, path: &str) -> gpui::Result<Vec<SharedString>> {
         let mut paths = gpui::assets::Assets.list(path)?;
-        paths.extend(SidebarIconAssets.list(path)?);
+        paths.extend(ExtraIconAssets.list(path)?);
         Ok(paths)
     }
 }
@@ -762,9 +765,6 @@ impl Workbench {
             .min_w_0()
             .min_h_0()
             .bg(cx.theme().background)
-            .border_1()
-            .border_color(cx.theme().border)
-            .rounded_md()
             .overflow_hidden()
             .child(
                 div()
@@ -776,8 +776,7 @@ impl Workbench {
                     .py_2()
                     .flex_shrink_0()
                     .bg(cx.theme().muted)
-                    .border_b_1()
-                    .border_color(cx.theme().border)
+                    .rounded_md()
                     .child(
                         div()
                             .text_sm()
@@ -800,21 +799,27 @@ impl Workbench {
                                 .to_string(),
                             ),
                     )
-                    .child(
+                    .child({
+                        let label = SharedString::from(tr("devices.registry.action.manage"));
                         Button::new("roster-manage-devices")
                             .small()
-                            .label(tr("devices.registry.action.manage"))
+                            .icon(gpui_kit::assets::IconName::List)
+                            .tooltip(label.clone())
+                            .accessibility_label(label)
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.open_device_registry(window, cx);
-                            })),
-                    )
+                            }))
+                    })
                     .when(
                         self.selected.iter().any(|key| key.starts_with("tracker:")),
                         |row| {
+                            let label = SharedString::from(tr("common.action.clear_selection"));
                             row.child(
                                 Button::new("clear-tracker-selection")
                                     .small()
-                                    .label(tr("common.action.clear_selection"))
+                                    .icon(gpui_kit::assets::IconName::ListX)
+                                    .tooltip(label.clone())
+                                    .accessibility_label(label)
                                     .on_click(cx.listener(|this, _, _, cx| {
                                         clear_tracker_selection(&mut this.selected);
                                         this.selection_changed();
@@ -823,13 +828,15 @@ impl Workbench {
                             )
                         },
                     )
-                    .child(
+                    .child({
+                        let label = SharedString::from(tr("devices.roster.refresh"));
                         Button::new("enumerate")
                             .small()
-                            .label(tr("devices.roster.refresh"))
                             .icon(IconName::RefreshCw)
-                            .on_click(cx.listener(|this, _, _, cx| this.rediscover_inventory(cx))),
-                    ),
+                            .tooltip(label.clone())
+                            .accessibility_label(label)
+                            .on_click(cx.listener(|this, _, _, cx| this.rediscover_inventory(cx)))
+                    }),
             )
             .child(self.roster(cx));
         if let Some(error) = &self.error {

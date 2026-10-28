@@ -22,6 +22,7 @@ use crate::{
     i18n::tr,
     sessions::ConnectionState,
 };
+use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::{
     ActiveTheme, Disableable, Selectable, Sizable,
     button::{Button, ButtonVariants},
@@ -163,6 +164,10 @@ impl Workbench {
                 "devices.serial.role.unavailable"
             };
             return div()
+                .id(SharedString::from(format!(
+                    "non-console-port:{context}:{port}"
+                )))
+                .test_support()
                 .flex()
                 .items_center()
                 .gap_3()
@@ -308,7 +313,6 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_3()
-            .p_2()
             .min_h_0()
             .min_w_0()
             .overflow_y_scroll();
@@ -327,98 +331,107 @@ impl Workbench {
             let group =
                 div()
                     .flex()
-                    .flex_wrap()
-                    .items_center()
+                    .flex_col()
                     .min_w_0()
-                    .gap_3()
+                    .gap_1()
                     .px_3()
                     .py_2()
                     .bg(cx.theme().muted)
                     .child(
                         div()
-                            .flex_1()
-                            .min_w(px(180.))
                             .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                Button::new(SharedString::from(format!("receiver-focus:{key}")))
-                                    .small()
-                                    .ghost()
-                                    .self_start()
-                                    .max_w_full()
-                                    .min_w_0()
-                                    .px_0()
-                                    .border_0()
-                                    .accessibility_label(self.receiver_label(receiver, receiver.label.clone()))
-                                    .tooltip(self.receiver_label(receiver, receiver.label.clone()))
-                                    .child(
-                                        div()
-                                            .min_w_0()
-                                            .truncate()
-                                            .text_left()
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .child(self.receiver_label(receiver, receiver_name)),
-                                    )
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        cx.stop_propagation();
-                                        this.focus_command_target(receiver_focus.clone());
-                                        cx.notify();
-                                    })),
-                            )
-                            .when_some(receiver.serial_number.as_ref(), |column, serial| {
-                                column.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(clipped(format!("receiver-serial:{key}"), serial.clone())),
-                                )
-                            })
+                            .flex_wrap()
+                            .items_center()
+                            .min_w_0()
+                            .gap_3()
                             .child(
                                 div()
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(clipped(
-                                        format!("receiver-count:{key}"),
-                                        rust_i18n::t!(
-                                            "devices.receiver.tracker_count",
-                                            online = observation.map_or(0, |value| value
-                                                .trackers
-                                                .iter()
-                                                .filter(|tracker| tracker_selectable(
-                                                    tracker,
-                                                    self.manager.sessions().map(|session| (
-                                                        session.port.as_str(),
-                                                        session.state,
-                                                        &session.identity,
-                                                    )),
-                                                ))
-                                                .count()),
-                                            total =
-                                                observation.map_or(0, |value| value.trackers.len())
-                                        )
-                                        .to_string(),
-                                    )),
+                                    .flex_1()
+                                    .min_w(px(180.))
+                                    .flex()
+                                    .child(
+                                        Button::new(SharedString::from(format!("receiver-focus:{key}")))
+                                            .small()
+                                            .ghost()
+                                            .self_start()
+                                            .max_w_full()
+                                            .min_w_0()
+                                            .px_0()
+                                            .border_0()
+                                            .accessibility_label(self.receiver_label(receiver, receiver.label.clone()))
+                                            .tooltip(self.receiver_label(receiver, receiver.label.clone()))
+                                            .child(
+                                                div()
+                                                    .min_w_0()
+                                                    .truncate()
+                                                    .text_left()
+                                                    .font_weight(FontWeight::SEMIBOLD)
+                                                    .child(self.receiver_label(receiver, receiver_name)),
+                                            )
+                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                                cx.stop_propagation();
+                                                this.focus_command_target(receiver_focus.clone());
+                                                cx.notify();
+                                            })),
+                                    ),
+                            )
+                            .child(
+                                Button::new(SharedString::from(format!("all-trackers:{key}")))
+                                    .small()
+                                    .map(|button| context_button(
+                                        button,
+                                        matches!(&self.sidebar.scope, CommandScope::AllTrackers(receiver) if receiver == &key),
+                                        cx,
+                                    ))
+                                    .min_w(px(156.))
+                                    .label(tr("devices.receiver.select_all_online"))
+                                    .tooltip(tr("devices.receiver.select_all_online_hint"))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        cx.stop_propagation();
+                                        this.change_command_scope(CommandScope::AllTrackers(
+                                            all_receiver.clone(),
+                                        ));
+                                        cx.notify();
+                                    })),
                             ),
                     )
                     .child(
-                        Button::new(SharedString::from(format!("all-trackers:{key}")))
-                            .small()
-                            .map(|button| context_button(
-                                button,
-                                matches!(&self.sidebar.scope, CommandScope::AllTrackers(receiver) if receiver == &key),
-                                cx,
-                            ))
-                            .min_w(px(156.))
-                            .label(tr("devices.receiver.select_all_online"))
-                            .tooltip(tr("devices.receiver.select_all_online_hint"))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.change_command_scope(CommandScope::AllTrackers(
-                                    all_receiver.clone(),
-                                ));
-                                cx.notify();
-                            })),
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .min_w_0()
+                            .gap_x_3()
+                            .gap_y_1()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .when_some(receiver.serial_number.as_ref(), |row, serial| {
+                                row.child(receiver_metadata(
+                                    format!("receiver-serial:{key}"),
+                                    serial,
+                                ))
+                            })
+                            .child(receiver_metadata(
+                                format!("receiver-count:{key}"),
+                                rust_i18n::t!(
+                                    "devices.receiver.tracker_count",
+                                    online = observation.map_or(0, |value| value
+                                        .trackers
+                                        .iter()
+                                        .filter(|tracker| tracker_selectable(
+                                            tracker,
+                                            self.manager.sessions().map(|session| (
+                                                session.port.as_str(),
+                                                session.state,
+                                                &session.identity,
+                                            )),
+                                        ))
+                                        .count()),
+                                    total =
+                                        observation.map_or(0, |value| value.trackers.len())
+                                )
+                                .as_ref(),
+                            )),
                     );
             let mut receiver_group = div()
                 .flex()
@@ -434,19 +447,15 @@ impl Workbench {
             let serial_ports = receiver_serial_ports(receiver, &self.inventory);
             if let Some(port) = serial_ports.as_ref().and_then(|ports| ports.console) {
                 associated.insert(port.port_name.clone());
-                receiver_group = receiver_group
-                    .child(
-                        div()
-                            .px_3()
-                            .py_1()
-                            .text_xs()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(tr("devices.serial.role.console")),
-                    )
-                    .child(self.port_row(&port.port_name, &port.label, &key, cx));
+                receiver_group =
+                    receiver_group.child(self.port_row(&port.port_name, &port.label, &key, cx));
             } else {
                 receiver_group = receiver_group.child(
                     div()
+                        .id(SharedString::from(format!(
+                            "receiver-missing-console:{key}"
+                        )))
+                        .test_support()
                         .px_3()
                         .py_1()
                         .text_xs()
@@ -815,6 +824,22 @@ impl Workbench {
         }
         roster.into_any_element()
     }
+}
+
+fn receiver_metadata(id: String, text: &str) -> AnyElement {
+    let text = SharedString::from(text);
+    let tooltip = text.clone();
+    div()
+        .id(SharedString::from(id))
+        .role(gpui_kit::Role::Label)
+        .aria_label(text.clone())
+        .test_support()
+        .min_w_0()
+        .max_w_full()
+        .truncate()
+        .child(text)
+        .tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx))
+        .into_any_element()
 }
 
 pub(super) fn receiver_command_port<'a>(

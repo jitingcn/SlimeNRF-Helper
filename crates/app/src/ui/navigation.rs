@@ -314,7 +314,7 @@ impl Workbench {
 #[cfg(test)]
 mod tests {
     use gpui_kit::{
-        AppContext as _, Bounds, TestAppContext, WindowBounds, WindowOptions, px, size,
+        AppContext as _, Bounds, Role, TestAppContext, WindowBounds, WindowOptions, px, size,
         test::TestWindowExt as _,
     };
 
@@ -322,8 +322,8 @@ mod tests {
     fn sidebar_navigation_enters_the_page_before_tabbing_to_its_first_control(
         cx: &mut TestAppContext,
     ) {
-        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
         let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
         let executor = runtime.executor();
 
         let (handle, workbench) = cx.update(|cx| {
@@ -361,7 +361,59 @@ mod tests {
             let manage = window.find("roster-manage-devices");
             assert_eq!(manage.focused(), Some(true));
             assert!(manage.visible());
+            assert_eq!(manage.role(), Some(Role::Button));
+            assert_eq!(
+                manage.label(),
+                Some(crate::i18n::tr("devices.registry.action.manage").as_str()),
+            );
+            assert!(window.try_find("clear-tracker-selection").is_none());
+            window.press("tab", cx);
+            let refresh = window.find("enumerate");
+            assert_eq!(refresh.focused(), Some(true));
+            assert_eq!(refresh.role(), Some(Role::Button));
+            assert_eq!(
+                refresh.label(),
+                Some(crate::i18n::tr("devices.roster.refresh").as_str()),
+            );
         })
         .unwrap();
+
+        let receiver = crate::domain::ReceiverEndpoint {
+            key: "synthetic-summary-receiver".into(),
+            path: b"synthetic-summary-receiver".to_vec(),
+            label: "Synthetic receiver".into(),
+            serial_number: Some("synthetic-summary-serial".into()),
+        };
+        workbench.update(cx, |this, cx| {
+            this.inventory.receivers.push(receiver.clone());
+            this.monitor =
+                crate::discovery::ReceiverMonitor::fixture(receiver, 0, "010203040506", true);
+            this.selected
+                .insert("tracker:synthetic-summary-receiver:0".into());
+            this.selected.insert("port:synthetic-summary-port".into());
+            cx.notify();
+        });
+        cx.update_window(handle, |_, window, cx| {
+            window.render_frame(cx);
+            window.press("shift-tab", cx);
+            let clear = window.find("clear-tracker-selection");
+            assert_eq!(clear.focused(), Some(true));
+            assert_eq!(clear.role(), Some(Role::Button));
+            assert_eq!(
+                clear.label(),
+                Some(crate::i18n::tr("common.action.clear_selection").as_str()),
+            );
+            window.press("enter", cx);
+            assert!(window.try_find("clear-tracker-selection").is_none());
+        })
+        .unwrap();
+        workbench.read_with(cx, |this, _| {
+            assert_eq!(
+                this.selected,
+                ["port:synthetic-summary-port".to_owned()]
+                    .into_iter()
+                    .collect(),
+            );
+        });
     }
 }

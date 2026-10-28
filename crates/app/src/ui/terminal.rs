@@ -957,6 +957,7 @@ impl Workbench {
 
     fn terminal(&mut self, port: &str, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         self.refresh_transcript(port, window, cx);
+        let show_send_all = self.has_multiple_terminal_send_targets();
         let terminal = &self.terminals[port];
         let session = self
             .manager
@@ -969,6 +970,18 @@ impl Workbench {
             .pending
             .as_ref()
             .is_some_and(|pending| pending.error.is_none());
+        let send_label: SharedString = tr(
+            if terminal
+                .pending
+                .as_ref()
+                .is_some_and(|pending| pending.error.is_some())
+            {
+                "serial.terminal.action.retry"
+            } else {
+                "serial.terminal.action.send"
+            },
+        )
+        .into();
         let transcript_port = port.to_owned();
         let gesture_port = port.to_owned();
         let keyboard_port = port.to_owned();
@@ -1221,53 +1234,6 @@ impl Workbench {
                             ))
                             .child(Input::new(&terminal.input)),
                     )
-                    .child(
-                        Button::new("terminal-send")
-                            .small()
-                            .w(px(88.))
-                            .flex_shrink_0()
-                            .primary()
-                            .when(!cx.theme().is_dark(), |button| button.outline())
-                            .map(|button| {
-                                command_button_tone(
-                                    button,
-                                    commands::command_tone(
-                                        terminal.input.read(cx).value().as_ref(),
-                                    ),
-                                    cx,
-                                )
-                            })
-                            .label(
-                                if terminal
-                                    .pending
-                                    .as_ref()
-                                    .is_some_and(|pending| pending.error.is_some())
-                                {
-                                    crate::i18n::tr("serial.terminal.action.retry")
-                                } else {
-                                    crate::i18n::tr("serial.terminal.action.send")
-                                },
-                            )
-                            .disabled(closing || waiting)
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.send(&send_port, window, cx)
-                            })),
-                    )
-                    .child(
-                        Button::new("terminal-send-all")
-                            .small()
-                            .w(px(88.))
-                            .flex_shrink_0()
-                            .label(tr("serial.terminal.action.send_all"))
-                            .disabled(
-                                closing
-                                    || waiting
-                                    || terminal.input.read(cx).value().trim().is_empty(),
-                            )
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.send_terminal_all(&send_all_port, window, cx);
-                            })),
-                    )
                     .when(terminal.pending.is_some(), |row| {
                         row.child(
                             Button::new("terminal-cancel")
@@ -1283,88 +1249,141 @@ impl Workbench {
                                     cx.notify();
                                 })),
                         )
-                    }),
+                    })
+                    .child(
+                        Button::new("terminal-send")
+                            .small()
+                            .flex_shrink_0()
+                            .primary()
+                            .when(!cx.theme().is_dark(), |button| button.outline())
+                            .map(|button| {
+                                command_button_tone(
+                                    button,
+                                    commands::command_tone(
+                                        terminal.input.read(cx).value().as_ref(),
+                                    ),
+                                    cx,
+                                )
+                            })
+                            .icon(gpui_kit::assets::IconName::CornerDownLeft)
+                            .tooltip(send_label.clone())
+                            .accessibility_label(send_label)
+                            .disabled(closing || waiting)
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                this.send(&send_port, window, cx)
+                            })),
+                    ),
             )
             .child(
                 div()
                     .flex()
-                    .flex_wrap()
-                    .items_center()
+                    .items_start()
                     .gap_2()
+                    .min_w_0()
                     .child(
-                        Button::new("terminal-clear")
-                            .small()
-                            .ghost()
-                            .label(crate::i18n::tr("serial.terminal.action.clear"))
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                TextSelection::clear(window, cx);
-                                this.manager.clear(&clear_port);
-                                cx.notify();
-                            })),
+                        div()
+                            .flex()
+                            .flex_1()
+                            .min_w_0()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                Button::new("terminal-clear")
+                                    .small()
+                                    .ghost()
+                                    .label(crate::i18n::tr("serial.terminal.action.clear"))
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        TextSelection::clear(window, cx);
+                                        this.manager.clear(&clear_port);
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Button::new("terminal-copy-selection")
+                                    .small()
+                                    .ghost()
+                                    .label(tr("serial.terminal.action.copy_selection"))
+                                    .disabled(!terminal.transcript.borrow().has_selection())
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.copy_terminal_selection(
+                                            &copy_selection_port,
+                                            window,
+                                            cx,
+                                        );
+                                    })),
+                            )
+                            .child(
+                                Button::new("terminal-copy")
+                                    .small()
+                                    .ghost()
+                                    .label(crate::i18n::tr("serial.terminal.action.copy_all"))
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        if let Some(session) = this.manager.session(&copy_port) {
+                                            cx.write_to_clipboard(ClipboardItem::new_string(
+                                                session.terminal.text(),
+                                            ));
+                                        }
+                                    })),
+                            )
+                            .child(
+                                Button::new("terminal-export")
+                                    .small()
+                                    .ghost()
+                                    .label(crate::i18n::tr("serial.terminal.action.export_log"))
+                                    .tooltip(crate::i18n::tr("serial.terminal.export.hint"))
+                                    .disabled(terminal.export.busy())
+                                    .on_click(cx.listener(move |this, _, _, cx| {
+                                        this.export_terminal_log(&export_port, cx);
+                                    })),
+                            )
+                            .child(
+                                Checkbox::new("terminal-follow")
+                                    .label(crate::i18n::tr("serial.terminal.action.follow"))
+                                    .checked(terminal.follow)
+                                    .on_click(cx.listener(move |this, checked, _, cx| {
+                                        if let Some(terminal) = this.terminals.get_mut(&follow_port)
+                                        {
+                                            terminal.follow = *checked;
+                                            if *checked {
+                                                terminal.scroll.scroll_to_bottom();
+                                            }
+                                        }
+                                        cx.notify();
+                                    })),
+                            )
+                            .child(
+                                Checkbox::new("terminal-wrap")
+                                    .small()
+                                    .label(tr("serial.terminal.action.wrap_lines"))
+                                    .checked(terminal.soft_wrap)
+                                    .on_click(cx.listener(move |this, checked, _, cx| {
+                                        if let Some(terminal) = this.terminals.get_mut(&wrap_port) {
+                                            terminal.soft_wrap = *checked;
+                                            let mut offset = terminal.scroll.offset();
+                                            offset.x = px(0.);
+                                            terminal.scroll.set_offset(offset);
+                                        }
+                                        cx.notify();
+                                    })),
+                            ),
                     )
-                    .child(
-                        Button::new("terminal-copy-selection")
-                            .small()
-                            .ghost()
-                            .label(tr("serial.terminal.action.copy_selection"))
-                            .disabled(!terminal.transcript.borrow().has_selection())
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.copy_terminal_selection(&copy_selection_port, window, cx);
-                            })),
-                    )
-                    .child(
-                        Button::new("terminal-copy")
-                            .small()
-                            .ghost()
-                            .label(crate::i18n::tr("serial.terminal.action.copy_all"))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                if let Some(session) = this.manager.session(&copy_port) {
-                                    cx.write_to_clipboard(ClipboardItem::new_string(
-                                        session.terminal.text(),
-                                    ));
-                                }
-                            })),
-                    )
-                    .child(
-                        Button::new("terminal-export")
-                            .small()
-                            .ghost()
-                            .label(crate::i18n::tr("serial.terminal.action.export_log"))
-                            .tooltip(crate::i18n::tr("serial.terminal.export.hint"))
-                            .disabled(terminal.export.busy())
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.export_terminal_log(&export_port, cx);
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("terminal-follow")
-                            .label(crate::i18n::tr("serial.terminal.action.follow"))
-                            .checked(terminal.follow)
-                            .on_click(cx.listener(move |this, checked, _, cx| {
-                                if let Some(terminal) = this.terminals.get_mut(&follow_port) {
-                                    terminal.follow = *checked;
-                                    if *checked {
-                                        terminal.scroll.scroll_to_bottom();
-                                    }
-                                }
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("terminal-wrap")
-                            .small()
-                            .label(tr("serial.terminal.action.wrap_lines"))
-                            .checked(terminal.soft_wrap)
-                            .on_click(cx.listener(move |this, checked, _, cx| {
-                                if let Some(terminal) = this.terminals.get_mut(&wrap_port) {
-                                    terminal.soft_wrap = *checked;
-                                    let mut offset = terminal.scroll.offset();
-                                    offset.x = px(0.);
-                                    terminal.scroll.set_offset(offset);
-                                }
-                                cx.notify();
-                            })),
-                    ),
+                    .when(show_send_all, |row| {
+                        row.child(
+                            Button::new("terminal-send-all")
+                                .small()
+                                .flex_shrink_0()
+                                .label(tr("serial.terminal.action.send_all"))
+                                .disabled(
+                                    closing
+                                        || waiting
+                                        || terminal.input.read(cx).value().trim().is_empty(),
+                                )
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.send_terminal_all(&send_all_port, window, cx);
+                                })),
+                        )
+                    }),
             );
         if let Some(status) = session.last_error.as_ref().or(terminal.status.as_ref()) {
             panel = panel.child(
