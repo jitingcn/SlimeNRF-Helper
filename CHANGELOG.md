@@ -21,6 +21,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - The displayed application version includes the checkout's short commit ID and marks tracked local changes as dirty; source archives fall back to the base version or a validated GitHub Actions SHA. Release versions, tags, asset names, and update comparisons remain unchanged.
 - Device lists use a flatter, more compact layout with a rounded summary bar: receiver serial numbers and online/total tracker counts share a wrapping metadata row, with the redundant command-console heading and outer list border and padding removed.
 - Device-list toolbar actions use compact icon buttons with localized hover descriptions.
+- Direct tracker commands now show the **Information** group first; the remaining command groups keep their existing order.
 - The terminal Send button uses a larger return-key icon button aligned with the command input. Send all appears directly below it in the existing lower toolbar only when multiple eligible command ports are connected, without reserving extra vertical space.
 - Selected terminal text is copied with keyboard shortcuts instead of a separate toolbar button.
 - The root is now a virtual Cargo workspace, with the desktop application's source and build support in `crates/app` alongside the existing recording core. Root development commands and resource path semantics are unchanged.

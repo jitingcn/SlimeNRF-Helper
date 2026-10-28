@@ -879,12 +879,12 @@ const GROUP_ORDER: &[&str] = &[
 ];
 
 const TRACKER_GROUP_ORDER: &[&str] = &[
+    "commands.group.information",
     "commands.group.system",
     "commands.group.diagnostics",
     "commands.group.connection",
     "commands.group.sensor_calibration",
     "commands.group.magnetometer",
-    "commands.group.information",
     "commands.group.temperature_calibration",
     "commands.group.reset",
     "commands.group.management",
