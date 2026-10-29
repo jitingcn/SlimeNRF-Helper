@@ -292,7 +292,9 @@ struct Workbench {
     pending_writes: Vec<PendingWrite>,
     batch_input: Entity<InputState>,
     command_search: Entity<InputState>,
+    firmware_search: Entity<InputState>,
     _command_search_subscription: Subscription,
+    _firmware_search_subscription: Subscription,
     batch_history: VecDeque<BatchRun>,
     custom_commands: shortcuts::CustomCommandState,
     flash: flash::FlashState,
@@ -408,6 +410,8 @@ impl Workbench {
         });
         let (command_search, command_search_subscription) =
             search_input("commands.search.placeholder", window, cx);
+        let (firmware_search, firmware_search_subscription) =
+            search_input("firmware.remote.search.placeholder", window, cx);
         cx.on_app_quit(|this, cx| {
             // A committed platform quit cannot keep GPUI alive indefinitely.
             // Start retained cleanup without blocking the UI; run() joins its
@@ -529,7 +533,9 @@ impl Workbench {
             pending_writes: Vec::new(),
             batch_input,
             command_search,
+            firmware_search,
             _command_search_subscription: command_search_subscription,
+            _firmware_search_subscription: firmware_search_subscription,
             batch_history: VecDeque::new(),
             custom_commands: shortcuts::CustomCommandState::default(),
             flash: flash::FlashState::default(),

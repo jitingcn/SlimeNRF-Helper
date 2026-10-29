@@ -66,6 +66,8 @@ pub(super) fn offline_workbench(
     );
     let (command_search, command_search_subscription) =
         super::search_input("commands.search.placeholder", window, cx);
+    let (firmware_search, firmware_search_subscription) =
+        super::search_input("firmware.remote.search.placeholder", window, cx);
     Workbench {
         async_io,
         shutdown_host: Arc::default(),
@@ -102,7 +104,9 @@ pub(super) fn offline_workbench(
         pending_writes: Vec::new(),
         batch_input: cx.new(|cx| gpui_kit::component::input::InputState::new(window, cx)),
         command_search,
+        firmware_search,
         _command_search_subscription: command_search_subscription,
+        _firmware_search_subscription: firmware_search_subscription,
         batch_history: Default::default(),
         custom_commands: Default::default(),
         flash: Default::default(),

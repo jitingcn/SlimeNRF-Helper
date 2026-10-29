@@ -247,6 +247,8 @@ TPS 是主机收到传感器记录的速率；近期没有数据不等于设备�
 
 `Only matching boards` 和变种筛选只是帮助缩小列表，不替代板型、角色、格式、bootloader 和地址检查。当前可见变种为 Standard 与接收器 DataCollect (CDC)，不宣称存在 tracker DataCollect/HID 产物。HEX、UF2、MCUboot BIN、Secure DFU ZIP、Legacy DFU ZIP 不能改扩展名混用。
 
+有线和无线更新的**在线固件**列表均提供**搜索固件文件**。搜索不区分大小写，可匹配文件名和显示的变种，并与已有的兼容性、变种筛选同时生效。清除搜索即可恢复列表；搜索不会下载文件，也不会改变已选固件。
+
 GitHub 令牌可选：启动前在进程环境设置 `GH_TOKEN` 或 `GITHUB_TOKEN`，优先非空 `GH_TOKEN`。公开 CI 优先 nightly.link，失败且有令牌才尝试有权限的 GitHub 下载。限流/过期/权限错误需解决后显式重试。不要把令牌放入配置、日志或问题附件。
 
 来源记录保留实际可用的版本/commit、URL 与 SHA-256；上游未提供 digest 时本地计算的哈希不冒充上游认证。Release 日期编号、CI run 与设备 FW_INFO 版本不可直接比较；未知版本/日期不以文件修改时间推断。

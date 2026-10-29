@@ -1,4 +1,5 @@
 use super::*;
+use gpui_kit::component::input::Input;
 
 fn artifact_firmware_hints(
     catalog: &board_catalog::Catalog,
@@ -626,6 +627,9 @@ impl Workbench {
     #[inline(never)]
     fn flash_remote_artifacts(&self, cx: &mut Context<Self>) -> AnyElement {
         let targets = self.flash_filter_targets();
+        let query = self.firmware_search.read(cx).value().trim().to_lowercase();
+        let searching = !query.is_empty();
+        let mut eligible_count = 0;
         let mut count = 0;
         let mut artifacts = div()
             .id("firmware-artifact-list")
@@ -657,6 +661,15 @@ impl Workbench {
                     },
                 )
             {
+                eligible_count += 1;
+                if searching
+                    && !artifact.name.to_lowercase().contains(&query)
+                    && !firmware_variant_label(&artifact.variant)
+                        .to_lowercase()
+                        .contains(&query)
+                {
+                    continue;
+                }
                 count += 1;
                 artifacts = artifacts.child(self.flash_remote_artifact(index, cx));
             }
@@ -666,10 +679,61 @@ impl Workbench {
                 .text_xs()
                 .child(format!("{count} / {}", self.flash.artifacts.len())),
         );
-        if count == 0 {
-            artifacts = artifacts.child(div().text_sm().child(tr("firmware.image.no_compatible")));
+        if eligible_count == 0 {
+            let message = tr("firmware.image.no_compatible");
+            artifacts = artifacts.child(
+                div()
+                    .id("firmware-artifact-no-compatible")
+                    .role(Role::Status)
+                    .aria_label(message.clone())
+                    .test_support()
+                    .text_sm()
+                    .whitespace_normal()
+                    .child(message),
+            );
+        } else if count == 0 {
+            let message = tr("firmware.remote.search.empty");
+            artifacts = artifacts.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_start()
+                    .gap_2()
+                    .child(
+                        div()
+                            .id("firmware-artifact-search-empty")
+                            .role(Role::Status)
+                            .aria_label(message.clone())
+                            .test_support()
+                            .text_sm()
+                            .whitespace_normal()
+                            .child(message),
+                    )
+                    .child(
+                        Button::new("firmware-artifact-clear-search")
+                            .label(tr("firmware.remote.search.clear"))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.firmware_search
+                                    .update(cx, |input, cx| input.set_value("", window, cx));
+                                this.firmware_search.focus_handle(cx).focus(window, cx);
+                            })),
+                    ),
+            );
         }
-        artifacts.overflow_y_scroll().into_any_element()
+        div()
+            .min_w_0()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                Input::new(&self.firmware_search)
+                    .id("firmware-artifact-search")
+                    .aria_label(tr("firmware.remote.search.placeholder"))
+                    .prefix(IconName::Search)
+                    .cleanable(true),
+            )
+            .child(artifacts.overflow_y_scroll())
+            .into_any_element()
     }
 }
 

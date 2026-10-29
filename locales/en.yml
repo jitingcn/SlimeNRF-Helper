@@ -965,6 +965,10 @@ firmware:
     latest_help: "Newest version with downloadable firmware in this source; device compatibility is checked separately"
     load_image: "Load firmware"
     load_versions: "Load versions"
+    search:
+      placeholder: "Search firmware files"
+      empty: "No firmware files match your search."
+      clear: "Clear search"
   result:
     activation:
       unconfirmed: "Transfer complete; activation not confirmed"

@@ -247,6 +247,8 @@ Click **Load versions** or **Latest available**. Choose a version and the exact 
 
 **Only matching boards** and variant filters narrow the list. They do not replace checks of the board, role, format, bootloader, or addresses. The currently visible variants are Standard and receiver DataCollect (CDC). The catalog does not claim to offer tracker DataCollect or HID artifacts. HEX, UF2, MCUboot BIN, Secure DFU ZIP, and Legacy DFU ZIP are not interchangeable by renaming their extensions.
 
+Both wired and wireless **Remote firmware** lists offer **Search firmware files**. Search matches filenames and displayed variants without case sensitivity, within the existing compatibility and variant filters. Clearing it restores the list; searching does not download a file or change selected firmware.
+
 A GitHub token is optional. Before startup, set `GH_TOKEN` or `GITHUB_TOKEN` in the process environment. A nonempty `GH_TOKEN` takes precedence. Public CI downloads try nightly.link first. Only if that fails and a token is available does the application try an authorized GitHub download. Resolve rate-limit, expiry, or permission errors, then retry explicitly. Do not put tokens in configuration files, logs, or issue attachments.
 
 Source records retain the available version or commit, URL, and SHA-256. If upstream provides no digest, a locally computed hash is not presented as upstream authentication. Release date-based identifiers, CI runs, and device FW_INFO versions are not directly comparable. Unknown versions and dates are not inferred from file modification times.

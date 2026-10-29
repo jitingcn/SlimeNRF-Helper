@@ -12,6 +12,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Added
 
 - Command-list search matches command text, names, and descriptions in the current language.
+- Both wired and wireless online firmware lists support filename and variant search without changing selected firmware.
 
 ### Changed
 

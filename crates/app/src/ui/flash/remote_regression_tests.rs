@@ -2,9 +2,19 @@ use super::{
     Action, FlashState, ImageCategory, ImageDestination, Mode, Payload, artifact_firmware_hints,
     firmware_filter_matches, firmware_page_matches, make_image, ota_target_key, validate_ota_image,
 };
+use crate::ui::{FeaturePage, Workbench};
 use crate::{
     board_catalog::{Catalog, FirmwareHint},
     firmware_source::{Artifact, SourceChannel, Version, is_bootloader_update},
+};
+use gpui_kit::{
+    AnyWindowHandle, AppContext as _, Bounds, Entity, Role, TestAppContext, Window, WindowBounds,
+    WindowOptions, px, size, test::TestWindowExt as _,
+};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+    time::{Duration, Instant},
 };
 
 fn version(channel: SourceChannel, id: u64) -> Version {
@@ -1107,4 +1117,520 @@ fn current_fox_ci_members_are_independently_authorized_for_both_roles() {
             }
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ArtifactSearchTargetFacts {
+    key: String,
+    receiver_path: Vec<u8>,
+    address: Option<String>,
+    board_target: String,
+    bootloader: String,
+}
+
+fn artifact_search_target_facts(target: &crate::esb_ota::Target) -> ArtifactSearchTargetFacts {
+    ArtifactSearchTargetFacts {
+        key: ota_target_key(target),
+        receiver_path: target.receiver.path.clone(),
+        address: target.address.clone(),
+        board_target: target.info.board_target.clone(),
+        bootloader: target.info.bootloader.clone(),
+    }
+}
+
+struct ArtifactSearchFixture {
+    window: AnyWindowHandle,
+    workbench: Entity<Workbench>,
+    search_entity: gpui_kit::EntityId,
+    artifacts: Vec<Artifact>,
+    image: super::Image,
+    destination: ImageDestination,
+    selected_volumes: BTreeSet<String>,
+    selected_targets: BTreeSet<String>,
+    target_facts: Vec<ArtifactSearchTargetFacts>,
+    tracker_selection: BTreeSet<String>,
+    active_group: Option<String>,
+    group_generations: HashMap<String, u64>,
+    remote_generation: u64,
+    _directory: tempfile::TempDir,
+    _runtime: crate::app_runtime::AppRuntime,
+}
+
+impl ArtifactSearchFixture {
+    fn new(cx: &mut TestAppContext, mode: Mode) -> Self {
+        let directory = tempfile::tempdir().expect("create synthetic UF2 directory");
+        std::fs::write(
+            directory.path().join("INFO_UF2.TXT"),
+            "Board-ID: nRF52840-SlimeNRFTracker-ProMicro\n",
+        )
+        .expect("write synthetic UF2 marker");
+        let volume = crate::uf2::inspect_volume(directory.path(), "INFO_UF2.TXT")
+            .expect("inspect synthetic UF2 volume");
+        let image = make_image(
+            "previously-downloaded.hex".into(),
+            b":0410000001020304E2\n:00000001FF\n".to_vec(),
+            "previously downloaded fixture".into(),
+            "previous-digest".into(),
+            false,
+        );
+        let version = version(SourceChannel::Release, 42);
+        let artifact = |id, name: &str, variant: &str, size| Artifact {
+            name: name.into(),
+            variant: variant.into(),
+            size,
+            version: version.clone(),
+            // These URLs fail validation before any request. The first row also
+            // exceeds the size limit, giving a different error if indices shift.
+            url: format!("http://127.0.0.1:1/artifact-{id}"),
+            sha256: None,
+            id,
+        };
+        let artifacts = vec![
+            artifact(
+                101,
+                "SlimeNRF_ProMicro_Chrysalis_Tracker.uf2",
+                "Standard",
+                70_000_000,
+            ),
+            artifact(
+                102,
+                "SlimeNRF_ProMicro_Chrysalis_Tracker-1.2.3.uf2",
+                "Standard",
+                64,
+            ),
+            artifact(103, "SlimeNRF_FoxDongleNEO_Receiver.uf2", "Standard", 64),
+            artifact(
+                104,
+                "SlimeNRF_FoxDongleNEO_Receiver_DataCollect_CDC.uf2",
+                "DataCollect CDC",
+                64,
+            ),
+        ];
+        let mut flash = FlashState {
+            mode,
+            catalog: Some(Catalog::load_embedded().expect("load embedded firmware catalog")),
+            catalog_loaded: true,
+            remote_view: true,
+            channel: SourceChannel::Release,
+            application_channel: SourceChannel::Release,
+            image: Some(image.clone()),
+            images: vec![image.clone()],
+            next_scan: Instant::now() + Duration::from_secs(60),
+            ..FlashState::default()
+        };
+        if mode == Mode::Uf2 {
+            flash.selected_volumes.insert(volume.identity.clone());
+            flash.volumes.push(volume);
+        } else {
+            let tracker = chrysalis_tracker();
+            flash.selected_targets.insert(ota_target_key(&tracker));
+            flash
+                .tracker_selection
+                .insert(format!("tracker:{}:{}", tracker.receiver.key, tracker.id));
+            flash.targets.push(tracker);
+            flash.reconcile_groups(None);
+            let group = flash
+                .active_group
+                .clone()
+                .expect("selected tracker has a firmware group");
+            flash.assignments.insert(group, image.clone());
+            flash.ota_step = super::OtaStep::Firmware;
+        }
+        let destination = flash
+            .destination(mode)
+            .expect("firmware destination exists");
+        flash.prepare_remote(mode, &destination);
+        let request = flash.remote_request(mode);
+        flash.apply_remote(mode, Payload::Latest(request, version));
+        flash.select_version(42);
+        let request = flash.remote_request(mode);
+        flash.apply_remote(mode, Payload::Artifacts(request, artifacts.clone()));
+        flash.images_destination = destination.clone();
+        let selected_volumes = flash.selected_volumes.clone();
+        let selected_targets = flash.selected_targets.clone();
+        let target_facts = flash
+            .targets
+            .iter()
+            .map(artifact_search_target_facts)
+            .collect();
+        let tracker_selection = flash.tracker_selection.clone();
+        let active_group = flash.active_group.clone();
+        let group_generations = flash.group_generations.clone();
+        let remote_generation = flash.remote_generation;
+        let runtime = crate::app_runtime::AppRuntime::new().expect("create isolated I/O runtime");
+        let executor = runtime.executor();
+        let selected = tracker_selection.clone();
+        let preferences_path = directory.path().join("preferences.json");
+        let (window, workbench) = cx.update(|cx| {
+            gpui_kit::open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                        Default::default(),
+                        size(px(1600.), px(1100.)),
+                    ))),
+                    ..Default::default()
+                },
+                cx,
+                move |window, cx| {
+                    cx.new(|cx| {
+                        let mut this = crate::ui::test_support::offline_workbench(
+                            window,
+                            cx,
+                            crate::sessions::SessionManager::new(),
+                            executor,
+                        );
+                        this.preferences_io =
+                            crate::ui::preferences::PreferenceIo::for_test(preferences_path);
+                        this.active_page = if mode == Mode::Uf2 {
+                            FeaturePage::Uf2
+                        } else {
+                            FeaturePage::Ota
+                        };
+                        this.selected = selected;
+                        this.flash = flash;
+                        this
+                    })
+                },
+            )
+            .expect("open real firmware Workbench")
+        });
+        cx.update_window(window, |_, window, _| window.activate_window())
+            .expect("activate firmware test window");
+        cx.run_until_parked();
+        let search_entity = cx.update(|cx| workbench.read(cx).firmware_search.entity_id());
+        Self {
+            window,
+            workbench,
+            search_entity,
+            artifacts,
+            image,
+            destination,
+            selected_volumes,
+            selected_targets,
+            target_facts,
+            tracker_selection,
+            active_group,
+            group_generations,
+            remote_generation,
+            _directory: directory,
+            _runtime: runtime,
+        }
+    }
+
+    fn assert_preserved(&self, cx: &gpui_kit::App) {
+        let workbench = self.workbench.read(cx);
+        assert_eq!(workbench.firmware_search.entity_id(), self.search_entity);
+        assert_eq!(workbench.selected, self.tracker_selection);
+        let state = &workbench.flash;
+        assert_eq!(state.selected_version, Some(42));
+        assert_eq!(state.versions.len(), 1);
+        assert_eq!(state.versions[0].id, 42);
+        assert_eq!(state.latest_version, Some((SourceChannel::Release, 42)));
+        assert_eq!(state.remote_generation, self.remote_generation);
+        assert_eq!(state.channel, SourceChannel::Release);
+        assert!(state.remote_destination.eq(&self.destination));
+        assert!(state.images_destination.eq(&self.destination));
+        assert_eq!(state.selected_volumes, self.selected_volumes);
+        assert_eq!(state.selected_targets, self.selected_targets);
+        assert_eq!(
+            state
+                .targets
+                .iter()
+                .map(artifact_search_target_facts)
+                .collect::<Vec<_>>(),
+            self.target_facts
+        );
+        assert_eq!(state.tracker_selection, self.tracker_selection);
+        assert_eq!(state.active_group, self.active_group);
+        assert_eq!(state.group_generations, self.group_generations);
+        assert_eq!(state.artifacts.len(), self.artifacts.len());
+        for (actual, expected) in state.artifacts.iter().zip(&self.artifacts) {
+            assert_eq!(actual.id, expected.id);
+            assert_eq!(actual.name, expected.name);
+            assert_eq!(actual.url, expected.url);
+            assert_eq!(actual.size, expected.size);
+        }
+        assert_eq!(state.images.len(), 1);
+        assert!(Arc::ptr_eq(&state.images[0].bytes, &self.image.bytes));
+        assert!(Arc::ptr_eq(
+            &state.image.as_ref().expect("selected image remains").bytes,
+            &self.image.bytes
+        ));
+        if let Some(group) = &self.active_group {
+            assert_eq!(state.assignments.len(), 1);
+            assert!(Arc::ptr_eq(
+                &state.assignments[group].bytes,
+                &self.image.bytes
+            ));
+        }
+        assert!(
+            state.job.is_none(),
+            "typing or clearing a query must not start a firmware network job"
+        );
+        assert!(state.error.is_none());
+    }
+}
+
+fn artifact_button_id(artifact: &Artifact) -> String {
+    format!(
+        "firmware-artifact-{:?}-{}-{}",
+        artifact.version.channel, artifact.version.id, artifact.id
+    )
+}
+
+fn assert_artifact_rows(window: &Window, fixture: &ArtifactSearchFixture, expected: &[usize]) {
+    let mut previous_top = None;
+    for (index, artifact) in fixture.artifacts.iter().enumerate() {
+        let row = window.try_find(artifact_button_id(artifact));
+        if !expected.contains(&index) {
+            assert!(
+                row.is_none(),
+                "unexpected artifact at original index {index}"
+            );
+            continue;
+        }
+        let row = row.expect("expected original artifact is rendered");
+        let label = format!(
+            "Load firmware {} · {} · {} · {} B",
+            artifact.version.name,
+            artifact.name,
+            super::firmware_variant_label(&artifact.variant),
+            artifact.size
+        );
+        assert_eq!(row.role(), Some(Role::Button));
+        assert_eq!(row.label(), Some(label.as_str()));
+        assert!(
+            row.visible(),
+            "artifact at original index {index} must be visible"
+        );
+        if let Some(previous_top) = previous_top {
+            assert!(
+                previous_top < row.bounds().top(),
+                "filtered rows must retain their original artifact order"
+            );
+        }
+        previous_top = Some(row.bounds().top());
+    }
+}
+
+fn replace_artifact_query(window: &mut Window, cx: &mut gpui_kit::App, query: &str) {
+    window.click("firmware-artifact-search", cx);
+    window.press("secondary-a", cx);
+    if !query.is_empty() {
+        window.input(query, cx);
+    } else {
+        window.press("backspace", cx);
+    }
+    assert_eq!(window.find("firmware-artifact-search").value(), Some(query));
+}
+
+fn exercise_artifact_search(cx: &mut TestAppContext, mode: Mode) {
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let mut fixture = ArtifactSearchFixture::new(cx, mode);
+    cx.update_window(fixture.window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.find("firmware-artifact-search").visible());
+        assert_eq!(
+            window.find("firmware-artifact-search").placeholder(),
+            Some("Search firmware files")
+        );
+        assert_eq!(
+            window.find("firmware-version-Release-42").checked(),
+            Some(true)
+        );
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        fixture.assert_preserved(cx);
+
+        replace_artifact_query(window, cx, "  cHrYsAlIs  ");
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        fixture.assert_preserved(cx);
+        replace_artifact_query(window, cx, "  1.2.3  ");
+        assert_artifact_rows(window, &fixture, &[1]);
+        fixture.assert_preserved(cx);
+        replace_artifact_query(window, cx, "  sTaNdArD  ");
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        fixture.assert_preserved(cx);
+        replace_artifact_query(window, cx, "   ");
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        assert!(window.try_find("firmware-artifact-search-empty").is_none());
+        assert!(fixture.workbench.read(cx).flash.matched_only);
+        assert!(fixture.workbench.read(cx).flash.variant_filter.is_none());
+        fixture.assert_preserved(cx);
+
+        replace_artifact_query(window, cx, "  sTaNdArD  ");
+        let firmware_page = if mode == Mode::Uf2 {
+            "nav-uf2"
+        } else {
+            "nav-esb-ota"
+        };
+        // Prevent actual device discovery while exercising the real language controls.
+        fixture
+            .workbench
+            .update(cx, |this, _| this.scanning_inventory = true);
+        window.click("nav-settings", cx);
+        window.click("settings-language-simplified-chinese", cx);
+        assert!(fixture.workbench.read(cx).inventory_task.is_none());
+        window.click(firmware_page, cx);
+        assert_eq!(
+            fixture.workbench.read(cx).flash.remote_generation,
+            fixture.remote_generation + 2
+        );
+        fixture.remote_generation += 2;
+        assert_eq!(
+            window.find("firmware-artifact-search").value(),
+            Some("  sTaNdArD  ")
+        );
+        assert_eq!(
+            window.find("firmware-artifact-search").placeholder(),
+            Some("搜索固件文件")
+        );
+        assert_artifact_rows(window, &fixture, &[]);
+        assert!(window.find("firmware-artifact-search-empty").visible());
+        fixture.assert_preserved(cx);
+        replace_artifact_query(window, cx, " 普通 ");
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        fixture.assert_preserved(cx);
+        window.click("nav-settings", cx);
+        window.click("settings-language-english", cx);
+        assert!(fixture.workbench.read(cx).inventory_task.is_none());
+        window.click(firmware_page, cx);
+        assert_eq!(
+            fixture.workbench.read(cx).flash.remote_generation,
+            fixture.remote_generation + 2
+        );
+        fixture.remote_generation += 2;
+        assert_eq!(
+            window.find("firmware-artifact-search").value(),
+            Some(" 普通 ")
+        );
+        assert_eq!(
+            window.find("firmware-artifact-search").placeholder(),
+            Some("Search firmware files")
+        );
+        fixture
+            .workbench
+            .update(cx, |this, _| this.scanning_inventory = false);
+        fixture.assert_preserved(cx);
+        assert_artifact_rows(window, &fixture, &[]);
+        let empty = window.find("firmware-artifact-search-empty");
+        assert_eq!(empty.role(), Some(Role::Status));
+        assert_eq!(empty.label(), Some("No firmware files match your search."));
+        assert!(window.try_find("firmware-artifact-no-compatible").is_none());
+        window.click("firmware-artifact-clear-search", cx);
+        assert_eq!(window.find("firmware-artifact-search").value(), Some(""));
+        assert_eq!(
+            window.find("firmware-artifact-search").focused(),
+            Some(true)
+        );
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        fixture.assert_preserved(cx);
+
+        replace_artifact_query(window, cx, "nothing-can-match-this");
+        assert_artifact_rows(window, &fixture, &[]);
+        assert!(window.find("firmware-artifact-search-empty").visible());
+        window.click("firmware-artifact-clear-search", cx);
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        fixture.assert_preserved(cx);
+
+        if mode == Mode::Uf2 {
+            window.click("firmware-matched", cx);
+            assert_eq!(window.find("firmware-matched").checked(), Some(false));
+            replace_artifact_query(window, cx, "  fOxDoNgLeNeO  ");
+            assert_artifact_rows(window, &fixture, &[2, 3]);
+            fixture.assert_preserved(cx);
+            window.click(("firmware-variant-filter", 0usize), cx);
+            assert_artifact_rows(window, &fixture, &[2]);
+            window.click(("firmware-variant-filter", 1usize), cx);
+            assert_artifact_rows(window, &fixture, &[3]);
+            assert_eq!(
+                fixture.workbench.read(cx).flash.variant_filter.as_deref(),
+                Some("DataCollect CDC")
+            );
+            window.click("firmware-matched", cx);
+            assert_artifact_rows(window, &fixture, &[]);
+            let incompatible = window.find("firmware-artifact-no-compatible");
+            assert_eq!(incompatible.role(), Some(Role::Status));
+            assert_eq!(
+                incompatible.label(),
+                Some("No compatible firmware for this category and target")
+            );
+            assert!(window.try_find("firmware-artifact-search-empty").is_none());
+            assert!(window.try_find("firmware-artifact-clear-search").is_none());
+            assert!(fixture.workbench.read(cx).flash.matched_only);
+            assert_eq!(
+                fixture.workbench.read(cx).flash.variant_filter.as_deref(),
+                Some("DataCollect CDC")
+            );
+            fixture.assert_preserved(cx);
+            window.click("firmware-clear-filters", cx);
+            assert_artifact_rows(window, &fixture, &[2, 3]);
+            window.click("firmware-matched", cx);
+            assert_artifact_rows(window, &fixture, &[]);
+            assert!(window.find("firmware-artifact-search-empty").visible());
+        } else {
+            window.click(("firmware-variant-filter", 0usize), cx);
+            assert_eq!(
+                fixture.workbench.read(cx).flash.variant_filter.as_deref(),
+                Some("Standard")
+            );
+            window.click("firmware-matched", cx);
+            replace_artifact_query(window, cx, "foxdongleneo");
+            assert_artifact_rows(window, &fixture, &[]);
+            assert!(window.find("firmware-artifact-search-empty").visible());
+            assert!(
+                window.try_find("firmware-artifact-no-compatible").is_none(),
+                "ESB method and target eligibility still precede search"
+            );
+            assert!(!fixture.workbench.read(cx).flash.matched_only);
+            assert_eq!(
+                fixture.workbench.read(cx).flash.variant_filter.as_deref(),
+                Some("Standard")
+            );
+        }
+        fixture.assert_preserved(cx);
+        window.click("firmware-artifact-clear-search", cx);
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        replace_artifact_query(window, cx, "  1.2.3  ");
+        assert_artifact_rows(window, &fixture, &[1]);
+        fixture.assert_preserved(cx);
+
+        window.click(artifact_button_id(&fixture.artifacts[1]), cx);
+        assert!(
+            fixture.workbench.read(cx).flash.job.is_some(),
+            "the actual filtered artifact button must start its retained worker"
+        );
+    })
+    .expect("interact with firmware search");
+    cx.run_until_parked();
+
+    fixture.workbench.update(cx, |this, _| {
+        let mut completed = None;
+        crate::sessions::test_support::until(|| {
+            completed = this.flash.poll_job();
+            completed.is_some()
+        });
+        let (result, _) = completed.expect("filtered artifact worker joined");
+        match result {
+            Err(error) => assert_eq!(
+                error, "Firmware source or redirect is not an approved HTTPS upstream host",
+                "the second original artifact must be selected, not oversized index zero"
+            ),
+            Ok(_) => panic!("invalid test URL must be rejected before any network request"),
+        }
+    });
+    cx.update(|cx| fixture.assert_preserved(cx));
+}
+
+#[gpui_kit::test]
+fn uf2_online_artifact_search_preserves_filters_selection_and_original_identity(
+    cx: &mut TestAppContext,
+) {
+    exercise_artifact_search(cx, Mode::Uf2);
+}
+
+#[gpui_kit::test]
+fn esb_online_artifact_search_preserves_filters_assignment_and_original_identity(
+    cx: &mut TestAppContext,
+) {
+    exercise_artifact_search(cx, Mode::Esb);
 }
