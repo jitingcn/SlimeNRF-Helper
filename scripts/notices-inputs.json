@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "input_sha256": {
-    "Cargo.lock": "28e8a15104df054e4be8e6fe5fb3ae622f89cb95ed3ecbdacda1ac0a5669be02",
-    "Cargo.toml": "26723823da797ba0ba450cfd6530bca4937ed893e8145f3606ac7b224bade38a",
+    "Cargo.lock": "5f7de50ccaeec56fde60a0a4b2998ac250298b7cbdc36722731e603b2fd90529",
+    "Cargo.toml": "17717f235535cbfaef6202af26e82d97e9048afcf2322b6c3e47da586a2a9c50",
     "crates/app/Cargo.toml": "1a2ebbd6edf103000aa71fdb78ad02de7f4fb43ed8221e379cd26bf9643058c7",
     "crates/firmware-image/Cargo.toml": "e592deac8222fe279cdec3d3d43edd49a9116fe45236770f836f4c01e08546b8",
     "crates/recording/Cargo.toml": "8887e1a93c436a2d2dea3d88a7f2a9be1a4c5084648faf88a3409cfc4521efba",
@@ -24,7 +24,7 @@
     "LICENSE-MIT": "984757f3c9a84f012b07ae89dc82cf9f9a711bdd61bca51c1e7c24c2173a0778"
   },
   "manifest_semantic_sha256": {
-    "Cargo.toml": "1f59e8ddf1847a9c748a74f92b433810d10d775587b64b07e8ac3e05f39a4f9a",
+    "Cargo.toml": "cfdad42895e2a4bca80fe204c9d6dda55c80655f203b7206c9212c28ac35d093",
     "crates/app/Cargo.toml": "c09592d22fbf82074d79e20b52b259c721c435a2fc3be82a829155c8a5c42067",
     "crates/firmware-image/Cargo.toml": "1c1dcdafb444609da1edf59b12da7cddf151147f8caaf0899c850f6e7d400aa2",
     "crates/recording/Cargo.toml": "503b2cb089536928c08e043689d2eaacc7b07209b6e5dec9fe154b029ea280a0",

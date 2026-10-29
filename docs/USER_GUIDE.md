@@ -18,14 +18,14 @@ On Windows, download the package whose filename ends in `windows-x64-no-firmware
 On Linux, download the AppImage. Replace the example filename below with the actual filename. Run these commands in the directory that contains the file.
 
 ```bash
-chmod +x ./slimenrf-helper-0.3.1-linux-x64-no-firmware.AppImage
-./slimenrf-helper-0.3.1-linux-x64-no-firmware.AppImage
+chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
+./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
 ```
 
 If FUSE is unavailable, start the application with this command:
 
 ```bash
-./slimenrf-helper-0.3.1-linux-x64-no-firmware.AppImage --appimage-extract-and-run
+./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage --appimage-extract-and-run
 ```
 
 The no-firmware package includes the default configuration but no firmware payloads. For updates, use local files, remote downloads, or an explicitly supplied external configuration. For Linux services, device permissions, and UF2 mount requirements, see [Linux device and runtime requirements](#linux-devices). For source builds, see [Development and packaging](DEVELOPMENT.md).

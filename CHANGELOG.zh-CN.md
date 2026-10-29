@@ -9,6 +9,8 @@
 
 ## [未发布]
 
+## [0.3.2] - 2026-10-29
+
 ### 修复
 
 - 修复 Windows 调试构建在连接串口或显示多个已连接串口的终端控件时可能发生的栈溢出崩溃。
@@ -106,7 +108,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.1...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.1.1...v0.2.0

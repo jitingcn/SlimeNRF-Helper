@@ -365,11 +365,11 @@ Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage
 4. 创建与 Cargo 版本一致的附注标签。
 5. 一并推送 `main` 和标签。
 
-以 `0.3.1` 为例，最后执行：
+以 `0.3.2` 为例，最后执行：
 
 ```bash
-	git tag -a v0.3.1 -m "SlimeNRF Helper 0.3.1"
-	git push --atomic origin main v0.3.1
+	git tag -a v0.3.2 -m "SlimeNRF Helper 0.3.2"
+	git push --atomic origin main v0.3.2
 ```
 
 等待标签对应的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 核对预发布说明和两个下载文件。不要移动已发布的标签或替换附件。
