@@ -18,6 +18,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - UF2 and OpenDFU updates show a graphical progress bar, transferred bytes, and percentage; unknown totals remain indeterminate, and 100% waits for the final operation result.
 - Receiver self-update uses a three-second activation-observation budget instead of a prolonged reconnect wait. Missing confirmation ends with **Transfer complete; activation not confirmed**, preserving the available diagnostic evidence.
+- Tracker cards place TPS at the upper right and combine battery percentage and voltage below, alongside temperature and firmware-reported power/full indicators. Compact layouts wrap the readings, with hover explanations for encoded telemetry.
 
 ### Fixed
 

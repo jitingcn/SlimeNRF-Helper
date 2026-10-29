@@ -809,6 +809,11 @@ devices:
     receiver_unavailable: "Receiver unavailable"
   tracker:
     address_unobserved: "Address not observed"
+    battery_help: "Battery level and encoded voltage reported by the firmware."
+    full: "Full"
+    full_help: "The firmware reports a full battery. This does not confirm external power or charging current."
+    power_help: "Firmware uses ≥4.31 V to indicate external power; this is not proof. Voltage may not be measured, and charging current is unknown."
+    power_indicated: "Firmware-indicated external power"
     selection:
       current: "Current"
       selected: "Selected"
@@ -816,6 +821,7 @@ devices:
     state:
       offline: "Offline"
       online: "Online"
+    temperature_help: "Encoded temperature. The firmware may negate the value to signal magnetic interference, so a negative value does not necessarily mean a physical sub-zero temperature."
     traffic_rate: "%{tps} TPS"
 firmware:
   action:

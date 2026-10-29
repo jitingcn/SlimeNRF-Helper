@@ -95,9 +95,11 @@ Focus the transcript with Tab to navigate its text. Use the arrow keys to move t
 
 TPS is the rate of sensor records received by the host. A lack of recent data does not prove that a device is powered off and does not indicate its battery level, signal, or capabilities. A completed serial write is not a device ACK or proof of command completion.
 
-On **Device setup**, online tracker cards show the latest HID-reported battery percentage and voltage in the upper-right corner. Devices without valid battery telemetry show no battery values. A reported `0%` remains visible. Going offline or changing the tracker assigned to a receiver slot clears the old reading.
+On **Device setup**, tracker cards show TPS at the upper right. The lower row combines the latest HID-reported battery percentage and voltage, for example `100% (4.3V)`, with temperature beside it. Missing battery or temperature data is omitted independently; a reported `0%` remains visible. Going offline or changing the tracker assigned to a receiver slot clears the old readings.
 
-Cards keep the name and hardware ID on two compact rows, with activity and online status below. **Current** and **Selected** badges appear at the lower right without changing the card height.
+The plug icon follows the firmware's external-power indication; **Full** requires its explicit full-charge marker, not merely `100%`. Hover for details: the firmware can encode external power by raising the reported voltage to at least 4.31 V, so this may not be the measured battery voltage and does not confirm charging current. Temperature retains its reported sign; a negative value can indicate magnetic interference rather than a physical sub-zero temperature.
+
+Cards keep the name and hardware ID above the readings. Online status and **Current** or **Selected** remain at the lower right; the lower row wraps when space is limited.
 
 The checkbox changes only batch selection, independently of the card body's current-target action. Clicking a disabled checkbox changes neither the selection nor the current target; clicking the body of a uniquely identified offline card still opens that target.
 

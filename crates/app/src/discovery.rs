@@ -259,6 +259,10 @@ fn receiver_key(path: &[u8]) -> String {
 pub(crate) struct TrackerBattery {
     pub(crate) percent: u8,
     pub(crate) voltage_v: f32,
+    /// The firmware's explicit full-charge marker, independent of external power.
+    pub(crate) charged: bool,
+    /// The voltage-based firmware convention, not proof of actual charging current.
+    pub(crate) plugged: bool,
 }
 
 #[derive(Default)]
@@ -267,6 +271,7 @@ pub struct ReceiverObservation {
     pub error: Option<String>,
     rates: [u32; SLOT_COUNT],
     batteries: [Option<TrackerBattery>; SLOT_COUNT],
+    temperatures: [Option<f32>; SLOT_COUNT],
 }
 
 impl ReceiverObservation {
@@ -281,6 +286,14 @@ impl ReceiverObservation {
             return None;
         }
         self.batteries.get(usize::from(slot)).copied().flatten()
+    }
+
+    /// The firmware may negate this encoded value to signal magnetic disturbance.
+    pub(crate) fn encoded_temperature_c(&self, slot: u8) -> Option<f32> {
+        if self.error.is_some() {
+            return None;
+        }
+        self.temperatures.get(usize::from(slot)).copied().flatten()
     }
 }
 
@@ -393,6 +406,19 @@ impl ReceiverMonitor {
             .find(|entry| entry.receiver.key == link.receiver_key)
             .expect("fixture receiver is retained");
         entry.observation.rates[usize::from(link.slot)] = tps;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fixture_telemetry(
+        &mut self,
+        receiver: &ReceiverEndpoint,
+        slot: u8,
+        battery: Option<TrackerBattery>,
+        encoded_temperature_c: Option<f32>,
+    ) {
+        let observation = self.fixture_observation_mut(receiver);
+        observation.batteries[usize::from(slot)] = battery;
+        observation.temperatures[usize::from(slot)] = encoded_temperature_c;
     }
 
     #[cfg(test)]
@@ -1191,10 +1217,12 @@ impl WorkerState {
         }) && links.next().is_none();
         let rates = self.roster.rates();
         let batteries = self.roster.batteries();
+        let temperatures = self.roster.temperatures();
         let changed = !links_match
             || self.error != observation.error
             || rates != observation.rates
-            || batteries != observation.batteries;
+            || batteries != observation.batteries
+            || temperatures != observation.temperatures;
         // Telemetry-only updates must not reallocate/clone tracker identities.
         if !links_match {
             observation.trackers = self.roster.links();
@@ -1204,6 +1232,7 @@ impl WorkerState {
         }
         observation.rates = rates;
         observation.batteries = batteries;
+        observation.temperatures = temperatures;
         changed
     }
 }
@@ -1225,6 +1254,7 @@ struct ObservedSlot {
     window_start: Option<Instant>,
     tps: u32,
     battery: Option<TrackerBattery>,
+    encoded_temperature_c: Option<f32>,
 }
 
 impl Roster {
@@ -1271,6 +1301,7 @@ impl Roster {
                     window_start: None,
                     tps: 0,
                     battery: None,
+                    encoded_temperature_c: None,
                 }
             });
             if kind == 0xff {
@@ -1287,6 +1318,7 @@ impl Roster {
                     observed.window_start = None;
                     observed.tps = 0;
                     observed.battery = None;
+                    observed.encoded_temperature_c = None;
                 }
                 observed.address = Some(address);
                 let text = observed
@@ -1306,12 +1338,20 @@ impl Roster {
                 changed |= !observed.link.online;
                 observed.link.online = true;
                 if let Some(telemetry) = BatteryTemperature::parse(record) {
-                    let battery = telemetry
-                        .percent()
-                        .zip(telemetry.voltage_v())
-                        .map(|(percent, voltage_v)| TrackerBattery { percent, voltage_v });
-                    changed |= observed.battery != battery;
+                    let battery = telemetry.percent().zip(telemetry.voltage_v()).map(
+                        |(percent, voltage_v)| TrackerBattery {
+                            percent,
+                            voltage_v,
+                            charged: telemetry.charged(),
+                            // Firmware uses at least 4310 mV as its external-power convention.
+                            plugged: telemetry.voltage_raw >= 186,
+                        },
+                    );
+                    let encoded_temperature_c = telemetry.encoded_temperature_c();
+                    changed |= observed.battery != battery
+                        || observed.encoded_temperature_c != encoded_temperature_c;
                     observed.battery = battery;
+                    observed.encoded_temperature_c = encoded_temperature_c;
                 }
             }
         }
@@ -1333,6 +1373,7 @@ impl Roster {
                 slot.window_start = None;
                 slot.tps = 0;
                 slot.battery = None;
+                slot.encoded_temperature_c = None;
                 changed = true;
             }
             if let Some(start) = slot.window_start {
@@ -1357,6 +1398,14 @@ impl Roster {
 
     fn batteries(&self) -> [Option<TrackerBattery>; SLOT_COUNT] {
         std::array::from_fn(|index| self.slots[index].as_ref().and_then(|slot| slot.battery))
+    }
+
+    fn temperatures(&self) -> [Option<f32>; SLOT_COUNT] {
+        std::array::from_fn(|index| {
+            self.slots[index]
+                .as_ref()
+                .and_then(|slot| slot.encoded_temperature_c)
+        })
     }
 
     fn links(&self) -> Vec<TrackerLink> {
@@ -2200,6 +2249,8 @@ mod tests {
                 Some(TrackerBattery {
                     percent: 72,
                     voltage_v: 4.0,
+                    charged: false,
+                    plugged: false,
                 })
             );
         }
@@ -2247,6 +2298,8 @@ mod tests {
             Some(TrackerBattery {
                 percent: 72,
                 voltage_v: 4.0,
+                charged: false,
+                plugged: false,
             })
         );
         assert_eq!(
@@ -2393,6 +2446,7 @@ mod tests {
             trackers: roster.links(),
             rates: roster.rates(),
             batteries: roster.batteries(),
+            temperatures: roster.temperatures(),
             error: None,
         };
         assert_eq!(observation.tps(3), 8);
@@ -2472,25 +2526,31 @@ mod tests {
         let battery = Some(TrackerBattery {
             percent: 72,
             voltage_v: 4.0,
+            charged: false,
+            plugged: false,
         });
         assert_eq!(roster.batteries()[4], battery);
+        assert_eq!(roster.temperatures()[4], Some(33.0));
         assert!(!roster.ingest_at(&frame(1, 4), now + Duration::from_millis(1100)));
         assert!(!roster.ingest_at(&registration, now + Duration::from_millis(1100)));
         assert_eq!(roster.batteries()[4], battery);
+        assert_eq!(roster.temperatures()[4], Some(33.0));
         registration[2] = 1;
         assert!(roster.ingest_at(&registration, now + Duration::from_millis(1200)));
         assert_eq!(roster.rates()[4], 0);
         assert!(!roster.links()[0].online);
         assert_eq!(roster.batteries()[4], None);
+        assert_eq!(roster.temperatures()[4], None);
         assert!(!roster.expire(now + Duration::from_millis(2200)));
         assert!(roster.ingest_at(&frame(7, 4), now + Duration::from_millis(2300)));
         assert_eq!(roster.batteries()[4], None);
+        assert_eq!(roster.temperatures()[4], None);
         assert!(roster.expire(now + Duration::from_millis(3300)));
         assert_eq!(roster.rates()[4], 1);
     }
 
     #[test]
-    fn battery_changes_publish_without_cloning_identities_or_redrawing_other_telemetry() {
+    fn telemetry_changes_publish_independently_without_cloning_identities() {
         let now = Instant::now();
         let mut state = WorkerState::new("receiver");
         let mut report = battery_frame(0, 3, [128, 0, 144]);
@@ -2501,11 +2561,15 @@ mod tests {
         let empty_battery = Some(TrackerBattery {
             percent: 0,
             voltage_v: 2.45,
+            charged: false,
+            plugged: false,
         });
         assert_eq!(observation.battery(3), empty_battery);
-        assert_eq!(observation.battery(0), None);
-        assert_eq!(observation.battery(16), None);
-        assert_eq!(observation.battery(255), None);
+        assert_eq!(observation.encoded_temperature_c(3), Some(33.0));
+        for slot in [0, 16, 255] {
+            assert_eq!(observation.battery(slot), None);
+            assert_eq!(observation.encoded_temperature_c(slot), None);
+        }
         assert_eq!(
             observation.trackers[0].address.as_deref(),
             Some("060504030201")
@@ -2518,8 +2582,6 @@ mod tests {
         let revision = state.revision;
         for report in [
             battery_frame(0, 3, [128, 0, 144]),
-            battery_frame(0, 3, [128, 0, 145]),
-            battery_frame(2, 3, [128, 0, 0]),
             battery_frame(6, 3, [0, 0, 0]),
             battery_frame(7, 3, [255, 255, 255]),
         ] {
@@ -2527,43 +2589,82 @@ mod tests {
             assert_eq!(state.revision, revision);
             assert!(!state.publish(&mut observation));
             assert_eq!(observation.battery(3), empty_battery);
+            assert_eq!(observation.encoded_temperature_c(3), Some(33.0));
         }
-        for (report, expected) in [
+
+        // Each row changes card data: temperature alone, independently missing
+        // fields, ordinary 100%, the exact power threshold, and the full marker.
+        for (bytes, battery, temperature) in [
+            ([128, 0, 145], empty_battery, Some(33.5)),
+            ([128, 0, 0], empty_battery, None),
+            ([0, 185, 72], None, Some(-3.0)),
             (
-                battery_frame(2, 3, [200, 155, 144]),
+                [228, 185, 0],
                 Some(TrackerBattery {
-                    percent: 72,
-                    voltage_v: 4.0,
+                    percent: 100,
+                    voltage_v: 4.3,
+                    charged: false,
+                    plugged: false,
                 }),
+                None,
             ),
             (
-                battery_frame(0, 3, [255, 180, 144]),
+                [228, 186, 0],
+                Some(TrackerBattery {
+                    percent: 100,
+                    voltage_v: 4.31,
+                    charged: false,
+                    plugged: true,
+                }),
+                None,
+            ),
+            (
+                [255, 186, 0],
+                Some(TrackerBattery {
+                    percent: 100,
+                    voltage_v: 4.31,
+                    charged: true,
+                    plugged: true,
+                }),
+                None,
+            ),
+            (
+                [255, 180, 144],
                 Some(TrackerBattery {
                     percent: 100,
                     voltage_v: 4.25,
+                    charged: true,
+                    plugged: false,
                 }),
+                Some(33.0),
             ),
-            (battery_frame(2, 3, [0, 180, 144]), None),
+            ([0, 180, 144], None, Some(33.0)),
+            ([127, 0, 0], None, None),
         ] {
             let revision = state.revision;
-            state.ingest(&report, now);
-            assert_eq!(state.revision, revision.wrapping_add(1));
-            assert!(state.publish(&mut observation));
-            assert_eq!(observation.battery(3), expected);
+            state.ingest(&battery_frame(2, 3, bytes), now);
+            assert_eq!(state.revision, revision.wrapping_add(1), "bytes {bytes:?}");
+            assert!(state.publish(&mut observation), "bytes {bytes:?}");
+            assert_eq!(observation.battery(3), battery, "bytes {bytes:?}");
+            assert_eq!(
+                observation.encoded_temperature_c(3),
+                temperature,
+                "bytes {bytes:?}",
+            );
             assert_eq!(
                 (
                     observation.trackers.as_ptr(),
                     observation.trackers[0].receiver_key.as_ptr(),
                     observation.trackers[0].address.as_ref().unwrap().as_ptr(),
                 ),
-                identities
+                identities,
+                "telemetry changes must retain allocated tracker identities",
             );
         }
         let revision = state.revision;
-        state.ingest(&battery_frame(0, 3, [127, 0, 0]), now);
+        state.ingest(&battery_frame(0, 3, [0, 255, 0]), now);
         assert_eq!(state.revision, revision);
         assert!(!state.publish(&mut observation));
-        assert_eq!(observation.battery(3), None);
     }
 
     #[test]
@@ -2586,11 +2687,15 @@ mod tests {
             Some(TrackerBattery {
                 percent: 0,
                 voltage_v: 4.0,
+                charged: false,
+                plugged: false,
             })
         );
         let full_battery = Some(TrackerBattery {
             percent: 100,
             voltage_v: 4.25,
+            charged: true,
+            plugged: false,
         });
         assert_eq!(
             monitor.observation_for(&endpoints[1]).unwrap().battery(3),
@@ -2605,6 +2710,14 @@ mod tests {
         assert!(failed.trackers[0].online);
         assert_eq!(failed.error.as_deref(), Some("reader failed"));
         assert_eq!(failed.battery(3), None);
+        assert_eq!(failed.encoded_temperature_c(3), None);
+        assert_eq!(
+            monitor
+                .observation_for(&endpoints[1])
+                .unwrap()
+                .encoded_temperature_c(3),
+            Some(33.0)
+        );
         assert_eq!(
             monitor.observation_for(&endpoints[1]).unwrap().battery(3),
             full_battery
@@ -2671,6 +2784,8 @@ mod tests {
                 Some(TrackerBattery {
                     percent: 100,
                     voltage_v: 4.25,
+                    charged: true,
+                    plugged: false,
                 })
             );
         }
@@ -2679,6 +2794,13 @@ mod tests {
         assert!(monitor.poll_at(now, failing_reader));
         assert_eq!(monitor.observation(&endpoint.key).unwrap().tps(3), 0);
         assert_eq!(monitor.observation(&endpoint.key).unwrap().battery(3), None);
+        assert_eq!(
+            monitor
+                .observation(&endpoint.key)
+                .unwrap()
+                .encoded_temperature_c(3),
+            None
+        );
         assert!(
             monitor
                 .observation(&endpoint.key)
@@ -2723,7 +2845,16 @@ mod tests {
             Some(TrackerBattery {
                 percent: 72,
                 voltage_v: 4.0,
+                charged: false,
+                plugged: false,
             })
+        );
+        assert_eq!(
+            monitor
+                .observation(&endpoint.key)
+                .unwrap()
+                .encoded_temperature_c(3),
+            Some(33.0)
         );
         let state = Arc::clone(&monitor.entries[&endpoint.path].state);
         let revision = state.lock().revision;
@@ -2737,6 +2868,13 @@ mod tests {
         assert!(monitor.poll_at(now + Duration::from_secs(5), no_reader));
         assert!(!monitor.observation(&endpoint.key).unwrap().trackers[0].online);
         assert_eq!(monitor.observation(&endpoint.key).unwrap().battery(3), None);
+        assert_eq!(
+            monitor
+                .observation(&endpoint.key)
+                .unwrap()
+                .encoded_temperature_c(3),
+            None
+        );
         assert!(!monitor.poll_at(now + Duration::from_secs(6), no_reader));
         state
             .lock()
@@ -2744,6 +2882,13 @@ mod tests {
         assert!(monitor.poll_at(now + Duration::from_secs(7), no_reader));
         assert!(monitor.observation(&endpoint.key).unwrap().trackers[0].online);
         assert_eq!(monitor.observation(&endpoint.key).unwrap().battery(3), None);
+        assert_eq!(
+            monitor
+                .observation(&endpoint.key)
+                .unwrap()
+                .encoded_temperature_c(3),
+            None
+        );
     }
 
     #[test]
@@ -2837,6 +2982,8 @@ mod tests {
                 Some(TrackerBattery {
                     percent: 72,
                     voltage_v: 4.0,
+                    charged: false,
+                    plugged: false,
                 })
             );
         }
@@ -3083,6 +3230,8 @@ mod tests {
                 Some(TrackerBattery {
                     percent: 72,
                     voltage_v: 4.0,
+                    charged: false,
+                    plugged: false,
                 })
             );
         }

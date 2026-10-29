@@ -809,6 +809,11 @@ devices:
     receiver_unavailable: "接收器不可用"
   tracker:
     address_unobserved: "尚未观测到地址"
+    battery_help: "固件报告的电量和编码电压。"
+    full: "已充满"
+    full_help: "固件报告电池已充满，但这不能确认是否接入外部电源或存在充电电流。"
+    power_help: "固件用 ≥4.31 V 指示外部供电，并非确证。电压可能不是实测值，充电电流未知。"
+    power_indicated: "固件指示外部电源"
     selection:
       current: "当前"
       selected: "已选中"
@@ -816,6 +821,7 @@ devices:
     state:
       offline: "离线"
       online: "在线"
+    temperature_help: "编码温度。固件可能通过取负值指示磁场干扰，因此负值不一定代表实际温度低于零度。"
     traffic_rate: "%{tps} TPS"
 firmware:
   action:

@@ -22,15 +22,17 @@ use crate::{
     i18n::tr,
     sessions::ConnectionState,
 };
+use gpui_kit::assets::IconName;
 use gpui_kit::base::TestSupportExt as _;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Selectable, Sizable,
+    ActiveTheme, Disableable, Icon, Selectable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     tooltip::Tooltip,
 };
 use gpui_kit::{
-    AnyElement, Context, FontWeight, IntoElement, SharedString, div, prelude::*, px, rems,
+    AnyElement, AnyView, App, Context, FontWeight, IntoElement, SharedString, Window, div,
+    prelude::*, px, rems,
 };
 use std::{collections::BTreeSet, fmt::Write as _};
 
@@ -507,8 +509,20 @@ impl Workbench {
                         "devices.tracker.state.offline"
                     });
                     let subdued = !available;
-                    let tps = observation.tps(tracker.slot);
-                    let battery = observation.battery(tracker.slot).filter(|_| tracker.online);
+                    let telemetry_available = tracker.online && observation.error.is_none();
+                    let tps = if telemetry_available {
+                        observation.tps(tracker.slot)
+                    } else {
+                        0
+                    };
+                    let traffic =
+                        rust_i18n::t!("devices.tracker.traffic_rate", tps = tps).to_string();
+                    let battery = observation
+                        .battery(tracker.slot)
+                        .filter(|_| telemetry_available);
+                    let temperature = observation
+                        .encoded_temperature_c(tracker.slot)
+                        .filter(|_| telemetry_available);
                     let (activity, outline_width) = tracker_activity_outline(
                         tps,
                         cx.theme().is_dark(),
@@ -604,23 +618,38 @@ impl Workbench {
                                                     tracker_label.clone(),
                                                 )),
                                         )
-                                        .when_some(battery, |header, battery| {
-                                            header.child(
-                                                div()
-                                                    .flex_shrink_0()
-                                                    .text_xs()
-                                                    .line_height(rems(1.))
-                                                    .font_family(
-                                                        cx.theme().mono_font_family.clone(),
-                                                    )
-                                                    .text_color(if selected || focused {
-                                                        cx.theme().accent_foreground
-                                                    } else {
-                                                        cx.theme().muted_foreground
-                                                    })
-                                                    .child(format!("{}%", battery.percent)),
-                                            )
-                                        }),
+                                        .child(
+                                            div()
+                                                .id(SharedString::from(format!(
+                                                    "tracker-tps:{tracker_key}"
+                                                )))
+                                                .role(gpui_kit::Role::Label)
+                                                .aria_label(traffic.clone())
+                                                .test_support()
+                                                .flex()
+                                                .flex_shrink_0()
+                                                .items_center()
+                                                .gap_1()
+                                                .text_xs()
+                                                .line_height(rems(1.))
+                                                .text_color(if selected || focused {
+                                                    cx.theme().accent_foreground
+                                                } else {
+                                                    cx.theme().muted_foreground
+                                                })
+                                                .child(
+                                                    div()
+                                                        .size_1p5()
+                                                        .flex_shrink_0()
+                                                        .rounded_md()
+                                                        .bg(if tps > 0 {
+                                                            activity
+                                                        } else {
+                                                            cx.theme().muted_foreground
+                                                        }),
+                                                )
+                                                .child(traffic),
+                                        ),
                                 )
                                 .child(
                                     div()
@@ -641,90 +670,176 @@ impl Workbench {
                                             tracker.address.clone().unwrap_or_else(|| {
                                                 tr("devices.tracker.address_unobserved")
                                             }),
-                                        )))
-                                        .when_some(battery, |row, battery| {
-                                            row.child(
-                                                div()
-                                                    .flex_shrink_0()
-                                                    .child(format!("{:.2} V", battery.voltage_v)),
-                                            )
-                                        }),
+                                        ))),
                                 )
                                 .child(
                                     div()
                                         .flex()
+                                        .flex_wrap()
                                         .items_center()
-                                        .h_4()
-                                        .gap_1()
+                                        .gap_x_2()
+                                        .gap_y_1()
                                         .text_xs()
                                         .line_height(rems(1.))
-                                        .whitespace_nowrap()
-                                        .overflow_hidden()
                                         .text_color(if selected || focused {
                                             cx.theme().accent_foreground
                                         } else {
                                             cx.theme().muted_foreground
                                         })
+                                        .when_some(battery, |row, battery| {
+                                            let value = format!(
+                                                "{}% ({:.1}V)",
+                                                battery.percent, battery.voltage_v
+                                            );
+                                            let hint = tr(if battery.plugged {
+                                                "devices.tracker.power_help"
+                                            } else {
+                                                "devices.tracker.battery_help"
+                                            });
+                                            row.child(
+                                                div()
+                                                    .id(SharedString::from(format!(
+                                                        "tracker-battery:{tracker_key}"
+                                                    )))
+                                                    .role(gpui_kit::Role::Label)
+                                                    .aria_label(value.clone())
+                                                    .test_support()
+                                                    .flex_shrink_0()
+                                                    .font_family(
+                                                        cx.theme().mono_font_family.clone(),
+                                                    )
+                                                    .child(value)
+                                                    .tooltip(move |window, cx| {
+                                                        tracker_telemetry_tooltip(
+                                                            hint.clone(),
+                                                            window,
+                                                            cx,
+                                                        )
+                                                    }),
+                                            )
+                                            .when(battery.plugged, |row| {
+                                                let hint = tr("devices.tracker.power_help");
+                                                row.child(
+                                                    div()
+                                                        .id(SharedString::from(format!(
+                                                            "tracker-power:{tracker_key}"
+                                                        )))
+                                                        .role(gpui_kit::Role::Label)
+                                                        .aria_label(tr(
+                                                            "devices.tracker.power_indicated",
+                                                        ))
+                                                        .test_support()
+                                                        .flex_shrink_0()
+                                                        .child(Icon::new(IconName::Plug).size_3())
+                                                        .tooltip(move |window, cx| {
+                                                            tracker_telemetry_tooltip(
+                                                                hint.clone(),
+                                                                window,
+                                                                cx,
+                                                            )
+                                                        }),
+                                                )
+                                            })
+                                            .when(
+                                                battery.charged,
+                                                |row| {
+                                                    let hint = tr("devices.tracker.full_help");
+                                                    let label = tr("devices.tracker.full");
+                                                    row.child(
+                                                        div()
+                                                            .id(SharedString::from(format!(
+                                                                "tracker-full:{tracker_key}"
+                                                            )))
+                                                            .role(gpui_kit::Role::Label)
+                                                            .aria_label(label.clone())
+                                                            .test_support()
+                                                            .flex_shrink_0()
+                                                            .child(label)
+                                                            .tooltip(move |window, cx| {
+                                                                tracker_telemetry_tooltip(
+                                                                    hint.clone(),
+                                                                    window,
+                                                                    cx,
+                                                                )
+                                                            }),
+                                                    )
+                                                },
+                                            )
+                                        })
+                                        .when_some(temperature, |row, temperature| {
+                                            let value = format!("{temperature:.1}°C");
+                                            let hint = tr("devices.tracker.temperature_help");
+                                            row.child(
+                                                div()
+                                                    .id(SharedString::from(format!(
+                                                        "tracker-temperature:{tracker_key}"
+                                                    )))
+                                                    .role(gpui_kit::Role::Label)
+                                                    .aria_label(value.clone())
+                                                    .test_support()
+                                                    .flex_shrink_0()
+                                                    .font_family(
+                                                        cx.theme().mono_font_family.clone(),
+                                                    )
+                                                    .child(value)
+                                                    .tooltip(move |window, cx| {
+                                                        tracker_telemetry_tooltip(
+                                                            hint.clone(),
+                                                            window,
+                                                            cx,
+                                                        )
+                                                    }),
+                                            )
+                                        })
                                         .child(
                                             div()
                                                 .flex()
-                                                .flex_1()
-                                                .min_w_0()
+                                                .flex_shrink_0()
                                                 .items_center()
                                                 .gap_1()
+                                                .ml_auto()
                                                 .child(
                                                     div()
-                                                        .size_1p5()
-                                                        .flex_shrink_0()
-                                                        .rounded_md()
-                                                        .bg(if tps > 0 {
-                                                            activity
-                                                        } else {
-                                                            cx.theme().muted_foreground
-                                                        }),
+                                                        .id(SharedString::from(format!(
+                                                            "tracker-status:{tracker_key}"
+                                                        )))
+                                                        .role(gpui_kit::Role::Label)
+                                                        .aria_label(status.clone())
+                                                        .test_support()
+                                                        .child(status),
                                                 )
-                                                .child(
-                                                    div().flex_1().min_w_0().child(clipped(
-                                                        format!("traffic:{tracker_key}"),
-                                                        rust_i18n::t!(
-                                                            "devices.tracker.traffic_rate",
-                                                            tps = tps
-                                                        )
-                                                        .to_string(),
-                                                    )),
-                                                ),
-                                        )
-                                        .child(
-                                            div().min_w_0().child(clipped(
-                                                format!("route:{tracker_key}"),
-                                                status,
-                                            )),
-                                        )
-                                        .when(selected || focused, |row| {
-                                            row.child(
-                                                div()
-                                                    .flex_shrink_0()
-                                                    .text_xs()
-                                                    .line_height(rems(1.))
-                                                    .px_1()
-                                                    .rounded_sm()
-                                                    .bg(if selected {
-                                                        cx.theme().primary
+                                                .when(selected || focused, |row| {
+                                                    let label = tr(if selected {
+                                                        "devices.tracker.selection.selected"
                                                     } else {
-                                                        cx.theme().group_box
-                                                    })
-                                                    .text_color(if selected {
-                                                        cx.theme().primary_foreground
-                                                    } else {
-                                                        cx.theme().accent_foreground
-                                                    })
-                                                    .child(if selected {
-                                                        tr("devices.tracker.selection.selected")
-                                                    } else {
-                                                        tr("devices.tracker.selection.current")
-                                                    }),
-                                            )
-                                        }),
+                                                        "devices.tracker.selection.current"
+                                                    });
+                                                    row.child(
+                                                        div()
+                                                            .id(SharedString::from(format!(
+                                                                "tracker-selection:{tracker_key}"
+                                                            )))
+                                                            .role(gpui_kit::Role::Label)
+                                                            .aria_label(label.clone())
+                                                            .test_support()
+                                                            .text_xs()
+                                                            .line_height(rems(1.))
+                                                            .px_1()
+                                                            .rounded_sm()
+                                                            .bg(if selected {
+                                                                cx.theme().primary
+                                                            } else {
+                                                                cx.theme().group_box
+                                                            })
+                                                            .text_color(if selected {
+                                                                cx.theme().primary_foreground
+                                                            } else {
+                                                                cx.theme().accent_foreground
+                                                            })
+                                                            .child(label),
+                                                    )
+                                                }),
+                                        ),
                                 ),
                         );
                     // The checkbox is a sibling, not an interactive child of the target button.
@@ -824,6 +939,26 @@ impl Workbench {
         }
         roster.into_any_element()
     }
+}
+
+fn tracker_telemetry_tooltip(hint: String, window: &mut Window, cx: &mut App) -> AnyView {
+    let hint = SharedString::from(hint);
+    Tooltip::element(move |window, _| {
+        // GPUI measures tooltip roots at min-content size. Constrain the
+        // actual text child, leaving room for the tooltip's margins and padding.
+        let width = (window.viewport_size().width - window.rem_size() * 4.)
+            .max(px(0.))
+            .min(window.rem_size() * 16.);
+        div()
+            .id("tracker-telemetry-tooltip")
+            .role(gpui_kit::Role::Label)
+            .aria_label(hint.clone())
+            .test_support()
+            .w(width)
+            .whitespace_normal()
+            .child(hint.clone())
+    })
+    .build(window, cx)
 }
 
 fn receiver_metadata(id: String, text: &str) -> AnyElement {
