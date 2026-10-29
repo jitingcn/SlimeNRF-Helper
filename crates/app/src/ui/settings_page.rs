@@ -388,6 +388,9 @@ impl Workbench {
         self.settings.search.update(cx, |input, cx| {
             input.set_placeholder(tr("app.settings.search.placeholder"), window, cx);
         });
+        self.command_search.update(cx, |input, cx| {
+            input.set_placeholder(tr("commands.search.placeholder"), window, cx);
+        });
         self.batch_input.update(cx, |input, cx| {
             input.set_placeholder(tr("serial.terminal.command_placeholder.batch"), window, cx);
         });

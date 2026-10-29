@@ -595,3 +595,424 @@ fn collapsed_groups_survive_history_scope_selection_and_focus_transitions() {
         BTreeSet::from(["commands.group.information"])
     );
 }
+
+mod search_ui_tests {
+    use super::{CommandFocus, PendingCommand};
+    use crate::{
+        app_runtime::Executor,
+        commands::{self, CommandContext},
+        domain::{DeviceRole, ReceiverEndpoint, SerialEndpoint, SerialPortKind},
+        sessions::test_support::{DisplaySession, display_manager, display_test_session},
+        ui::{Workbench, preferences::PreferenceIo, test_support::offline_workbench},
+    };
+    use gpui_kit::{
+        AnyWindowHandle, App, AppContext as _, Bounds, Entity, TestAppContext, Window,
+        WindowBounds, WindowOptions, px, size, test::TestWindowExt as _,
+    };
+    use std::{collections::BTreeSet, path::PathBuf};
+
+    const RECEIVER: &str = "search-fixture-receiver";
+    const RECEIVER_PORT: &str = "search-fixture-console";
+    const UNKNOWN_PORT: &str = "search-fixture-unknown";
+
+    struct Fixture {
+        window: AnyWindowHandle,
+        workbench: Entity<Workbench>,
+        _session: DisplaySession,
+    }
+
+    fn fixture(cx: &mut TestAppContext, executor: Executor, preferences_path: PathBuf) -> Fixture {
+        let mut manager = display_manager();
+        let session = display_test_session(&mut manager, RECEIVER_PORT);
+        let (window, workbench) = cx.update(|cx| {
+            gpui_kit::open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                        Default::default(),
+                        size(px(1400.), px(1600.)),
+                    ))),
+                    ..Default::default()
+                },
+                cx,
+                move |window, cx| {
+                    cx.new(|cx| {
+                        let mut this = offline_workbench(window, cx, manager, executor);
+                        this.preferences_io = PreferenceIo::for_test(preferences_path);
+                        this.inventory.receivers.push(ReceiverEndpoint {
+                            key: RECEIVER.into(),
+                            path: RECEIVER.as_bytes().to_vec(),
+                            label: "Synthetic receiver".into(),
+                            serial_number: Some("search-fixture-serial".into()),
+                        });
+                        this.inventory.ports.push(SerialEndpoint {
+                            port_name: RECEIVER_PORT.into(),
+                            label: "Synthetic receiver console".into(),
+                            manufacturer: None,
+                            product: None,
+                            kind: SerialPortKind::Usb,
+                            serial_number: Some("search-fixture-serial".into()),
+                            vid: Some(0x1209),
+                            pid: Some(0x7690),
+                            usb_interface: None,
+                        });
+                        this.inventory.ports.push(SerialEndpoint {
+                            port_name: UNKNOWN_PORT.into(),
+                            label: "Synthetic unidentified console".into(),
+                            manufacturer: None,
+                            product: None,
+                            kind: SerialPortKind::Unknown,
+                            serial_number: None,
+                            vid: None,
+                            pid: None,
+                            usb_interface: None,
+                        });
+                        this.command_focus = Some(CommandFocus::Serial(RECEIVER_PORT.into()));
+                        this
+                    })
+                },
+            )
+            .expect("open the real workbench for command search")
+        });
+        cx.update_window(window, |_, window, _| window.activate_window())
+            .expect("activate the command search window");
+        cx.run_until_parked();
+        cx.update_window(window, |_, window, cx| {
+            assert!(window.is_window_active());
+            window.render_frame(cx);
+            assert!(window.find("command-search").visible());
+        })
+        .expect("render the command search window");
+        Fixture {
+            window,
+            workbench,
+            _session: session,
+        }
+    }
+
+    fn replace_search(window: &mut Window, cx: &mut App, query: &str) {
+        window.click("command-search", cx);
+        window.press("secondary-a", cx);
+        window.input(query, cx);
+    }
+
+    fn assert_cards(window: &Window, expected: &[&str]) {
+        let mut ids = BTreeSet::new();
+        for context in [
+            CommandContext::Direct(DeviceRole::Receiver),
+            CommandContext::Direct(DeviceRole::Tracker),
+            CommandContext::Direct(DeviceRole::Unknown),
+            CommandContext::ForwardedTracker,
+        ] {
+            ids.extend(commands::presets(context).map(|preset| preset.id));
+        }
+        let mut cards: Vec<_> = ids
+            .into_iter()
+            .filter_map(|id| {
+                let card = window.try_find(format!("sidebar-preset:{id}"))?;
+                assert!(card.visible(), "matching card {id} must be visible");
+                Some((id, card.bounds().top()))
+            })
+            .collect();
+        cards.sort_by(|left, right| {
+            left.1
+                .partial_cmp(&right.1)
+                .expect("card positions must be comparable")
+        });
+        let observed: Vec<_> = cards.into_iter().map(|(id, _)| id).collect();
+        assert_eq!(observed, expected, "rendered command identities and order");
+    }
+
+    #[gpui_kit::test]
+    fn typed_search_matches_command_title_and_description_and_clears(cx: &mut TestAppContext) {
+        let runtime = crate::app_runtime::AppRuntime::new().expect("start isolated runtime");
+        let directory = tempfile::tempdir().expect("create private preferences directory");
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let fixture = fixture(
+            cx,
+            runtime.executor(),
+            directory.path().join("preferences.json"),
+        );
+        cx.update_window(fixture.window, |_, window, cx| {
+            let input_id = fixture.workbench.read(cx).command_search.entity_id();
+            assert!(window.find("sidebar-preset:info").visible());
+            assert!(window.find("sidebar-preset:help").visible());
+
+            window.click("command-search", cx);
+            window.input("  ClEaRcHaNnEl  ", cx);
+            assert_eq!(
+                window.find("command-search").value(),
+                Some("  ClEaRcHaNnEl  ")
+            );
+            assert_cards(window, &["receiver-clearchannel"]);
+            assert!(window.find("commands.group.radio").visible());
+            assert!(window.try_find("commands.group.information").is_none());
+
+            replace_search(window, cx, "device");
+            assert_cards(window, &["info", "help", "uptime", "reboot"]);
+            assert!(
+                window.find("commands.group.information").bounds().top()
+                    < window.find("commands.group.system").bounds().top(),
+                "matching groups must retain the authored order"
+            );
+
+            replace_search(window, cx, "channel");
+            assert_cards(
+                window,
+                &["receiver-channel", "receiver-clearchannel", "rssi-scan"],
+            );
+            replace_search(window, cx, "paired trackers");
+            assert_cards(window, &["list"]);
+            assert_eq!(
+                window.find("sidebar-preset:list").label(),
+                Some("Paired trackers")
+            );
+            replace_search(window, cx, "hardware information");
+            assert_cards(window, &["info"]);
+            assert_eq!(
+                window.find("sidebar-preset:info").label(),
+                Some("Device info")
+            );
+
+            replace_search(window, cx, "no-command-can-match-this-query");
+            assert_cards(window, &[]);
+            assert_eq!(
+                window.find("command-search-empty").role(),
+                Some(gpui_kit::Role::Status)
+            );
+            assert!(window.find("command-clear-search").visible());
+            window.click("command-clear-search", cx);
+            assert_eq!(window.find("command-search").value(), Some(""));
+            assert_eq!(window.find("command-search").focused(), Some(true));
+            assert!(window.find("sidebar-preset:info").visible());
+            assert!(window.find("sidebar-preset:help").visible());
+            assert_eq!(
+                fixture.workbench.read(cx).command_search.entity_id(),
+                input_id
+            );
+        })
+        .expect("exercise command filtering and clearing");
+    }
+
+    #[gpui_kit::test]
+    fn search_temporarily_expands_matches_without_losing_collapsed_groups(cx: &mut TestAppContext) {
+        let runtime = crate::app_runtime::AppRuntime::new().expect("start isolated runtime");
+        let directory = tempfile::tempdir().expect("create private preferences directory");
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let fixture = fixture(
+            cx,
+            runtime.executor(),
+            directory.path().join("preferences.json"),
+        );
+        cx.update_window(fixture.window, |_, window, cx| {
+            window.click("commands.group.information", cx);
+            assert!(window.try_find("sidebar-preset:info").is_none());
+            assert!(
+                fixture
+                    .workbench
+                    .read(cx)
+                    .sidebar
+                    .collapsed_groups
+                    .contains("commands.group.information")
+            );
+
+            window.click("command-search", cx);
+            window.input("hardware information", cx);
+            assert_cards(window, &["info"]);
+            window.click("commands.group.information", cx);
+            assert_cards(window, &["info"]);
+            assert!(
+                fixture
+                    .workbench
+                    .read(cx)
+                    .sidebar
+                    .collapsed_groups
+                    .contains("commands.group.information"),
+                "search disclosure must not overwrite the retained collapsed state"
+            );
+
+            replace_search(window, cx, "   ");
+            assert_eq!(window.find("command-search").value(), Some("   "));
+            assert!(window.find("commands.group.information").visible());
+            assert!(window.try_find("sidebar-preset:info").is_none());
+            replace_search(window, cx, "no-command-can-match-this-query");
+            assert_cards(window, &[]);
+            window.click("command-clear-search", cx);
+            assert_eq!(window.find("command-search").value(), Some(""));
+            assert!(window.try_find("sidebar-preset:info").is_none());
+            window.click("commands.group.information", cx);
+            assert!(window.find("sidebar-preset:info").visible());
+            assert!(
+                !fixture
+                    .workbench
+                    .read(cx)
+                    .sidebar
+                    .collapsed_groups
+                    .contains("commands.group.information")
+            );
+        })
+        .expect("exercise retained command-group disclosure state");
+    }
+
+    #[gpui_kit::test]
+    fn search_respects_device_context_and_filtered_card_opens_its_own_review(
+        cx: &mut TestAppContext,
+    ) {
+        let runtime = crate::app_runtime::AppRuntime::new().expect("start isolated runtime");
+        let directory = tempfile::tempdir().expect("create private preferences directory");
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let fixture = fixture(
+            cx,
+            runtime.executor(),
+            directory.path().join("preferences.json"),
+        );
+        let input_id = fixture
+            .workbench
+            .read_with(cx, |this, _| this.command_search.entity_id());
+        cx.update_window(fixture.window, |_, window, cx| {
+            assert_eq!(
+                fixture.workbench.read(cx).command_search.entity_id(),
+                input_id
+            );
+            window.click("command-search", cx);
+            window.input("  LiST  ", cx);
+            assert_cards(window, &["list"]);
+
+            window.click(format!("port-focus:direct:{UNKNOWN_PORT}"), cx);
+            assert_eq!(window.find("command-search").value(), Some("  LiST  "));
+            assert_cards(window, &[]);
+            assert!(window.find("command-clear-search").visible());
+            assert_eq!(
+                fixture.workbench.read(cx).command_context(),
+                CommandContext::Direct(DeviceRole::Unknown)
+            );
+        })
+        .expect("exercise the unknown-device context");
+        fixture.workbench.update(cx, |this, cx| {
+            let receiver = this.inventory.receivers[0].clone();
+            this.monitor =
+                crate::discovery::ReceiverMonitor::fixture(receiver, 0, "010203040506", true);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        cx.update_window(fixture.window, |_, window, cx| {
+            window.render_frame(cx);
+            window.click(format!("card:tracker:{RECEIVER}:0"), cx);
+            assert_eq!(window.find("command-search").value(), Some("  LiST  "));
+            assert_eq!(
+                fixture.workbench.read(cx).command_context(),
+                CommandContext::ForwardedTracker
+            );
+            assert_cards(window, &[]);
+            replace_search(window, cx, "  CALIBRATE ACC  ");
+            assert_cards(window, &["calibrate-acc"]);
+
+            window.click(format!("port-focus:{RECEIVER}:{RECEIVER_PORT}"), cx);
+            assert_eq!(
+                window.find("command-search").value(),
+                Some("  CALIBRATE ACC  ")
+            );
+            assert_cards(window, &[]);
+            assert_eq!(
+                fixture.workbench.read(cx).command_context(),
+                CommandContext::Direct(DeviceRole::Receiver)
+            );
+
+            replace_search(window, cx, "channel");
+            assert_cards(
+                window,
+                &["receiver-channel", "receiver-clearchannel", "rssi-scan"],
+            );
+            window.click("sidebar-preset:receiver-channel", cx);
+            let workbench = fixture.workbench.read(cx);
+            assert!(
+                matches!(
+                    &workbench.sidebar.pending,
+                    Some(PendingCommand::Parameter { preset, .. }) if preset.id == "receiver-channel"
+                ),
+                "the filtered card must open its own parameter editor"
+            );
+            assert!(workbench.batch_history.is_empty());
+            assert!(workbench.manager.writes_idle(RECEIVER_PORT));
+            window.click("cancel-sidebar-command", cx);
+            assert_eq!(window.find("command-search").value(), Some("channel"));
+            assert_eq!(fixture.workbench.read(cx).command_search.entity_id(), input_id);
+            assert_cards(
+                window,
+                &["receiver-channel", "receiver-clearchannel", "rssi-scan"],
+            );
+        })
+        .expect("exercise context filtering and the non-sending card action");
+    }
+
+    #[gpui_kit::test]
+    fn locale_changes_recompute_matches_without_replacing_the_query(cx: &mut TestAppContext) {
+        let runtime = crate::app_runtime::AppRuntime::new().expect("start isolated runtime");
+        let directory = tempfile::tempdir().expect("create private preferences directory");
+        let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+        let fixture = fixture(
+            cx,
+            runtime.executor(),
+            directory.path().join("preferences.json"),
+        );
+        cx.update_window(fixture.window, |_, window, cx| {
+            let input_id = fixture.workbench.read(cx).command_search.entity_id();
+            assert_eq!(
+                window.find("command-search").placeholder(),
+                Some("Search commands")
+            );
+            window.click("command-search", cx);
+            window.input("hardware information", cx);
+            assert_cards(window, &["info"]);
+
+            // An existing scan suppresses real device enumeration during this isolated UI test.
+            fixture
+                .workbench
+                .update(cx, |this, _| this.scanning_inventory = true);
+            window.click("nav-settings", cx);
+            window.click("settings-language-simplified-chinese", cx);
+            assert!(fixture.workbench.read(cx).inventory_task.is_none());
+            window.click("nav-device-setup", cx);
+            assert_eq!(
+                window.find("command-search").value(),
+                Some("hardware information")
+            );
+            assert_eq!(
+                window.find("command-search").placeholder(),
+                Some("搜索命令")
+            );
+            assert_eq!(
+                fixture.workbench.read(cx).command_search.entity_id(),
+                input_id
+            );
+            assert_cards(window, &[]);
+            assert!(window.find("command-clear-search").visible());
+
+            replace_search(window, cx, "设备信息");
+            assert_cards(window, &["info"]);
+            assert_eq!(window.find("sidebar-preset:info").label(), Some("设备信息"));
+            window.click("nav-settings", cx);
+            window.click("settings-language-english", cx);
+            window.click("nav-device-setup", cx);
+            assert_eq!(window.find("command-search").value(), Some("设备信息"));
+            assert_eq!(
+                window.find("command-search").placeholder(),
+                Some("Search commands")
+            );
+            assert_eq!(
+                fixture.workbench.read(cx).command_search.entity_id(),
+                input_id
+            );
+            assert_cards(window, &[]);
+            window.click("command-clear-search", cx);
+            assert_eq!(window.find("command-search").value(), Some(""));
+            assert_eq!(
+                window.find("sidebar-preset:info").label(),
+                Some("Device info")
+            );
+            fixture
+                .workbench
+                .update(cx, |this, _| this.scanning_inventory = false);
+        })
+        .expect("exercise the real locale controls and retained search");
+    }
+}

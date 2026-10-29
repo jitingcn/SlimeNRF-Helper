@@ -48,14 +48,14 @@ use gpui_kit::component::{
     ActiveTheme, Disableable, IconName, ResizableState, Selectable, Sizable, TitleBar,
     button::Button,
     checkbox::Checkbox,
-    input::{Input, InputState},
+    input::{Input, InputEvent, InputState},
     resizable_panel,
 };
 use gpui_kit::{
     self as gpui, AnyElement, AssetSource, Axis, Bounds, Context, Entity, FocusHandle, FontWeight,
-    IntoElement, KeyBinding, PathBuilder, Pixels, Render, SharedString, Task, TitlebarOptions,
-    Window, WindowBounds, WindowDecorations, WindowOptions, actions, canvas, div, point,
-    prelude::*, px, rgb, size,
+    IntoElement, KeyBinding, PathBuilder, Pixels, Render, SharedString, Subscription, Task,
+    TitlebarOptions, Window, WindowBounds, WindowDecorations, WindowOptions, actions, canvas, div,
+    point, prelude::*, px, rgb, size,
 };
 
 use crate::{
@@ -291,6 +291,8 @@ struct Workbench {
     tabs: TabSelection,
     pending_writes: Vec<PendingWrite>,
     batch_input: Entity<InputState>,
+    command_search: Entity<InputState>,
+    _command_search_subscription: Subscription,
     batch_history: VecDeque<BatchRun>,
     custom_commands: shortcuts::CustomCommandState,
     flash: flash::FlashState,
@@ -307,6 +309,20 @@ struct Workbench {
     _poll_task: Task<()>,
     _serial_poll_task: Task<()>,
     inventory_task: Option<Task<()>>,
+}
+
+fn search_input(
+    placeholder: &'static str,
+    window: &mut Window,
+    cx: &mut Context<Workbench>,
+) -> (Entity<InputState>, Subscription) {
+    let input = cx.new(|cx| InputState::new(window, cx).placeholder(tr(placeholder)));
+    let subscription = cx.subscribe_in(&input, window, |_, _, event, _, cx| {
+        if matches!(event, InputEvent::Change) {
+            cx.notify();
+        }
+    });
+    (input, subscription)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -390,6 +406,8 @@ impl Workbench {
         let batch_input = cx.new(|cx| {
             InputState::new(window, cx).placeholder(tr("serial.terminal.command_placeholder.batch"))
         });
+        let (command_search, command_search_subscription) =
+            search_input("commands.search.placeholder", window, cx);
         cx.on_app_quit(|this, cx| {
             // A committed platform quit cannot keep GPUI alive indefinitely.
             // Start retained cleanup without blocking the UI; run() joins its
@@ -510,6 +528,8 @@ impl Workbench {
             tabs: TabSelection::default(),
             pending_writes: Vec::new(),
             batch_input,
+            command_search,
+            _command_search_subscription: command_search_subscription,
             batch_history: VecDeque::new(),
             custom_commands: shortcuts::CustomCommandState::default(),
             flash: flash::FlashState::default(),

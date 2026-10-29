@@ -64,6 +64,8 @@ pub(super) fn offline_workbench(
         cx.has_global::<UiTestSessionActive>(),
         "offline Workbench fixtures require an outer UiTestSession",
     );
+    let (command_search, command_search_subscription) =
+        super::search_input("commands.search.placeholder", window, cx);
     Workbench {
         async_io,
         shutdown_host: Arc::default(),
@@ -99,6 +101,8 @@ pub(super) fn offline_workbench(
         tabs: Default::default(),
         pending_writes: Vec::new(),
         batch_input: cx.new(|cx| gpui_kit::component::input::InputState::new(window, cx)),
+        command_search,
+        _command_search_subscription: command_search_subscription,
         batch_history: Default::default(),
         custom_commands: Default::default(),
         flash: Default::default(),

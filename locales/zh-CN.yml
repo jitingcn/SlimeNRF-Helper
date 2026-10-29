@@ -350,6 +350,10 @@ commands:
     shortcut_unavailable: "此快捷命令不适用于所选设备或连接"
     slot_range: "追踪器槽位必须为 0 到 15"
     target_changed: "目标设备已变更；请重新选择命令"
+  search:
+    placeholder: "搜索命令"
+    empty: "没有匹配的命令。"
+    clear: "清除搜索"
   group:
     connection: "连接"
     diagnostics: "诊断"

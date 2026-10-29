@@ -24,7 +24,10 @@ use crate::{
     sessions::{ConnectionState, SessionManager, WriteReceipt},
 };
 use cards::command_card;
-use gpui_kit::{AnyElement, Context, Div, Entity, FontWeight, SharedString, div, prelude::*, px};
+use gpui_kit::base::TestSupportExt as _;
+use gpui_kit::{
+    AnyElement, Context, Div, Entity, Focusable as _, FontWeight, SharedString, div, prelude::*, px,
+};
 use gpui_kit::{
     App,
     component::{
@@ -550,8 +553,24 @@ impl Workbench {
         } else {
             CommandContext::ForwardedTracker
         };
+        let query = self.command_search.read(cx).value().trim().to_lowercase();
+        let searching = !query.is_empty();
+        let mut has_matches = false;
         for group in commands::preset_groups(context) {
-            let collapsed = self.sidebar.collapsed_groups.contains(group);
+            let mut matches = commands::presets(context)
+                .filter(|preset| {
+                    preset.group == group
+                        && (!searching
+                            || preset.command.to_lowercase().contains(&query)
+                            || tr(preset.label).to_lowercase().contains(&query)
+                            || tr(preset.description).to_lowercase().contains(&query))
+                })
+                .peekable();
+            if matches.peek().is_none() {
+                continue;
+            }
+            has_matches = true;
+            let collapsed = !searching && self.sidebar.collapsed_groups.contains(group);
             let label = SharedString::from(tr(group));
             let mut choices = div()
                 .flex()
@@ -572,6 +591,7 @@ impl Workbench {
                         } else {
                             IconName::ChevronDown
                         })
+                        .disabled(searching)
                         .accessibility_label(label.clone())
                         .child(
                             div()
@@ -589,7 +609,7 @@ impl Workbench {
                         })),
                 );
             if !collapsed {
-                for preset in commands::presets(context).filter(|preset| preset.group == group) {
+                for preset in matches {
                     choices = choices.child(
                         command_card(
                             SharedString::from(format!("sidebar-preset:{}", preset.id)),
@@ -606,6 +626,35 @@ impl Workbench {
                 }
             }
             content = content.child(choices);
+        }
+        if searching && !has_matches {
+            let message = tr("commands.search.empty");
+            content = content.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_start()
+                    .gap_2()
+                    .text_sm()
+                    .whitespace_normal()
+                    .child(
+                        div()
+                            .id("command-search-empty")
+                            .role(gpui_kit::Role::Status)
+                            .aria_label(message.clone())
+                            .test_support()
+                            .child(message),
+                    )
+                    .child(
+                        Button::new("command-clear-search")
+                            .label(tr("commands.search.clear"))
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.command_search
+                                    .update(cx, |input, cx| input.set_value("", window, cx));
+                                this.command_search.focus_handle(cx).focus(window, cx);
+                            })),
+                    ),
+            );
         }
         content.into_any_element()
     }
@@ -852,6 +901,17 @@ impl Workbench {
             );
         }
         sidebar = sidebar.child(scopes);
+        if self.sidebar.pending.is_none() && self.sidebar.scope != CommandScope::SerialBatch {
+            sidebar = sidebar.child(
+                div().flex_shrink_0().min_w_0().px_3().pt_3().child(
+                    Input::new(&self.command_search)
+                        .id("command-search")
+                        .aria_label(tr("commands.search.placeholder"))
+                        .prefix(IconName::Search)
+                        .cleanable(true),
+                ),
+            );
+        }
         let mut body = div().flex().flex_col().gap_3().min_w_0();
         if self.sidebar.shows_current_device() {
             let (summary, _) = self.sidebar_scope_summary();

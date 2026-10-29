@@ -77,6 +77,8 @@ Use the device's command-console serial port for terminal commands. A CDC port m
 
 Each port sends and receives independently. Switching tabs or feature pages does not close sessions. **Disconnect** retains the tab and transcript. Hover a terminal tab, or reach its close button with Tab, to reveal its **X** without moving the layout. The **X** closes connected, reconnecting, or disconnected sessions and removes the tab and transcript after cleanup. Active commands, device operations, or log export can temporarily disable it. Export any text you need before closing.
 
+Use **Search commands** above the command list to match command text, names, or descriptions in the current language. Search is case-insensitive and keeps the current target scope. Matching groups open temporarily; clearing the search restores their previous collapsed state. Typing a search does not send a command.
+
 The terminal has bounded scrollback, ANSI colors, output following, cross-line drag selection, plain-text copying, and ↑/↓ recall of the last 100 commands per port. Recalling a command does not send it. Drag selection pauses output following, but reception continues in the background. **Export log** saves only the retained UTF-8 text snapshot at the time you click. It is not a continuous file log, raw capture, or full VT screen emulator.
 
 You can also browse command history with the wheel over the command input: scroll up for older commands and down for newer ones. Returning past the newest history entry restores your draft. This does not send a command; scrolling over the transcript still scrolls its output.

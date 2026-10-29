@@ -350,6 +350,10 @@ commands:
     shortcut_unavailable: "This shortcut is not available for the selected device or connection"
     slot_range: "Tracker slot must be from 0 to 15"
     target_changed: "The target device changed; select the command again"
+  search:
+    placeholder: "Search commands"
+    empty: "No commands match your search."
+    clear: "Clear search"
   group:
     connection: "Connection"
     diagnostics: "Diagnostics"

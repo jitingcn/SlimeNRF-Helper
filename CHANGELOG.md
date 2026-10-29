@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- Command-list search matches command text, names, and descriptions in the current language.
+
 ### Changed
 
 - UF2 and OpenDFU updates show a graphical progress bar, transferred bytes, and percentage; unknown totals remain indeterminate, and 100% waits for the final operation result.
