@@ -1897,6 +1897,107 @@ fn terminal_test_endpoint(port: &str) -> SerialEndpoint {
 }
 
 #[gpui_kit::test]
+fn full_workbench_cancels_pending_terminal_command_before_open_completes(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::sessions::test_support::{
+        connected, peer, socket_transport, stopped, with_socket_factory,
+    };
+    use gpui_kit::{VisualContext as _, px, size, test::TestWindowExt as _};
+    use std::io::Read as _;
+
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let (opening_tx, opening_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let release_rx = parking_lot::Mutex::new(release_rx);
+    let mut manager = with_socket_factory(move |_| {
+        opening_tx.send(()).unwrap();
+        // Dropping the sender also releases the worker if a test assertion fails.
+        let _ = release_rx.lock().recv();
+        socket_transport(address)
+    });
+    manager.connect("A").unwrap();
+    opening_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        let mut this = offline_workbench(window, cx, manager, executor);
+        this.inventory.ports = vec![terminal_test_endpoint("A")];
+        this.sync_tabs(window, cx);
+        this
+    });
+    cx.replace_root_view(|window, cx| gpui_kit::base::Root::new(workbench.clone(), window, cx));
+    cx.simulate_resize(size(px(1200.), px(800.)));
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+    let input_id = workbench.read_with(cx, |this, _| this.terminals["A"].input.entity_id());
+
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert!(window.is_window_active());
+        window.click(("input", input_id), cx);
+        window.input("help", cx);
+    });
+    cx.run_until_parked();
+    cx.update(|window, cx| window.click("terminal-send", cx));
+    cx.run_until_parked();
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("terminal-send").disabled(), Some(true));
+        assert_eq!(window.find(("input", input_id)).value(), Some("help"));
+        workbench.update(cx, |this, _| {
+            assert_eq!(
+                this.manager.session("A").unwrap().state,
+                ConnectionState::Connecting
+            );
+            assert_eq!(
+                this.terminals["A"].pending.as_ref().unwrap().command,
+                "help"
+            );
+            assert!(this.pending_writes.is_empty());
+        });
+        window.click("terminal-cancel", cx);
+    });
+    cx.run_until_parked();
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("terminal-cancel").is_none());
+        assert_eq!(window.find(("input", input_id)).value(), Some("help"));
+        workbench.update(cx, |this, _| {
+            assert!(this.terminals["A"].pending.is_none());
+            assert!(this.terminals["A"].status.is_none());
+        });
+    });
+
+    release_tx.send(()).unwrap();
+    let mut stream = peer(&listener);
+    workbench.update(cx, |this, cx| {
+        connected(&mut this.manager, "A");
+        cx.notify();
+    });
+    cx.update(|window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find(("input", input_id)).value(), Some("help"));
+    });
+    workbench.update(cx, |this, _| {
+        assert!(this.terminals["A"].pending.is_none());
+        assert!(this.pending_writes.is_empty());
+        this.manager.disconnect("A").unwrap();
+        stopped(&mut this.manager, "A");
+    });
+    let mut sent = Vec::new();
+    stream.read_to_end(&mut sent).unwrap();
+    assert!(
+        sent.is_empty(),
+        "cancelled command must not be sent on open"
+    );
+}
+
+#[gpui_kit::test]
 fn send_all_tracks_admitted_connected_sessions_without_reserving_footer_space(
     cx: &mut gpui_kit::TestAppContext,
 ) {

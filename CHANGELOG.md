@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed a stack-overflow crash in Windows debug builds when connecting serial terminals or displaying controls for multiple connected ports.
+
 ## [0.3.1] - 2026-10-29
 
 ### Changed

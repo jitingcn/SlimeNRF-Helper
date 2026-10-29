@@ -13,7 +13,7 @@ use crate::{
     commands,
     domain::{Inventory, SerialEndpoint, console_port_allowed},
     i18n::tr,
-    sessions::{ConnectionState, WriteReceipt},
+    sessions::{ConnectionState, SessionView, WriteReceipt},
     terminal_view::{LogFilter, TerminalTranscript, TranscriptState, TranscriptViewport},
 };
 use futures_util::{FutureExt as _, future::Shared};
@@ -26,10 +26,10 @@ use gpui_kit::component::{
     tab::{Tab, TabBar},
 };
 use gpui_kit::{
-    AnyElement, App, BackgroundExecutor, ClipboardItem, Context, Entity, FocusHandle, FontWeight,
-    HitboxBehavior, IntoElement, KeyDownEvent, MouseButton, Pixels, ScrollDelta, ScrollEvent,
-    ScrollHandle, SharedString, Subscription, Task, TouchPhase, WeakEntity, Window, canvas, div,
-    prelude::*, px, rems,
+    AnyElement, App, BackgroundExecutor, ClipboardItem, Context, Div, Entity, FocusHandle,
+    FontWeight, HitboxBehavior, IntoElement, KeyDownEvent, MouseButton, Pixels, ScrollDelta,
+    ScrollEvent, ScrollHandle, SharedString, Subscription, Task, TouchPhase, WeakEntity, Window,
+    canvas, div, prelude::*, px, rems,
 };
 use gpui_kit::{
     Focusable as _,
@@ -1021,6 +1021,31 @@ impl Workbench {
             .border_color(cx.theme().border)
             .rounded_md()
             .overflow_hidden();
+        let tabs = self.terminal_tabs(cx);
+        if let Some(port) = self.tabs.active.clone() {
+            workspace = workspace
+                .child(tabs)
+                .child(self.terminal(&port, window, cx));
+        } else {
+            workspace = workspace
+                .child(
+                    div()
+                        .px_3()
+                        .py_2()
+                        .text_sm()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(tr("serial.terminal.title")),
+                )
+                .child(div().flex_1().min_w_0().child(terminal_empty_state(
+                    "serial.terminal.empty.no_connection",
+                    "serial.terminal.empty.connect_hint",
+                    cx,
+                )));
+        }
+        workspace.into_any_element()
+    }
+
+    fn terminal_tabs(&self, cx: &mut Context<Self>) -> TabBar {
         let mut tabs = TabBar::new("terminal-tabs").menu(true).max_width(px(260.));
         let mut tab_ports = Vec::new();
         for (index, session) in self.manager.sessions().enumerate() {
@@ -1088,49 +1113,343 @@ impl Workbench {
                 cx.notify();
             }
         }));
-        if let Some(port) = self.tabs.active.clone() {
-            workspace = workspace
-                .child(tabs)
-                .child(self.terminal(&port, window, cx));
-        } else {
-            workspace = workspace
-                .child(
-                    div()
-                        .px_3()
-                        .py_2()
-                        .text_sm()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(tr("serial.terminal.title")),
-                )
-                .child(div().flex_1().min_w_0().child(terminal_empty_state(
-                    "serial.terminal.empty.no_connection",
-                    "serial.terminal.empty.connect_hint",
-                    cx,
-                )));
-        }
-        workspace.into_any_element()
+        tabs
     }
 
     fn terminal(&mut self, port: &str, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         self.refresh_transcript(port, window, cx);
-        let show_send_all = self.has_multiple_terminal_send_targets();
         let terminal = &self.terminals[port];
         let session = self
             .manager
             .session(port)
             .expect("selected tab has a session");
-        let reconnecting = self.manager.is_reconnecting(port);
         let closing = self.manager.is_close_requested(port);
-        let transcript_empty = session
-            .terminal
-            .rows()
-            .next()
-            .is_none_or(|(_, _, text, _, newline)| text.is_empty() && !newline);
-        let log_filter = terminal.transcript.borrow().log_filter();
         let waiting = terminal
             .pending
             .as_ref()
             .is_some_and(|pending| pending.error.is_none());
+        let panel = div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_w_0()
+            .min_h_0()
+            .gap_2()
+            .p_3()
+            .child(self.terminal_header(port, session, closing, cx))
+            .child(self.terminal_viewport(port, terminal, session, window, cx))
+            .child(self.terminal_command_row(port, terminal, closing, waiting, cx))
+            .child(self.terminal_options_row(port, terminal, closing, waiting, cx));
+        self.terminal_status(terminal, session, panel, cx)
+            .into_any_element()
+    }
+
+    fn terminal_status(
+        &self,
+        terminal: &TerminalSession,
+        session: &SessionView,
+        mut panel: Div,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        if let Some(status) = session.last_error.as_ref().or(terminal.status.as_ref()) {
+            panel = panel.child(
+                div()
+                    .text_xs()
+                    .text_color(
+                        if session.last_error.is_some()
+                            || terminal
+                                .pending
+                                .as_ref()
+                                .is_some_and(|pending| pending.error.is_some())
+                        {
+                            cx.theme().danger
+                        } else {
+                            cx.theme().muted_foreground
+                        },
+                    )
+                    .child(clipped("terminal-status".into(), status.clone())),
+            );
+        }
+        if let Some(result) = terminal.export_status.as_ref() {
+            let message = match result {
+                Ok(path) => rust_i18n::t!(
+                    "serial.terminal.export.success",
+                    path = path.display().to_string()
+                )
+                .to_string(),
+                Err(error) => error.clone(),
+            };
+            panel = panel.child(
+                div()
+                    .text_xs()
+                    .text_color(if result.is_err() {
+                        cx.theme().danger
+                    } else {
+                        cx.theme().muted_foreground
+                    })
+                    .child(clipped("terminal-export-status".into(), message)),
+            );
+        }
+        panel
+    }
+
+    fn terminal_options_row(
+        &self,
+        port: &str,
+        terminal: &TerminalSession,
+        closing: bool,
+        waiting: bool,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let mut row = div()
+            .flex()
+            .items_start()
+            .gap_2()
+            .min_w_0()
+            .child(self.terminal_options_controls(port, terminal, cx));
+        if self.has_multiple_terminal_send_targets() {
+            row = row.child(self.terminal_send_all_button(port, terminal, closing, waiting, cx));
+        }
+        row
+    }
+
+    fn terminal_options_controls(
+        &self,
+        port: &str,
+        terminal: &TerminalSession,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let clear_port = port.to_owned();
+        let copy_port = port.to_owned();
+        let export_port = port.to_owned();
+        let follow_port = port.to_owned();
+        let wrap_port = port.to_owned();
+        div()
+            .flex()
+            .flex_1()
+            .min_w_0()
+            .flex_wrap()
+            .items_center()
+            .gap_2()
+            .child(
+                Button::new("terminal-clear")
+                    .small()
+                    .ghost()
+                    .label(crate::i18n::tr("serial.terminal.action.clear"))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        TextSelection::clear(window, cx);
+                        this.manager.clear(&clear_port);
+                        cx.notify();
+                    })),
+            )
+            .child(
+                Button::new("terminal-copy")
+                    .small()
+                    .ghost()
+                    .label(crate::i18n::tr("serial.terminal.action.copy_all"))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(session) = this.manager.session(&copy_port) {
+                            cx.write_to_clipboard(ClipboardItem::new_string(
+                                session.terminal.text(),
+                            ));
+                        }
+                    })),
+            )
+            .child(
+                Button::new("terminal-export")
+                    .small()
+                    .ghost()
+                    .label(crate::i18n::tr("serial.terminal.action.export_log"))
+                    .tooltip(crate::i18n::tr("serial.terminal.export.hint"))
+                    .disabled(terminal.export.busy())
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.export_terminal_log(&export_port, cx);
+                    })),
+            )
+            .child(self.terminal_filter(port, terminal, cx))
+            .child(
+                Checkbox::new("terminal-follow")
+                    .label(crate::i18n::tr("serial.terminal.action.follow"))
+                    .checked(terminal.follow)
+                    .on_click(cx.listener(move |this, checked, _, cx| {
+                        if let Some(terminal) = this.terminals.get_mut(&follow_port) {
+                            terminal.follow = *checked;
+                            if *checked {
+                                terminal.scroll.scroll_to_bottom();
+                            }
+                        }
+                        cx.notify();
+                    })),
+            )
+            .child(
+                Checkbox::new("terminal-wrap")
+                    .small()
+                    .label(tr("serial.terminal.action.wrap_lines"))
+                    .checked(terminal.soft_wrap)
+                    .on_click(cx.listener(move |this, checked, _, cx| {
+                        if let Some(terminal) = this.terminals.get_mut(&wrap_port) {
+                            terminal.soft_wrap = *checked;
+                            let mut offset = terminal.scroll.offset();
+                            offset.x = px(0.);
+                            terminal.scroll.set_offset(offset);
+                        }
+                        cx.notify();
+                    })),
+            )
+    }
+
+    fn terminal_send_all_button(
+        &self,
+        port: &str,
+        terminal: &TerminalSession,
+        closing: bool,
+        waiting: bool,
+        cx: &mut Context<Self>,
+    ) -> Button {
+        let send_all_port = port.to_owned();
+        Button::new("terminal-send-all")
+            .small()
+            .flex_shrink_0()
+            .label(tr("serial.terminal.action.send_all"))
+            .disabled(closing || waiting || terminal.input.read(cx).value().trim().is_empty())
+            .on_click(cx.listener(move |this, _, window, cx| {
+                this.send_terminal_all(&send_all_port, window, cx);
+            }))
+    }
+
+    fn terminal_filter(
+        &self,
+        port: &str,
+        terminal: &TerminalSession,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement + use<> {
+        let log_filter = terminal.transcript.borrow().log_filter();
+        let filter_port = port.to_owned();
+        let filter_wheel_port = port.to_owned();
+        let filter_owner = cx.weak_entity();
+        Button::new("terminal-log-filter")
+            .small()
+            .dropdown_caret(true)
+            .label(
+                rust_i18n::t!(
+                    "serial.terminal.log_filter.label",
+                    level = terminal_log_filter_label(log_filter)
+                )
+                .to_string(),
+            )
+            .tooltip(tr("serial.terminal.log_filter.hint"))
+            .on_scroll(cx.listener(move |this, event: &ScrollEvent, window, cx| {
+                let Some(terminal) = this.terminals.get_mut(&filter_wheel_port) else {
+                    return;
+                };
+                let wheel = terminal.filter_wheel.scroll(event, window.rem_size());
+                match wheel {
+                    WheelResult::Ignored => {}
+                    WheelResult::Accumulating => cx.stop_propagation(),
+                    WheelResult::Step { upward } => {
+                        let filter = next_terminal_log_filter(
+                            terminal.transcript.borrow().log_filter(),
+                            upward,
+                        );
+                        cx.stop_propagation();
+                        this.set_terminal_log_filter(&filter_wheel_port, filter, window, cx);
+                    }
+                }
+            }))
+            .dropdown_menu(move |mut menu, _, _| {
+                for filter in TERMINAL_LOG_FILTERS {
+                    let owner = filter_owner.clone();
+                    let port = filter_port.clone();
+                    menu = menu.item(
+                        PopupMenuItem::new(terminal_log_filter_label(filter))
+                            .checked(filter == log_filter)
+                            .on_click(move |_, window, cx| {
+                                let _ = owner.update(cx, |this, cx| {
+                                    this.set_terminal_log_filter(&port, filter, window, cx);
+                                });
+                            }),
+                    );
+                }
+                menu
+            })
+    }
+
+    fn terminal_command_row(
+        &self,
+        port: &str,
+        terminal: &TerminalSession,
+        closing: bool,
+        waiting: bool,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let mut row = div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .min_w_0()
+            .child(self.terminal_command_input(port, terminal, cx));
+        if terminal.pending.is_some() {
+            row = row.child(self.terminal_cancel_button(port, cx));
+        }
+        row.child(self.terminal_send_button(port, terminal, closing, waiting, cx))
+    }
+
+    fn terminal_command_input(
+        &self,
+        port: &str,
+        terminal: &TerminalSession,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let older_history_port = port.to_owned();
+        let newer_history_port = port.to_owned();
+        let history_wheel_port = port.to_owned();
+        let history_wheel_owner = cx.weak_entity();
+        div()
+            .relative()
+            .flex_1()
+            .min_w_0()
+            // Input keybindings dispatch actions before raw key events.
+            // Capture the existing movement actions before Input handles them.
+            .capture_action(cx.listener(
+                move |this, _: &gpui_kit::component::input::MoveUp, window, cx| {
+                    this.recall_terminal_command(&older_history_port, true, window, cx);
+                },
+            ))
+            .capture_action(cx.listener(
+                move |this, _: &gpui_kit::component::input::MoveDown, window, cx| {
+                    this.recall_terminal_command(&newer_history_port, false, window, cx);
+                },
+            ))
+            // A non-occluding hitbox captures vertical gestures before
+            // Input can consume their incidental horizontal motion.
+            .child(terminal_history_wheel_capture(
+                history_wheel_port,
+                history_wheel_owner,
+            ))
+            .child(Input::new(&terminal.input))
+    }
+
+    fn terminal_cancel_button(&self, port: &str, cx: &mut Context<Self>) -> Button {
+        let cancel_port = port.to_owned();
+        Button::new("terminal-cancel")
+            .small()
+            .label(tr("common.action.cancel"))
+            .on_click(cx.listener(move |this, _, _, cx| {
+                if let Some(terminal) = this.terminals.get_mut(&cancel_port) {
+                    cancel_terminal_command(&mut terminal.pending, &mut terminal.status);
+                }
+                cx.notify();
+            }))
+    }
+
+    fn terminal_send_button(
+        &self,
+        port: &str,
+        terminal: &TerminalSession,
+        closing: bool,
+        waiting: bool,
+        cx: &mut Context<Self>,
+    ) -> Button {
         let send_label: SharedString = tr(
             if terminal
                 .pending
@@ -1143,6 +1462,153 @@ impl Workbench {
             },
         )
         .into();
+        let send_port = port.to_owned();
+        Button::new("terminal-send")
+            .flex_shrink_0()
+            .primary()
+            .when(!cx.theme().is_dark(), |button| button.outline())
+            .map(|button| {
+                command_button_tone(
+                    button,
+                    commands::command_tone(terminal.input.read(cx).value().as_ref()),
+                    cx,
+                )
+            })
+            .icon(gpui_kit::assets::IconName::CornerDownLeft)
+            .tooltip(send_label.clone())
+            .accessibility_label(send_label)
+            .disabled(closing || waiting)
+            .on_click(cx.listener(move |this, _, window, cx| this.send(&send_port, window, cx)))
+    }
+
+    fn terminal_viewport(
+        &self,
+        port: &str,
+        terminal: &TerminalSession,
+        session: &SessionView,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let transcript_empty = session
+            .terminal
+            .rows()
+            .next()
+            .is_none_or(|(_, _, text, _, newline)| text.is_empty() && !newline);
+        div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .overflow_hidden()
+            .rounded_md()
+            .border_1()
+            .border_color(if terminal.transcript_focus.is_focused(window) {
+                cx.theme().ring
+            } else {
+                cx.theme().border
+            })
+            .bg(cx.theme().background)
+            .child(if transcript_empty {
+                terminal_empty_state(
+                    "serial.terminal.empty.no_output",
+                    if session.state == ConnectionState::Connected {
+                        "serial.terminal.empty.send_hint"
+                    } else {
+                        "serial.terminal.empty.reconnect_hint"
+                    },
+                    cx,
+                )
+            } else {
+                self.terminal_transcript_content(port, terminal, cx)
+            })
+            .child(
+                div().absolute().inset_0().child(
+                    Scrollbar::new(&terminal.scroll)
+                        .axis(if terminal.soft_wrap {
+                            ScrollbarAxis::Vertical
+                        } else {
+                            ScrollbarAxis::Both
+                        })
+                        .viewport_from_layout(),
+                ),
+            )
+    }
+
+    fn terminal_header(
+        &self,
+        port: &str,
+        session: &SessionView,
+        closing: bool,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let reconnecting = self.manager.is_reconnecting(port);
+        let connect_port = port.to_owned();
+        let title = self.serial_name(port);
+        div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .min_w_0()
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .child(clipped("terminal-title".into(), title)),
+                    )
+                    .when_some(session.identity.address.as_ref(), |column, address| {
+                        column.child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(clipped("terminal-address".into(), address.clone())),
+                        )
+                    }),
+            )
+            .child(div().text_xs().flex_shrink_0().child(connection_status(
+                Some(session.state),
+                reconnecting,
+                cx,
+            )))
+            .child(
+                Button::new("terminal-connection")
+                    .small()
+                    .w(px(CONNECTION_ACTION_WIDTH))
+                    .label(connection_action(Some(session.state), reconnecting))
+                    .when(
+                        !reconnecting
+                            && matches!(
+                                session.state,
+                                ConnectionState::Disconnected | ConnectionState::Faulted
+                            ),
+                        |button| {
+                            button
+                                .primary()
+                                .when(!cx.theme().is_dark(), |button| button.outline())
+                        },
+                    )
+                    .disabled(
+                        closing || (!reconnecting && session.state == ConnectionState::Closing),
+                    )
+                    .on_click(
+                        cx.listener(move |this, _, _, cx| {
+                            this.toggle_connection(&connect_port, cx)
+                        }),
+                    ),
+            )
+    }
+
+    fn terminal_transcript_content(
+        &self,
+        port: &str,
+        terminal: &TerminalSession,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let transcript_port = port.to_owned();
         let gesture_port = port.to_owned();
         let keyboard_port = port.to_owned();
@@ -1239,411 +1705,7 @@ impl Workbench {
                     on_reflow,
                 },
             ));
-        let connect_port = port.to_owned();
-        let send_port = port.to_owned();
-        let send_all_port = port.to_owned();
-        let cancel_port = port.to_owned();
-        let clear_port = port.to_owned();
-        let copy_port = port.to_owned();
-        let follow_port = port.to_owned();
-        let wrap_port = port.to_owned();
-        let older_history_port = port.to_owned();
-        let newer_history_port = port.to_owned();
-        let history_wheel_port = port.to_owned();
-        let history_wheel_owner = cx.weak_entity();
-        let export_port = port.to_owned();
-        let filter_port = port.to_owned();
-        let filter_wheel_port = port.to_owned();
-        let filter_owner = cx.weak_entity();
-        let title = self.serial_name(port);
-        let mut panel = div()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .min_w_0()
-            .min_h_0()
-            .gap_2()
-            .p_3()
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .min_w_0()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .flex()
-                            .flex_col()
-                            .gap_1()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(clipped("terminal-title".into(), title)),
-                            )
-                            .when_some(session.identity.address.as_ref(), |column, address| {
-                                column.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(clipped("terminal-address".into(), address.clone())),
-                                )
-                            }),
-                    )
-                    .child(div().text_xs().flex_shrink_0().child(connection_status(
-                        Some(session.state),
-                        reconnecting,
-                        cx,
-                    )))
-                    .child(
-                        Button::new("terminal-connection")
-                            .small()
-                            .w(px(CONNECTION_ACTION_WIDTH))
-                            .label(connection_action(Some(session.state), reconnecting))
-                            .when(
-                                !reconnecting
-                                    && matches!(
-                                        session.state,
-                                        ConnectionState::Disconnected | ConnectionState::Faulted
-                                    ),
-                                |button| {
-                                    button
-                                        .primary()
-                                        .when(!cx.theme().is_dark(), |button| button.outline())
-                                },
-                            )
-                            .disabled(
-                                closing
-                                    || (!reconnecting && session.state == ConnectionState::Closing),
-                            )
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.toggle_connection(&connect_port, cx)
-                            })),
-                    ),
-            )
-            .child(
-                div()
-                    .relative()
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_hidden()
-                    .rounded_md()
-                    .border_1()
-                    .border_color(if terminal.transcript_focus.is_focused(window) {
-                        cx.theme().ring
-                    } else {
-                        cx.theme().border
-                    })
-                    .bg(cx.theme().background)
-                    .child(if transcript_empty {
-                        terminal_empty_state(
-                            "serial.terminal.empty.no_output",
-                            if session.state == ConnectionState::Connected {
-                                "serial.terminal.empty.send_hint"
-                            } else {
-                                "serial.terminal.empty.reconnect_hint"
-                            },
-                            cx,
-                        )
-                    } else {
-                        transcript.into_any_element()
-                    })
-                    .child(
-                        div().absolute().inset_0().child(
-                            Scrollbar::new(&terminal.scroll)
-                                .axis(if terminal.soft_wrap {
-                                    ScrollbarAxis::Vertical
-                                } else {
-                                    ScrollbarAxis::Both
-                                })
-                                .viewport_from_layout(),
-                        ),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .min_w_0()
-                    .child(
-                        div()
-                            .relative()
-                            .flex_1()
-                            .min_w_0()
-                            // Input keybindings dispatch actions before raw key events.
-                            // Capture the existing movement actions before Input handles them.
-                            .capture_action(cx.listener(
-                                move |this, _: &gpui_kit::component::input::MoveUp, window, cx| {
-                                    this.recall_terminal_command(
-                                        &older_history_port,
-                                        true,
-                                        window,
-                                        cx,
-                                    );
-                                },
-                            ))
-                            .capture_action(cx.listener(
-                                move |this,
-                                      _: &gpui_kit::component::input::MoveDown,
-                                      window,
-                                      cx| {
-                                    this.recall_terminal_command(
-                                        &newer_history_port,
-                                        false,
-                                        window,
-                                        cx,
-                                    );
-                                },
-                            ))
-                            // A non-occluding hitbox captures vertical gestures before
-                            // Input can consume their incidental horizontal motion.
-                            .child(terminal_history_wheel_capture(
-                                history_wheel_port,
-                                history_wheel_owner,
-                            ))
-                            .child(Input::new(&terminal.input)),
-                    )
-                    .when(terminal.pending.is_some(), |row| {
-                        row.child(
-                            Button::new("terminal-cancel")
-                                .small()
-                                .label(tr("common.action.cancel"))
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    if let Some(terminal) = this.terminals.get_mut(&cancel_port) {
-                                        cancel_terminal_command(
-                                            &mut terminal.pending,
-                                            &mut terminal.status,
-                                        );
-                                    }
-                                    cx.notify();
-                                })),
-                        )
-                    })
-                    .child(
-                        Button::new("terminal-send")
-                            .flex_shrink_0()
-                            .primary()
-                            .when(!cx.theme().is_dark(), |button| button.outline())
-                            .map(|button| {
-                                command_button_tone(
-                                    button,
-                                    commands::command_tone(
-                                        terminal.input.read(cx).value().as_ref(),
-                                    ),
-                                    cx,
-                                )
-                            })
-                            .icon(gpui_kit::assets::IconName::CornerDownLeft)
-                            .tooltip(send_label.clone())
-                            .accessibility_label(send_label)
-                            .disabled(closing || waiting)
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.send(&send_port, window, cx)
-                            })),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_start()
-                    .gap_2()
-                    .min_w_0()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_1()
-                            .min_w_0()
-                            .flex_wrap()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Button::new("terminal-clear")
-                                    .small()
-                                    .ghost()
-                                    .label(crate::i18n::tr("serial.terminal.action.clear"))
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        TextSelection::clear(window, cx);
-                                        this.manager.clear(&clear_port);
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Button::new("terminal-copy")
-                                    .small()
-                                    .ghost()
-                                    .label(crate::i18n::tr("serial.terminal.action.copy_all"))
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        if let Some(session) = this.manager.session(&copy_port) {
-                                            cx.write_to_clipboard(ClipboardItem::new_string(
-                                                session.terminal.text(),
-                                            ));
-                                        }
-                                    })),
-                            )
-                            .child(
-                                Button::new("terminal-export")
-                                    .small()
-                                    .ghost()
-                                    .label(crate::i18n::tr("serial.terminal.action.export_log"))
-                                    .tooltip(crate::i18n::tr("serial.terminal.export.hint"))
-                                    .disabled(terminal.export.busy())
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        this.export_terminal_log(&export_port, cx);
-                                    })),
-                            )
-                            .child(
-                                Button::new("terminal-log-filter")
-                                    .small()
-                                    .dropdown_caret(true)
-                                    .label(
-                                        rust_i18n::t!(
-                                            "serial.terminal.log_filter.label",
-                                            level = terminal_log_filter_label(log_filter)
-                                        )
-                                        .to_string(),
-                                    )
-                                    .tooltip(tr("serial.terminal.log_filter.hint"))
-                                    .on_scroll(cx.listener(
-                                        move |this, event: &ScrollEvent, window, cx| {
-                                            let Some(terminal) =
-                                                this.terminals.get_mut(&filter_wheel_port)
-                                            else {
-                                                return;
-                                            };
-                                            let wheel = terminal
-                                                .filter_wheel
-                                                .scroll(event, window.rem_size());
-                                            match wheel {
-                                                WheelResult::Ignored => {}
-                                                WheelResult::Accumulating => cx.stop_propagation(),
-                                                WheelResult::Step { upward } => {
-                                                    let filter = next_terminal_log_filter(
-                                                        terminal.transcript.borrow().log_filter(),
-                                                        upward,
-                                                    );
-                                                    cx.stop_propagation();
-                                                    this.set_terminal_log_filter(
-                                                        &filter_wheel_port,
-                                                        filter,
-                                                        window,
-                                                        cx,
-                                                    );
-                                                }
-                                            }
-                                        },
-                                    ))
-                                    .dropdown_menu(move |mut menu, _, _| {
-                                        for filter in TERMINAL_LOG_FILTERS {
-                                            let owner = filter_owner.clone();
-                                            let port = filter_port.clone();
-                                            menu = menu.item(
-                                                PopupMenuItem::new(terminal_log_filter_label(
-                                                    filter,
-                                                ))
-                                                .checked(filter == log_filter)
-                                                .on_click(move |_, window, cx| {
-                                                    let _ = owner.update(cx, |this, cx| {
-                                                        this.set_terminal_log_filter(
-                                                            &port, filter, window, cx,
-                                                        );
-                                                    });
-                                                }),
-                                            );
-                                        }
-                                        menu
-                                    }),
-                            )
-                            .child(
-                                Checkbox::new("terminal-follow")
-                                    .label(crate::i18n::tr("serial.terminal.action.follow"))
-                                    .checked(terminal.follow)
-                                    .on_click(cx.listener(move |this, checked, _, cx| {
-                                        if let Some(terminal) = this.terminals.get_mut(&follow_port)
-                                        {
-                                            terminal.follow = *checked;
-                                            if *checked {
-                                                terminal.scroll.scroll_to_bottom();
-                                            }
-                                        }
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Checkbox::new("terminal-wrap")
-                                    .small()
-                                    .label(tr("serial.terminal.action.wrap_lines"))
-                                    .checked(terminal.soft_wrap)
-                                    .on_click(cx.listener(move |this, checked, _, cx| {
-                                        if let Some(terminal) = this.terminals.get_mut(&wrap_port) {
-                                            terminal.soft_wrap = *checked;
-                                            let mut offset = terminal.scroll.offset();
-                                            offset.x = px(0.);
-                                            terminal.scroll.set_offset(offset);
-                                        }
-                                        cx.notify();
-                                    })),
-                            ),
-                    )
-                    .when(show_send_all, |row| {
-                        row.child(
-                            Button::new("terminal-send-all")
-                                .small()
-                                .flex_shrink_0()
-                                .label(tr("serial.terminal.action.send_all"))
-                                .disabled(
-                                    closing
-                                        || waiting
-                                        || terminal.input.read(cx).value().trim().is_empty(),
-                                )
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.send_terminal_all(&send_all_port, window, cx);
-                                })),
-                        )
-                    }),
-            );
-        if let Some(status) = session.last_error.as_ref().or(terminal.status.as_ref()) {
-            panel = panel.child(
-                div()
-                    .text_xs()
-                    .text_color(
-                        if session.last_error.is_some()
-                            || terminal
-                                .pending
-                                .as_ref()
-                                .is_some_and(|pending| pending.error.is_some())
-                        {
-                            cx.theme().danger
-                        } else {
-                            cx.theme().muted_foreground
-                        },
-                    )
-                    .child(clipped("terminal-status".into(), status.clone())),
-            );
-        }
-        if let Some(result) = terminal.export_status.as_ref() {
-            let message = match result {
-                Ok(path) => rust_i18n::t!(
-                    "serial.terminal.export.success",
-                    path = path.display().to_string()
-                )
-                .to_string(),
-                Err(error) => error.clone(),
-            };
-            panel = panel.child(
-                div()
-                    .text_xs()
-                    .text_color(if result.is_err() {
-                        cx.theme().danger
-                    } else {
-                        cx.theme().muted_foreground
-                    })
-                    .child(clipped("terminal-export-status".into(), message)),
-            );
-        }
-        panel.into_any_element()
+        transcript.into_any_element()
     }
 }
 
