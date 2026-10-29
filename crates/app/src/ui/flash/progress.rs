@@ -1,5 +1,18 @@
 use super::*;
 use crate::update::{Uf2CopyReport, Uf2FinalizationStage};
+use gpui_kit::component::progress::Progress as ProgressBar;
+
+pub(super) fn wired_transfer_percent(progress: &Progress) -> Option<f32> {
+    if progress.total == 0 {
+        return None;
+    }
+    if progress.completed >= progress.total {
+        return Some(100.);
+    }
+    let percent = (progress.completed as f64 / progress.total as f64 * 100.) as f32;
+    // Converting to f32 must not round an incomplete transfer up to 100%.
+    Some(percent.min(100.0_f32.next_down()))
+}
 
 pub(super) fn ota_terminal(phase: OtaPhase) -> bool {
     matches!(
@@ -489,13 +502,16 @@ impl FlashState {
 impl Workbench {
     #[inline(never)]
     pub(super) fn flash_activity_toast(&self, cx: &mut Context<Self>) -> AnyElement {
-        let mut status = div()
+        let status = div()
             .id("firmware-activity-message")
             .min_w_0()
             .max_h(px(120.))
             .overflow_y_scroll()
             .overflow_x_hidden()
             .whitespace_normal();
+        #[cfg(test)]
+        let status = status.test_support();
+        let mut status = status;
         if self.flash.pending.is_some() {
             status = status.child(tr("firmware.status.wait_lease"));
         } else if let Some(progress) = self
@@ -618,6 +634,52 @@ impl Workbench {
     #[inline(never)]
     fn flash_progress(&self, progress: &Progress, cx: &mut Context<Self>) -> AnyElement {
         if progress.ota.is_empty() {
+            if self.flash.activity_kind == ActivityKind::Operation
+                && matches!(self.flash.activity_origin, Mode::Uf2 | Mode::OpenDfu)
+            {
+                let percent = wired_transfer_percent(progress);
+                let mut text = if progress.total > 0 {
+                    let whole_percent = (u128::from(progress.completed) * 100
+                        / u128::from(progress.total))
+                    .min(100);
+                    format!(
+                        "{} · {} / {} B ({}%)",
+                        progress.message, progress.completed, progress.total, whole_percent
+                    )
+                } else if progress.completed > 0 {
+                    format!("{} · {} B", progress.message, progress.completed)
+                } else {
+                    progress.message.clone()
+                };
+                if progress.total > 0 && progress.completed >= progress.total {
+                    text.push_str(" · ");
+                    text.push_str(&tr("firmware.progress.waiting_result"));
+                }
+                let message = div()
+                    .id("flash-progress-message")
+                    .role(Role::Status)
+                    .aria_label(text.clone())
+                    .min_w_0()
+                    .text_sm()
+                    .whitespace_normal()
+                    .child(text);
+                #[cfg(test)]
+                let message = message.test_support();
+                let bar = ProgressBar::new("flash-progress-bar")
+                    .small()
+                    .loading(percent.is_none())
+                    .value(percent.unwrap_or_default())
+                    .accessibility_label(progress.message.clone());
+                return div()
+                    .w_full()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(message)
+                    .child(bar)
+                    .into_any_element();
+            }
             let text = if progress.total > 0 {
                 format!(
                     "{} · {} / {} ({:.0}%)",
@@ -629,9 +691,14 @@ impl Workbench {
             } else {
                 progress.message.clone()
             };
-            let message = div().text_sm().child(text);
+            let message = div()
+                .id("flash-progress-message")
+                .role(Role::Status)
+                .aria_label(text.clone())
+                .text_sm()
+                .child(text);
             #[cfg(test)]
-            let message = message.id("flash-progress-message").test_support();
+            let message = message.test_support();
             return message.into_any_element();
         }
         let counts = OtaCounts::from_progress(&progress.ota);

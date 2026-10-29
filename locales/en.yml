@@ -924,6 +924,7 @@ firmware:
   progress:
     eta: "ETA ≈"
     waiting: "Waiting for progress"
+    waiting_result: "Waiting for final result"
   query:
     cancelled: "Firmware information query cancelled"
     connect_receiver: "Connect a receiver to discover trackers"

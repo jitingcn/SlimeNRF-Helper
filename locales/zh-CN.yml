@@ -924,6 +924,7 @@ firmware:
   progress:
     eta: "预计剩余 ≈"
     waiting: "等待传输进展"
+    waiting_result: "等待最终结果"
   query:
     cancelled: "已取消固件信息查询"
     connect_receiver: "连接接收器后可发现追踪器"

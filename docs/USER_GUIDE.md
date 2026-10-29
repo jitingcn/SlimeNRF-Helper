@@ -252,6 +252,8 @@ Source records retain the available version or commit, URL, and SHA-256. If upst
 <a id="firmware-updates"></a>
 ## Update firmware
 
+UF2 and OpenDFU transfers show a progress bar, byte count, and percentage when the total is known. Preparation and other unknown-total stages use an indeterminate indicator. Reaching 100% means the reported transfer is complete; **Waiting for final result** remains until the worker finishes. It does not confirm that the new firmware has booted.
+
 ### Update through UF2
 
 1. If the device is still running, select its command-console serial port above the flash-volume list on this page. Click **Enter bootloader**. A serial port already connected in **Device setup** reuses its existing session. You do not need to switch pages.

@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- UF2 and OpenDFU updates show a graphical progress bar, transferred bytes, and percentage; unknown totals remain indeterminate, and 100% waits for the final operation result.
+
 ## [0.2.0] - 2026-10-28
 
 ### Added

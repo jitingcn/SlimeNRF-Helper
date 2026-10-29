@@ -557,6 +557,37 @@ fn uf2_pending_details_retain_counts_and_os_diagnostic_for_each_finalization_sta
     }
 }
 
+#[test]
+fn wired_percentage_is_unknown_without_total_and_never_rounds_up_early() {
+    use crate::ui::flash::progress::wired_transfer_percent;
+
+    assert_eq!(wired_transfer_percent(&Progress::stage("waiting")), None);
+    assert_eq!(
+        wired_transfer_percent(&Progress::bytes("waiting", 5, 0)),
+        None
+    );
+    assert_eq!(
+        wired_transfer_percent(&Progress::bytes("writing", 0, 102400)),
+        Some(0.)
+    );
+    assert_eq!(
+        wired_transfer_percent(&Progress::bytes("writing", 65536, 102400)),
+        Some(64.)
+    );
+    assert_eq!(
+        wired_transfer_percent(&Progress::bytes("writing", u64::MAX - 1, u64::MAX)),
+        Some(100.0_f32.next_down())
+    );
+    assert_eq!(
+        wired_transfer_percent(&Progress::bytes("writing", 102400, 102400)),
+        Some(100.)
+    );
+    assert_eq!(
+        wired_transfer_percent(&Progress::bytes("writing", 102401, 102400)),
+        Some(100.)
+    );
+}
+
 struct ProgressHarness {
     workbench: Entity<Workbench>,
     scroll: ScrollHandle,
@@ -577,11 +608,14 @@ impl Render for ProgressHarness {
                 .overflow_y_scroll()
                 .overflow_x_hidden()
                 .track_scroll(&self.scroll);
-            if this.flash.shows_activity(Mode::Uf2) {
+            if this.flash.shows_activity(this.flash_mode()) {
                 content = content.child(this.flash_activity(cx));
             }
-            if this.flash.shows_results(Mode::Uf2) {
+            if this.flash.shows_results(this.flash_mode()) {
                 content = content.child(this.flash_results(cx));
+            }
+            if this.flash.floating_activity(this.flash_mode()) {
+                content = content.child(this.flash_activity_toast(cx));
             }
             div().size_full().p_3().child(content)
         })
@@ -691,6 +725,58 @@ fn assert_vertical_containment(
     );
 }
 
+fn publish_progress(
+    cx: &mut TestAppContext,
+    fixture: &ProgressFixture,
+    updates: &mpsc::Sender<Progress>,
+    published: &mpsc::Receiver<()>,
+    progress: Progress,
+) {
+    updates.send(progress).expect("request synthetic progress");
+    published
+        .recv_timeout(Duration::from_secs(3))
+        .expect("synthetic worker publishes progress");
+    fixture.workbench.update(cx, |this, cx| {
+        assert!(this.poll_flash());
+        assert!(this.flash.job.is_some());
+        assert!(this.flash.results.is_empty());
+        cx.notify();
+    });
+    settle_progress(cx, fixture);
+}
+
+fn assert_live_progress_layout(
+    window: &Window,
+    expected_stage: &str,
+    expected_status: &str,
+    cancel_label: &str,
+) -> Pixels {
+    let viewport = window.find("progress-fixture-viewport").bounds();
+    let message = window.find("flash-progress-message");
+    let bar = window.find("flash-progress-bar");
+    let cancel = window.find("flash-cancel");
+    assert_eq!(message.role(), Some(gpui_kit::Role::Status));
+    assert_eq!(message.label(), Some(expected_status));
+    assert_eq!(bar.role(), Some(gpui_kit::Role::ProgressIndicator));
+    assert_eq!(bar.label(), Some(expected_stage));
+    assert_eq!(cancel.label(), Some(cancel_label));
+    assert!(message.visible() && bar.visible() && cancel.visible());
+    for (name, bounds) in [
+        ("progress message", message.bounds()),
+        ("progress bar", bar.bounds()),
+        ("cancel", cancel.bounds()),
+    ] {
+        assert_horizontal_containment(window, viewport, bounds, name);
+        assert_vertical_containment(window, viewport, bounds, name);
+    }
+    assert!(bar.bounds().size.width > px(120.));
+    assert!(bar.bounds().size.height <= px(10.));
+    assert!(message.bounds().bottom() <= bar.bounds().top());
+    assert!(bar.bounds().bottom() <= cancel.bounds().top());
+    assert!(window.try_find("flash-results-panel").is_none());
+    viewport.size.width
+}
+
 #[gpui_kit::test]
 fn synthetic_uf2_progress_cancellation_and_results_survive_locales_and_resize(
     cx: &mut TestAppContext,
@@ -742,9 +828,19 @@ fn synthetic_uf2_progress_cancellation_and_results_survive_locales_and_resize(
         UpdateOutcome::Failed("Synthetic target disconnected before the copy completed".into()),
     ];
 
-    for (language, cancel_label, dismiss_label) in [
-        (Language::English, "Cancel", "Dismiss results"),
-        (Language::SimplifiedChinese, "取消", "关闭结果"),
+    for (language, cancel_label, dismiss_label, waiting_label) in [
+        (
+            Language::English,
+            "Cancel",
+            "Dismiss results",
+            "Waiting for final result",
+        ),
+        (
+            Language::SimplifiedChinese,
+            "取消",
+            "关闭结果",
+            "等待最终结果",
+        ),
     ] {
         let preferences = Preferences {
             language,
@@ -766,14 +862,22 @@ fn synthetic_uf2_progress_cancellation_and_results_survive_locales_and_resize(
             .zip(outcomes.iter().cloned())
             .map(|(volume, outcome)| (ResultIdentity::Uf2(volume), outcome))
             .collect();
+        let (updates, wait_for_update) = mpsc::channel();
         let (published, progress_published) = mpsc::channel();
         let (cancelled, cancel_observed) = mpsc::channel();
         let (release, wait_for_release) = mpsc::channel();
         let job = Job::start(move |cancel, emit| {
-            emit(Progress::bytes("Writing test.uf2", 65536, 102400));
-            let _ = published.send(());
             while !cancel.load(Ordering::Acquire) {
-                std::thread::sleep(Duration::from_millis(1));
+                match wait_for_update.recv_timeout(Duration::from_millis(1)) {
+                    Ok(progress) => {
+                        emit(progress);
+                        let _ = published.send(());
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        return Err("synthetic progress channel closed".to_owned());
+                    }
+                }
             }
             let _ = cancelled.send(());
             wait_for_release
@@ -794,61 +898,74 @@ fn synthetic_uf2_progress_cancellation_and_results_survive_locales_and_resize(
             };
             cx.notify();
         });
-        progress_published
-            .recv_timeout(Duration::from_secs(3))
-            .expect("synthetic worker publishes transfer progress");
-        fixture.workbench.update(cx, |this, cx| {
-            assert!(this.poll_flash());
-            assert!(this.flash.running_operation(Mode::Uf2));
-            assert_eq!(
-                this.flash
-                    .job
-                    .as_ref()
-                    .unwrap()
-                    .progress
-                    .as_ref()
-                    .unwrap()
-                    .completed,
-                65536
-            );
-            assert!(this.flash.results.is_empty());
-            cx.notify();
-        });
-
         cx.simulate_window_resize(fixture.window, size(px(740.), px(540.)));
         fixture.scroll.set_offset(Default::default());
-        settle_progress(cx, &fixture);
+        publish_progress(
+            cx,
+            &fixture,
+            &updates,
+            &progress_published,
+            Progress::stage("Preparing firmware"),
+        );
+        cx.update_window(fixture.window, |_, window, _| {
+            assert_eq!(window.rem_size(), px(20.), "{language:?}");
+            assert_live_progress_layout(
+                window,
+                "Preparing firmware",
+                "Preparing firmware",
+                cancel_label,
+            );
+        })
+        .expect("inspect unknown-total preparation");
+        publish_progress(
+            cx,
+            &fixture,
+            &updates,
+            &progress_published,
+            Progress::bytes("Writing test.uf2", 0, 102400),
+        );
+        cx.update_window(fixture.window, |_, window, _| {
+            assert_live_progress_layout(
+                window,
+                "Writing test.uf2",
+                "Writing test.uf2 · 0 / 102400 B (0%)",
+                cancel_label,
+            );
+        })
+        .expect("inspect transfer start");
+        publish_progress(
+            cx,
+            &fixture,
+            &updates,
+            &progress_published,
+            Progress::bytes("Writing test.uf2", 65536, 102400),
+        );
         let wide = cx
             .update_window(fixture.window, |_, window, _| {
-                let viewport = window.find("progress-fixture-viewport").bounds();
-                let message = window.find("flash-progress-message");
-                let cancel = window.find("flash-cancel");
-                assert_eq!(window.rem_size(), px(20.), "{language:?}");
-                assert_eq!(cancel.label(), Some(cancel_label), "{language:?}");
-                assert!(message.visible() && cancel.visible(), "{language:?}");
-                assert_horizontal_containment(window, viewport, message.bounds(), "progress");
-                assert_horizontal_containment(window, viewport, cancel.bounds(), "cancel");
-                assert_vertical_containment(window, viewport, cancel.bounds(), "cancel");
-                assert!(message.bounds().bottom() <= cancel.bounds().top());
-                assert!(window.try_find("flash-results-panel").is_none());
-                viewport.size.width
+                assert_live_progress_layout(
+                    window,
+                    "Writing test.uf2",
+                    "Writing test.uf2 · 65536 / 102400 B (64%)",
+                    cancel_label,
+                )
             })
             .expect("inspect wide transferring layout");
+        publish_progress(
+            cx,
+            &fixture,
+            &updates,
+            &progress_published,
+            Progress::bytes("Writing test.uf2", 102400, 102400),
+        );
+        let full_status = format!("Writing test.uf2 · 102400 / 102400 B (100%) · {waiting_label}");
 
         // This intentionally stresses the component below the application's minimum window.
         cx.simulate_window_resize(fixture.window, size(px(420.), px(360.)));
         settle_progress(cx, &fixture);
         cx.update_window(fixture.window, |_, window, cx| {
-            let viewport = window.find("progress-fixture-viewport").bounds();
-            let message = window.find("flash-progress-message");
-            let cancel = window.find("flash-cancel");
-            assert!(viewport.size.width < wide, "{language:?}");
-            assert_eq!(cancel.label(), Some(cancel_label), "{language:?}");
-            assert!(message.visible() && cancel.visible(), "{language:?}");
-            assert_horizontal_containment(window, viewport, message.bounds(), "narrow progress");
-            assert_horizontal_containment(window, viewport, cancel.bounds(), "narrow cancel");
-            assert_vertical_containment(window, viewport, cancel.bounds(), "narrow cancel");
-            assert!(message.bounds().bottom() <= cancel.bounds().top());
+            let narrow =
+                assert_live_progress_layout(window, "Writing test.uf2", &full_status, cancel_label);
+            assert!(narrow < wide, "{language:?}");
             window.click("flash-cancel", cx);
         })
         .expect("click the real narrow-layout cancel button");
@@ -864,6 +981,11 @@ fn synthetic_uf2_progress_cancellation_and_results_survive_locales_and_resize(
             assert!(this.flash.results.is_empty());
             cx.notify();
         });
+        settle_progress(cx, &fixture);
+        cx.update_window(fixture.window, |_, window, _| {
+            assert_live_progress_layout(window, "Writing test.uf2", &full_status, cancel_label);
+        })
+        .expect("the full transfer remains pending until the held worker joins");
         release.send(()).expect("release the synthetic worker");
         fixture.workbench.update(cx, |this, cx| {
             crate::sessions::test_support::until(|| {
@@ -886,6 +1008,7 @@ fn synthetic_uf2_progress_cancellation_and_results_survive_locales_and_resize(
 
         cx.update_window(fixture.window, |_, window, cx| {
             assert!(window.try_find("flash-progress-message").is_none());
+            assert!(window.try_find("flash-progress-bar").is_none());
             assert!(window.try_find("flash-cancel").is_none());
             let viewport = window.find("progress-fixture-viewport").bounds();
             let panel = window.find("flash-results-panel").bounds();
@@ -959,7 +1082,192 @@ fn synthetic_uf2_progress_cancellation_and_results_survive_locales_and_resize(
             assert!(window.try_find("flash-results-panel").is_none());
             assert!(window.try_find("flash-results-dismiss").is_none());
             assert!(window.try_find("flash-progress-message").is_none());
+            assert!(window.try_find("flash-progress-bar").is_none());
         })
         .expect("inspect dismissed results");
     }
+}
+
+#[gpui_kit::test]
+fn synthetic_opendfu_progress_tracks_transfer_until_the_worker_joins(cx: &mut TestAppContext) {
+    let runtime = AppRuntime::new().expect("create isolated I/O runtime");
+    let private_preferences = tempfile::tempdir().expect("create isolated preference directory");
+    let _ui_session = UiTestSession::new(cx);
+    let fixture = progress_fixture(
+        cx,
+        &runtime,
+        private_preferences.path().join("preferences.json"),
+    );
+    let preferences = Preferences {
+        language: Language::English,
+        ..Preferences::default()
+    };
+    cx.update(|cx| crate::ui::theme::apply(&preferences, cx));
+    let (updates, wait_for_update) = mpsc::channel();
+    let (published, progress_published) = mpsc::channel();
+    let job = Job::start(move |cancel, emit| {
+        loop {
+            if cancel.load(Ordering::Acquire) {
+                return Err("synthetic OpenDFU worker cancelled".to_owned());
+            }
+            match wait_for_update.recv_timeout(Duration::from_millis(1)) {
+                Ok(progress) => {
+                    emit(progress);
+                    let _ = published.send(());
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+            }
+        }
+        Ok(Payload::Update(UpdateCompletion::Results(vec![(
+            ResultIdentity::Serial("fixture-port".into()),
+            UpdateOutcome::Completed,
+        )])))
+    })
+    .expect("start synthetic OpenDFU worker");
+    fixture.workbench.update(cx, |this, cx| {
+        this.preferences = preferences;
+        this.flash = FlashState {
+            mode: Mode::OpenDfu,
+            activity_origin: Mode::OpenDfu,
+            operation_origin: Mode::OpenDfu,
+            activity_kind: ActivityKind::Operation,
+            job: Some(job),
+            ..FlashState::default()
+        };
+        cx.notify();
+    });
+
+    for (progress, stage, status) in [
+        (
+            Progress::stage("Waiting for the receiver console"),
+            "Waiting for the receiver console",
+            "Waiting for the receiver console",
+        ),
+        (
+            Progress::bytes("Writing test.bin", 1024, 0),
+            "Writing test.bin",
+            "Writing test.bin · 1024 B",
+        ),
+        (
+            Progress::bytes("Connecting to OpenDFU: test.bin", 0, 4096),
+            "Connecting to OpenDFU: test.bin",
+            "Connecting to OpenDFU: test.bin · 0 / 4096 B (0%)",
+        ),
+        (
+            Progress::bytes("Writing test.bin", 1024, 4096),
+            "Writing test.bin",
+            "Writing test.bin · 1024 / 4096 B (25%)",
+        ),
+        (
+            Progress::bytes("Writing test.bin", 4095, 4096),
+            "Writing test.bin",
+            "Writing test.bin · 4095 / 4096 B (99%)",
+        ),
+        (
+            Progress::bytes("Writing test.bin", 4096, 4096),
+            "Writing test.bin",
+            "Writing test.bin · 4096 / 4096 B (100%) · Waiting for final result",
+        ),
+    ] {
+        publish_progress(cx, &fixture, &updates, &progress_published, progress);
+        cx.update_window(fixture.window, |_, window, _| {
+            assert_live_progress_layout(window, stage, status, "Cancel");
+        })
+        .expect("inspect the live OpenDFU stage");
+    }
+    fixture.workbench.read_with(cx, |this, _| {
+        assert!(this.flash.running_operation(Mode::OpenDfu));
+        assert!(this.flash.results.is_empty());
+    });
+    drop(updates);
+    fixture.workbench.update(cx, |this, cx| {
+        crate::sessions::test_support::until(|| {
+            this.poll_flash();
+            this.flash.job.is_none()
+        });
+        assert!(!this.flash.running_operation(Mode::OpenDfu));
+        assert_eq!(
+            this.flash.results,
+            vec![(
+                ResultTarget::from(ResultIdentity::Serial("fixture-port".into())),
+                UpdateOutcome::Completed,
+            )]
+        );
+        cx.notify();
+    });
+    settle_progress(cx, &fixture);
+    cx.update_window(fixture.window, |_, window, _| {
+        assert!(window.try_find("flash-progress-bar").is_none());
+        assert!(window.try_find("flash-cancel").is_none());
+        assert!(window.find("flash-results-panel").visible());
+        assert!(window.find("firmware-result-fixture-port").visible());
+    })
+    .expect("inspect the joined OpenDFU result");
+}
+
+#[gpui_kit::test]
+fn query_progress_keeps_item_counts_without_a_wired_byte_bar(cx: &mut TestAppContext) {
+    let runtime = AppRuntime::new().expect("create isolated I/O runtime");
+    let private_preferences = tempfile::tempdir().expect("create isolated preference directory");
+    let _ui_session = UiTestSession::new(cx);
+    let fixture = progress_fixture(
+        cx,
+        &runtime,
+        private_preferences.path().join("preferences.json"),
+    );
+    let (published, progress_published) = mpsc::channel();
+    let job = Job::start(move |cancel, emit| {
+        emit(Progress::bytes("Querying firmware information", 2, 8));
+        let _ = published.send(());
+        while !cancel.load(Ordering::Acquire) {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        Ok(Payload::Update(UpdateCompletion::Queries(
+            crate::firmware_update::QueryResults {
+                targets: Vec::new(),
+                failures: Vec::new(),
+            },
+        )))
+    })
+    .expect("start synthetic query");
+    fixture.workbench.update(cx, |this, cx| {
+        this.active_page = FeaturePage::Ota;
+        this.flash = FlashState {
+            mode: Mode::Esb,
+            activity_origin: Mode::Esb,
+            activity_kind: ActivityKind::Query,
+            job: Some(job),
+            ..FlashState::default()
+        };
+        cx.notify();
+    });
+    progress_published
+        .recv_timeout(Duration::from_secs(3))
+        .expect("publish synthetic query counts");
+    fixture.workbench.update(cx, |this, cx| {
+        assert!(this.poll_flash());
+        assert!(this.flash.floating_activity(Mode::Esb));
+        cx.notify();
+    });
+    settle_progress(cx, &fixture);
+    cx.update_window(fixture.window, |_, window, cx| {
+        let message = window.find("flash-progress-message");
+        assert_eq!(
+            message.label(),
+            Some("Querying firmware information · 2 / 8 (25%)")
+        );
+        assert!(message.visible());
+        assert!(window.try_find("flash-progress-bar").is_none());
+        window.click("flash-cancel", cx);
+    })
+    .expect("inspect and cancel the query activity");
+    fixture.workbench.update(cx, |this, cx| {
+        crate::sessions::test_support::until(|| {
+            this.poll_flash();
+            this.flash.job.is_none()
+        });
+        assert!(!this.flash.floating_activity(Mode::Esb));
+        cx.notify();
+    });
 }
