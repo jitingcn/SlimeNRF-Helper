@@ -18,14 +18,14 @@ Windows 下载文件名以 `windows-x64-no-firmware.exe` 结尾的包，下载�
 Linux 下载 AppImage。将以下示例文件名替换为实际下载文件名。在文件所在目录执行以下命令。
 
 ```bash
-chmod +x ./slimenrf-helper-0.3.0-linux-x64-no-firmware.AppImage
-./slimenrf-helper-0.3.0-linux-x64-no-firmware.AppImage
+chmod +x ./slimenrf-helper-0.3.1-linux-x64-no-firmware.AppImage
+./slimenrf-helper-0.3.1-linux-x64-no-firmware.AppImage
 ```
 
 如果没有 FUSE，使用以下命令启动：
 
 ```bash
-./slimenrf-helper-0.3.0-linux-x64-no-firmware.AppImage --appimage-extract-and-run
+./slimenrf-helper-0.3.1-linux-x64-no-firmware.AppImage --appimage-extract-and-run
 ```
 
 无固件包内置默认配置，但不包含固件载荷。更新时使用本地文件、远程下载或显式外部配置。Linux 的服务、设备权限与 UF2 挂载条件见 [Linux 设备与运行条件](#linux-devices)。源码构建见[开发与打包](DEVELOPMENT.zh-CN.md)。

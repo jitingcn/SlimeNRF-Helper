@@ -365,11 +365,11 @@ Repository permissions remain read-only except for `contents: write` on the prer
 4. Create an annotated tag that matches the Cargo version.
 5. Push `main` and the tag together.
 
-For version `0.3.0`, the final commands are:
+For version `0.3.1`, the final commands are:
 
 ```bash
-	git tag -a v0.3.0 -m "SlimeNRF Helper 0.3.0"
-	git push --atomic origin main v0.3.0
+	git tag -a v0.3.1 -m "SlimeNRF Helper 0.3.1"
+	git push --atomic origin main v0.3.1
 ```
 
 Wait for the tag's workflow to finish. Check the prerelease notes and both downloads on [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Do not move a published tag or replace its assets.
