@@ -1,5 +1,8 @@
 use std::cmp::Ordering;
 
+#[cfg(any(windows, test))]
+use std::ffi::{OsStr, OsString};
+
 use semver::Version;
 use serde::Deserialize;
 
@@ -84,16 +87,49 @@ impl Target {
         Ok(Self { arch, variant })
     }
 
+    fn asset_suffix(self) -> &'static str {
+        match (self.arch, self.variant) {
+            (Architecture::X64, Variant::Full) => "-windows-x64.exe",
+            (Architecture::X64, Variant::NoFirmware) => "-windows-x64-no-firmware.exe",
+            (Architecture::Arm64, Variant::Full) => "-windows-arm64.exe",
+            (Architecture::Arm64, Variant::NoFirmware) => "-windows-arm64-no-firmware.exe",
+        }
+    }
+
     fn asset_name(self, version: &Version) -> String {
-        let arch = match self.arch {
-            Architecture::X64 => "x64",
-            Architecture::Arm64 => "arm64",
+        format!("slimenrf-helper-{version}{}", self.asset_suffix())
+    }
+
+    #[cfg(any(windows, test))]
+    pub(super) fn is_canonical_asset_name(self, name: &OsStr) -> bool {
+        let Some(name) = name.to_str() else {
+            return false;
         };
-        let variant = match self.variant {
-            Variant::Full => "",
-            Variant::NoFirmware => "-no-firmware",
+        let Some(rest) = name.strip_prefix("slimenrf-helper-") else {
+            return false;
         };
-        format!("slimenrf-helper-{version}-windows-{arch}{variant}.exe")
+        rest.strip_suffix(self.asset_suffix())
+            .and_then(|raw| Version::parse(raw).ok())
+            .is_some_and(|version| self.asset_name(&version) == name)
+    }
+
+    #[cfg(any(windows, test))]
+    pub(super) fn installation_name(
+        self,
+        original: &OsStr,
+        release: &Release,
+    ) -> Result<OsString, String> {
+        let version = Version::parse(&release.version)
+            .map_err(|_| "The selected release version is invalid")?;
+        if version.to_string() != release.version || self.asset_name(&version) != release.asset.name
+        {
+            return Err("The selected release asset filename does not match this build".into());
+        }
+        if self.is_canonical_asset_name(original) {
+            Ok(OsString::from(release.asset.name.as_str()))
+        } else {
+            Ok(original.to_os_string())
+        }
     }
 }
 

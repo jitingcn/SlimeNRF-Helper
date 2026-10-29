@@ -1,7 +1,9 @@
 use super::*;
 use std::{io::Cursor, os::windows::fs::FileTimesExt, time::SystemTime};
 use windows_sys::Win32::{
-    Storage::FileSystem::{FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT},
+    Storage::FileSystem::{
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, GetShortPathNameW,
+    },
     System::{
         Ioctl::FSCTL_SET_REPARSE_POINT,
         Pipes::{CreatePipe, PeekNamedPipe},
@@ -52,6 +54,7 @@ fn config() -> HelperConfig {
         nonce: [0x42; 16],
         locale: "en".into(),
         target: wide(OsString::from(r"C:\fixture\application.exe").as_os_str()),
+        final_name: wide(OsString::from("application.exe").as_os_str()),
         working_directory: wide(OsString::from(r"C:\fixture").as_os_str()),
         arguments: vec![wide(OsString::from("--example").as_os_str()), vec![0xd800]],
         target_identity: FileIdentity {
@@ -766,8 +769,14 @@ fn changed_staged_hash_or_length_cannot_publish() {
         handoff.sha256 = declared_digest;
         // This synthetic staging directory has no helper, so restart preparation
         // fails before any process can be started.
-        let failure = install_after_exit(&handoff, &fixture.target, &fixture.directory)
-            .expect_err("changed stage must not be published");
+        let failure = install_after_exit(
+            &handoff,
+            &fixture.target,
+            &fixture.target,
+            &fixture.directory,
+            &fixture.stage_identity,
+        )
+        .expect_err("changed stage must not be published");
         assert!(
             failure.message.contains(expected_error),
             "{name}: {}",
@@ -785,7 +794,7 @@ fn native_success_replaces_target_keeps_original_backup_and_launches_new() {
     let fixture = Fixture::new();
     let mut launches = Vec::new();
     publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -810,7 +819,7 @@ fn replaced_target_swapped_before_launch_is_not_rolled_back_or_launched() {
     let displaced = fixture.root.path().join("displaced-replacement.exe");
     let unrelated = b"unrelated target must survive";
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -840,7 +849,7 @@ fn identity_violation_during_launch_never_rolls_back_or_relaunches() {
     let unrelated = b"unrelated target must survive";
     let mut attempts = 0;
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -872,7 +881,7 @@ fn unchanged_replacement_failure_relaunches_original_without_losing_stage() {
     let fixture = Fixture::new();
     let mut launches = Vec::new();
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -910,7 +919,13 @@ fn no_replace_move_preserves_existing_target_and_moves_only_to_absent_path() {
         file_identity(&fixture.stage).expect("identify stage after timestamp change");
     assert_ne!(fixture.stage_identity.created, fixture.identity.created);
     assert!(
-        move_file_no_replace(&fixture.stage, &fixture.target).is_err(),
+        move_verified_no_replace(
+            &fixture.stage,
+            &fixture.target,
+            &fixture.stage_identity,
+            false
+        )
+        .is_err(),
         "a preexisting target must not be overwritten"
     );
     assert!(is_original(&fixture.target, &fixture.identity));
@@ -920,8 +935,13 @@ fn no_replace_move_preserves_existing_target_and_moves_only_to_absent_path() {
 
     let displaced = fixture.root.path().join("displaced-original.exe");
     fs::rename(&fixture.target, &displaced).expect("move original fixture aside");
-    move_file_no_replace(&fixture.stage, &fixture.target)
-        .expect("move stage to the now-absent target");
+    move_verified_no_replace(
+        &fixture.stage,
+        &fixture.target,
+        &fixture.stage_identity,
+        false,
+    )
+    .expect("move stage to the now-absent target");
     assert!(is_original(&displaced, &fixture.identity));
     let moved = file_identity(&fixture.target).expect("identify moved stage");
     assert!(same_file_id(&moved, &fixture.stage_identity));
@@ -934,7 +954,7 @@ fn partial_1177_failure_restores_missing_target_from_backup() {
     let fixture = Fixture::new();
     let mut launches = Vec::new();
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -963,7 +983,7 @@ fn failed_new_launch_rolls_back_existing_target_and_relaunches_original() {
     let fixture = Fixture::new();
     let mut launches = Vec::new();
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -996,7 +1016,7 @@ fn failed_handoff_after_spawn_preserves_new_target_and_original_backup() {
     let fixture = Fixture::new();
     let mut launches = Vec::new();
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -1038,7 +1058,7 @@ fn failed_original_relaunch_is_reported_after_successful_rollback() {
     let fixture = Fixture::new();
     let mut launches = Vec::new();
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -1079,7 +1099,7 @@ fn changed_target_identity_prevents_replacement_and_preserves_existing_backup() 
             fs::write(&fixture.backup, b"existing backup").expect("write backup fixture");
         }
         let failure = publish_replacement(
-            &fixture.target,
+            (&fixture.target, &fixture.target),
             &fixture.stage,
             &fixture.backup,
             &fixture.identity,
@@ -1111,7 +1131,7 @@ fn changed_staged_file_identity_prevents_replacement_and_launch() {
         fixture.stage_identity
     );
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -1133,7 +1153,7 @@ fn unexpected_existing_backup_is_never_replaced_or_launched() {
     let fixture = Fixture::new();
     fs::write(&fixture.backup, b"existing backup").expect("write backup fixture");
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -1155,7 +1175,7 @@ fn failed_rollback_of_locked_target_preserves_backup() {
     let mut lock = None;
     let mut launches = 0;
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -1202,7 +1222,7 @@ fn recovery_rejects_reparse_target_and_keeps_the_original_backup() {
     fs::write(&sentinel, b"untouched").expect("write unrelated sentinel");
 
     let failure = publish_replacement(
-        &fixture.target,
+        (&fixture.target, &fixture.target),
         &fixture.stage,
         &fixture.backup,
         &fixture.identity,
@@ -1243,6 +1263,736 @@ fn recovery_never_substitutes_an_unrelated_backup() {
             assert_eq!(fs::read(&fixture.target).unwrap(), REPLACEMENT);
         } else {
             assert!(!fixture.target.exists());
+        }
+    }
+}
+
+fn canonical_test_name(version: &str) -> String {
+    let arch = if cfg!(target_arch = "aarch64") {
+        "arm64"
+    } else {
+        "x64"
+    };
+    let variant = if cfg!(feature = "embed-firmware") {
+        ""
+    } else {
+        "-no-firmware"
+    };
+    format!("slimenrf-helper-{version}-windows-{arch}{variant}.exe")
+}
+
+#[test]
+fn helper_destination_is_a_validated_sibling_name() {
+    let root = tempfile::tempdir().unwrap();
+    let original = root.path().join(canonical_test_name("0.1.0"));
+    let new_name = canonical_test_name("2.0.0-rc.1+build.4");
+    let new_path = root.path().join(&new_name);
+    assert_eq!(
+        destination_from_name(
+            &original,
+            &wide(OsString::from(new_name.as_str()).as_os_str())
+        )
+        .unwrap(),
+        new_path
+    );
+    assert_eq!(
+        destination_from_name(&original, &wide(original.file_name().unwrap())).unwrap(),
+        original
+    );
+    for invalid in [
+        "",
+        ".",
+        "..",
+        r"..\other.exe",
+        "custom.exe",
+        "slimenrf-helper-v2.0.0-windows-x64.exe",
+    ] {
+        assert!(
+            destination_from_name(&original, &wide(OsString::from(invalid).as_os_str())).is_err(),
+            "invalid destination {invalid:?}"
+        );
+    }
+    let absolute = fs::canonicalize(root.path()).unwrap().join("other.exe");
+    assert!(destination_from_name(&original, &wide(absolute.as_os_str())).is_err());
+    assert!(destination_from_name(&original, &[b'a' as u16, 0, b'b' as u16]).is_err());
+    let custom = root.path().join("custom.exe");
+    assert_eq!(
+        destination_from_name(&custom, &wide(custom.file_name().unwrap())).unwrap(),
+        custom
+    );
+    assert!(destination_from_name(&custom, &wide(OsString::from(new_name).as_os_str())).is_err());
+}
+
+#[test]
+fn destination_alias_is_not_a_new_directory_entry() {
+    let fixture = Fixture::new();
+    assert_eq!(
+        resolve_destination(&fixture.target, &fixture.target).unwrap(),
+        Destination::InPlace
+    );
+    let alternate_case = fixture.root.path().join("APPLICATION.EXE");
+    if alternate_case.exists() {
+        assert_eq!(
+            resolve_destination(&fixture.target, &alternate_case).unwrap(),
+            Destination::SameEntry
+        );
+    }
+    let long = nul_wide(&fixture.target).unwrap();
+    let mut short = vec![0_u16; 32768];
+    // SAFETY: long is NUL-terminated and short is a writable UTF-16 buffer.
+    let length =
+        unsafe { GetShortPathNameW(long.as_ptr(), short.as_mut_ptr(), short.len() as u32) };
+    if length > 0 && (length as usize) < short.len() {
+        let short = PathBuf::from(OsString::from_wide(&short[..length as usize]));
+        let alias = fixture.target.with_file_name(short.file_name().unwrap());
+        if alias != fixture.target {
+            assert_eq!(
+                resolve_destination(&fixture.target, &alias).unwrap(),
+                Destination::SameEntry
+            );
+        }
+    }
+}
+
+#[test]
+fn existing_destination_entries_are_never_replaced_even_for_a_hardlink() {
+    for kind in ["file", "hardlink", "directory", "junction"] {
+        let fixture = Fixture::new();
+        let destination = fixture.root.path().join("next.exe");
+        let junction_target = fixture.root.path().join("junction-target");
+        match kind {
+            "file" => fs::write(&destination, b"foreign file").unwrap(),
+            "hardlink" => fs::hard_link(&fixture.target, &destination).unwrap(),
+            "directory" => fs::create_dir(&destination).unwrap(),
+            "junction" => {
+                fs::create_dir(&junction_target).unwrap();
+                fs::write(junction_target.join("sentinel"), b"untouched").unwrap();
+                junction(&destination, &junction_target);
+            }
+            _ => unreachable!(),
+        }
+        let mut launched = Vec::new();
+        let failure = publish_replacement(
+            (&fixture.target, &destination),
+            &fixture.stage,
+            &fixture.backup,
+            &fixture.identity,
+            &fixture.stage_identity,
+            |_, _, _| panic!("a destination collision must precede replacement"),
+            |path| {
+                launched.push(path.to_path_buf());
+                Ok(())
+            },
+        )
+        .expect_err("existing destination must be rejected");
+        assert!(
+            failure.message.contains("already exists"),
+            "{kind}: {failure:?}"
+        );
+        assert!(failure.cleanup_taken, "{kind}");
+        assert_eq!(launched, vec![fixture.target.clone()], "{kind}");
+        assert!(is_original(&fixture.target, &fixture.identity), "{kind}");
+        assert_eq!(fs::read(&fixture.stage).unwrap(), REPLACEMENT, "{kind}");
+        assert!(!fixture.backup.exists(), "{kind}");
+        match kind {
+            "file" => assert_eq!(fs::read(&destination).unwrap(), b"foreign file"),
+            "hardlink" => assert!(is_original(&destination, &fixture.identity)),
+            "directory" => assert!(destination.is_dir()),
+            "junction" => assert_eq!(
+                fs::read(junction_target.join("sentinel")).unwrap(),
+                b"untouched"
+            ),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[test]
+fn renamed_publication_launches_verified_destination_and_retains_backup() {
+    let fixture = Fixture::new();
+    let destination = fixture.root.path().join("next.exe");
+    let mut launched = Vec::new();
+    publish_replacement(
+        (&fixture.target, &destination),
+        &fixture.stage,
+        &fixture.backup,
+        &fixture.identity,
+        &fixture.stage_identity,
+        replace_file,
+        |path| {
+            launched.push(path.to_path_buf());
+            assert_eq!(fs::read(path).unwrap(), REPLACEMENT);
+            Ok(())
+        },
+    )
+    .expect("publish and launch renamed replacement");
+    assert_eq!(launched, vec![destination.clone()]);
+    assert!(!fixture.target.exists());
+    assert!(!fixture.stage.exists());
+    assert_eq!(fs::read(&destination).unwrap(), REPLACEMENT);
+    assert!(is_original(&fixture.backup, &fixture.identity));
+}
+
+#[test]
+fn destination_created_after_preflight_causes_atomic_recovery_without_clobbering() {
+    let fixture = Fixture::new();
+    let destination = fixture.root.path().join("next.exe");
+    let mut launched = Vec::new();
+    let failure = publish_replacement(
+        (&fixture.target, &destination),
+        &fixture.stage,
+        &fixture.backup,
+        &fixture.identity,
+        &fixture.stage_identity,
+        |target, stage, backup| {
+            replace_file(target, stage, backup)?;
+            fs::write(&destination, b"concurrent foreign file").unwrap();
+            Ok(())
+        },
+        |path| {
+            launched.push(path.to_path_buf());
+            Ok(())
+        },
+    )
+    .expect_err("the atomic rename must reject the raced destination");
+    assert!(failure.message.contains("renamed"), "{failure:?}");
+    assert!(failure.cleanup_taken);
+    assert_eq!(launched, vec![fixture.target.clone()]);
+    assert!(is_original(&fixture.target, &fixture.identity));
+    assert_eq!(fs::read(&destination).unwrap(), b"concurrent foreign file");
+    assert_eq!(fs::read(&fixture.stage).unwrap(), REPLACEMENT);
+    assert!(!fixture.backup.exists());
+}
+
+#[test]
+fn failed_renamed_spawn_restores_old_name_and_retains_replacement_for_cleanup() {
+    let fixture = Fixture::new();
+    let destination = fixture.root.path().join("next.exe");
+    let mut launched = Vec::new();
+    let failure = publish_replacement(
+        (&fixture.target, &destination),
+        &fixture.stage,
+        &fixture.backup,
+        &fixture.identity,
+        &fixture.stage_identity,
+        replace_file,
+        |path| {
+            launched.push(path.to_path_buf());
+            if path == destination.as_path() {
+                assert_eq!(fs::read(path).unwrap(), REPLACEMENT);
+                Err(LaunchFailure::Spawn("simulated spawn failure".into()))
+            } else {
+                assert_eq!(fs::read(path).unwrap(), ORIGINAL);
+                Ok(())
+            }
+        },
+    )
+    .expect_err("failed spawn must restore the original");
+    assert!(failure.cleanup_taken, "{failure:?}");
+    assert!(!failure.preserve_backup);
+    assert_eq!(launched, vec![destination.clone(), fixture.target.clone()]);
+    assert!(is_original(&fixture.target, &fixture.identity));
+    assert!(!destination.exists());
+    assert_eq!(fs::read(&fixture.stage).unwrap(), REPLACEMENT);
+    assert!(!fixture.backup.exists());
+}
+
+#[test]
+fn renamed_post_spawn_handoff_failure_never_restores_or_relaunches() {
+    let fixture = Fixture::new();
+    let destination = fixture.root.path().join("next.exe");
+    let mut launched = Vec::new();
+    let failure = publish_replacement(
+        (&fixture.target, &destination),
+        &fixture.stage,
+        &fixture.backup,
+        &fixture.identity,
+        &fixture.stage_identity,
+        replace_file,
+        |path| {
+            launched.push(path.to_path_buf());
+            Err(LaunchFailure::Handoff("withheld acknowledgement".into()))
+        },
+    )
+    .expect_err("failed handoff must retain the new image and backup");
+    assert!(failure.preserve_backup);
+    assert!(!failure.cleanup_taken);
+    assert_eq!(launched, vec![destination.clone()]);
+    assert!(!fixture.target.exists());
+    assert_eq!(fs::read(&destination).unwrap(), REPLACEMENT);
+    assert!(is_original(&fixture.backup, &fixture.identity));
+}
+
+#[test]
+fn renamed_recovery_never_moves_substituted_entries() {
+    for substituted in ["destination", "backup", "original", "stage"] {
+        let fixture = Fixture::new();
+        let destination = fixture.root.path().join("next.exe");
+        replace_file(&fixture.target, &fixture.stage, Some(&fixture.backup)).unwrap();
+        move_verified_no_replace(
+            &fixture.target,
+            &destination,
+            &fixture.stage_identity,
+            false,
+        )
+        .unwrap();
+        let displaced = fixture.root.path().join("displaced.exe");
+        let foreign = b"foreign entry survives";
+        match substituted {
+            "destination" => {
+                fs::rename(&destination, &displaced).unwrap();
+                fs::write(&destination, foreign).unwrap();
+            }
+            "backup" => {
+                fs::rename(&fixture.backup, &displaced).unwrap();
+                fs::write(&fixture.backup, foreign).unwrap();
+            }
+            "original" => fs::write(&fixture.target, foreign).unwrap(),
+            "stage" => fs::write(&fixture.stage, foreign).unwrap(),
+            _ => unreachable!(),
+        }
+        assert!(
+            restore_renamed_original(
+                &fixture.target,
+                &destination,
+                &fixture.stage,
+                &fixture.backup,
+                &fixture.identity,
+                &fixture.stage_identity,
+            )
+            .is_err(),
+            "substituted {substituted} must prevent recovery"
+        );
+        let foreign_path = match substituted {
+            "destination" => &destination,
+            "backup" => &fixture.backup,
+            "original" => &fixture.target,
+            "stage" => &fixture.stage,
+            _ => unreachable!(),
+        };
+        assert_eq!(fs::read(foreign_path).unwrap(), foreign, "{substituted}");
+        if substituted == "backup" {
+            assert!(is_original(&displaced, &fixture.identity));
+        } else {
+            assert!(is_original(&fixture.backup, &fixture.identity));
+        }
+        if substituted == "destination" {
+            assert_eq!(fs::read(&displaced).unwrap(), REPLACEMENT);
+        } else {
+            assert_eq!(fs::read(&destination).unwrap(), REPLACEMENT);
+        }
+    }
+}
+
+#[test]
+fn handle_bound_rename_rejects_substitution_and_pins_its_source() {
+    let fixture = Fixture::new();
+    let displaced = fixture.root.path().join("verified.exe");
+    fs::rename(&fixture.stage, &displaced).unwrap();
+    fs::write(&fixture.stage, b"foreign file").unwrap();
+    let destination = fixture.root.path().join("next.exe");
+    assert!(
+        move_verified_no_replace(&fixture.stage, &destination, &fixture.stage_identity, false)
+            .is_err()
+    );
+    assert_eq!(fs::read(&fixture.stage).unwrap(), b"foreign file");
+    assert_eq!(fs::read(&displaced).unwrap(), REPLACEMENT);
+    assert!(!destination.exists());
+
+    let guard = open_rename_source(&displaced, &fixture.stage_identity, false).unwrap();
+    assert!(
+        fs::rename(&displaced, &destination).is_err(),
+        "another pathname-based rename must not displace the admitted source"
+    );
+    rename_open_file(&guard, &destination).expect("the admitted handle can rename its own file");
+    drop(guard);
+    assert_eq!(fs::read(&destination).unwrap(), REPLACEMENT);
+}
+
+#[test]
+fn cleanup_never_authorizes_a_substituted_or_unverified_stage() {
+    let fixture = Fixture::new();
+    let size = REPLACEMENT.len() as u64;
+    let digest: [u8; 32] = Sha256::digest(REPLACEMENT).into();
+    assert_eq!(
+        authorized_stage_identity(&fixture.stage, Some(&fixture.stage_identity), size, &digest)
+            .unwrap(),
+        None,
+        "an invalid PE must not be authorized for cleanup"
+    );
+    assert_eq!(
+        authorized_stage_identity(&fixture.stage, None, size, &digest).unwrap(),
+        None
+    );
+    let displaced = fixture.root.path().join("verified-stage.exe");
+    fs::rename(&fixture.stage, &displaced).unwrap();
+    fs::write(&fixture.stage, REPLACEMENT).unwrap();
+    assert_eq!(
+        authorized_stage_identity(&fixture.stage, Some(&fixture.stage_identity), size, &digest)
+            .unwrap(),
+        None,
+        "even identical bytes do not authorize a different file"
+    );
+    assert_eq!(fs::read(&fixture.stage).unwrap(), REPLACEMENT);
+    assert!(is_original(&displaced, &fixture.stage_identity));
+}
+
+#[test]
+fn failed_renamed_spawn_preserves_foreign_paths_and_recovery_evidence() {
+    for substituted in ["destination", "backup", "original", "stage"] {
+        let fixture = Fixture::new();
+        let destination = fixture.root.path().join("next.exe");
+        let displaced = fixture.root.path().join("displaced.exe");
+        let foreign = b"foreign entry survives";
+        let mut launches = 0;
+        let failure = publish_replacement(
+            (&fixture.target, &destination),
+            &fixture.stage,
+            &fixture.backup,
+            &fixture.identity,
+            &fixture.stage_identity,
+            replace_file,
+            |path| {
+                launches += 1;
+                assert_eq!(path, destination.as_path());
+                match substituted {
+                    "destination" => {
+                        fs::rename(&destination, &displaced).unwrap();
+                        fs::write(&destination, foreign).unwrap();
+                    }
+                    "backup" => {
+                        fs::rename(&fixture.backup, &displaced).unwrap();
+                        fs::write(&fixture.backup, foreign).unwrap();
+                    }
+                    "original" => fs::write(&fixture.target, foreign).unwrap(),
+                    "stage" => fs::write(&fixture.stage, foreign).unwrap(),
+                    _ => unreachable!(),
+                }
+                Err(LaunchFailure::Spawn("simulated spawn failure".into()))
+            },
+        )
+        .expect_err("substituted recovery path must stop rollback");
+        assert_eq!(launches, 1, "{substituted}");
+        assert!(failure.preserve_backup, "{substituted}: {failure:?}");
+        assert!(!failure.cleanup_taken, "{substituted}");
+        let foreign_path = match substituted {
+            "destination" => &destination,
+            "backup" => &fixture.backup,
+            "original" => &fixture.target,
+            "stage" => &fixture.stage,
+            _ => unreachable!(),
+        };
+        assert_eq!(fs::read(foreign_path).unwrap(), foreign, "{substituted}");
+        if substituted == "backup" {
+            assert!(is_original(&displaced, &fixture.identity));
+        } else {
+            assert!(is_original(&fixture.backup, &fixture.identity));
+        }
+        if substituted == "destination" {
+            assert_eq!(fs::read(&displaced).unwrap(), REPLACEMENT);
+        } else {
+            assert_eq!(fs::read(&destination).unwrap(), REPLACEMENT);
+        }
+    }
+}
+
+#[test]
+fn revalidated_identical_pe_with_new_identity_is_not_admitted_after_handoff() {
+    let fixture = Fixture::new();
+    fs::remove_file(&fixture.stage).unwrap();
+    fs::copy(std::env::current_exe().unwrap(), &fixture.stage).unwrap();
+    let size = fs::metadata(&fixture.stage).unwrap().len();
+    let mut file = File::open(&fixture.stage).unwrap();
+    let mut hash = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer).unwrap();
+        if count == 0 {
+            break;
+        }
+        hash.update(&buffer[..count]);
+    }
+    drop(file);
+    let digest: [u8; 32] = hash.finalize().into();
+    let admitted = verify_staged(&fixture.stage, size, &digest).unwrap();
+    assert_eq!(
+        authorized_stage_identity(&fixture.stage, Some(&admitted), size, &digest).unwrap(),
+        Some(admitted.clone())
+    );
+    OpenOptions::new()
+        .append(true)
+        .open(&fixture.stage)
+        .unwrap()
+        .write_all(b"changed")
+        .unwrap();
+    assert!(same_file_id(
+        &file_identity(&fixture.stage).unwrap(),
+        &admitted
+    ));
+    assert_eq!(
+        authorized_stage_identity(&fixture.stage, Some(&admitted), size, &digest).unwrap(),
+        None,
+        "an altered admitted file must remain evidence"
+    );
+    OpenOptions::new()
+        .write(true)
+        .open(&fixture.stage)
+        .unwrap()
+        .set_len(size)
+        .unwrap();
+    let displaced = fixture.root.path().join("admitted-stage.exe");
+    fs::rename(&fixture.stage, &displaced).unwrap();
+    fs::copy(&displaced, &fixture.stage).unwrap();
+    let replacement_identity = verify_staged(&fixture.stage, size, &digest).unwrap();
+    assert!(!same_file_id(&replacement_identity, &admitted));
+
+    let mut handoff = config();
+    handoff.target_identity = fixture.identity.clone();
+    handoff.working_directory = wide(fixture.root.path().as_os_str());
+    handoff.arguments.clear();
+    handoff.size = size;
+    handoff.sha256 = digest;
+    let failure = install_after_exit(
+        &handoff,
+        &fixture.target,
+        &fixture.target,
+        &fixture.directory,
+        &admitted,
+    )
+    .expect_err("same bytes at a substituted stage must not be installed");
+    assert!(failure.message.contains("identity changed"), "{failure:?}");
+    assert!(is_original(&fixture.target, &fixture.identity));
+    assert!(same_file_id(
+        &file_identity(&fixture.stage).unwrap(),
+        &replacement_identity
+    ));
+    assert!(same_file_id(&file_identity(&displaced).unwrap(), &admitted));
+    assert!(!fixture.backup.exists());
+}
+
+fn case_rename_fixture() -> (Fixture, PathBuf) {
+    let mut fixture = Fixture::new();
+    let original = fixture.root.path().join(canonical_test_name("2.0.0-Alpha"));
+    let destination = fixture.root.path().join(canonical_test_name("2.0.0-alpha"));
+    fs::rename(&fixture.target, &original).expect("give the original its canonical old name");
+    fixture.target = original;
+    (fixture, destination)
+}
+
+fn assert_entry_spelling(root: &Path, present: &Path, absent: &Path) {
+    let names: Vec<OsString> = fs::read_dir(root)
+        .expect("read the fixture directory")
+        .map(|entry| entry.expect("read the fixture entry").file_name())
+        .collect();
+    assert!(
+        names
+            .iter()
+            .any(|name| name == present.file_name().unwrap()),
+        "the directory must contain the exact requested spelling: {names:?}"
+    );
+    assert!(
+        names.iter().all(|name| name != absent.file_name().unwrap()),
+        "the previous spelling must not remain as a directory entry: {names:?}"
+    );
+}
+
+#[test]
+fn case_only_update_publishes_the_exact_canonical_directory_entry() {
+    let (fixture, destination) = case_rename_fixture();
+    let mut launched = Vec::new();
+    publish_replacement(
+        (&fixture.target, &destination),
+        &fixture.stage,
+        &fixture.backup,
+        &fixture.identity,
+        &fixture.stage_identity,
+        replace_file,
+        |path| {
+            launched.push(path.to_path_buf());
+            assert_entry_spelling(fixture.root.path(), &destination, &fixture.target);
+            assert_eq!(fs::read(path).unwrap(), REPLACEMENT);
+            Ok(())
+        },
+    )
+    .expect("publish the canonical name with its exact case");
+    assert_eq!(launched, vec![destination.clone()]);
+    assert_entry_spelling(fixture.root.path(), &destination, &fixture.target);
+    assert!(is_original(&fixture.backup, &fixture.identity));
+    assert!(!fixture.stage.exists());
+}
+
+#[test]
+fn failed_case_only_spawn_restores_the_original_directory_entry_spelling() {
+    let (fixture, destination) = case_rename_fixture();
+    let mut launched = Vec::new();
+    let failure = publish_replacement(
+        (&fixture.target, &destination),
+        &fixture.stage,
+        &fixture.backup,
+        &fixture.identity,
+        &fixture.stage_identity,
+        replace_file,
+        |path| {
+            launched.push(path.to_path_buf());
+            if path == destination.as_path() {
+                assert_entry_spelling(fixture.root.path(), &destination, &fixture.target);
+                Err(LaunchFailure::Spawn("simulated spawn failure".into()))
+            } else {
+                assert_eq!(path, fixture.target.as_path());
+                assert_entry_spelling(fixture.root.path(), &fixture.target, &destination);
+                assert_eq!(fs::read(path).unwrap(), ORIGINAL);
+                Ok(())
+            }
+        },
+    )
+    .expect_err("a failed spawn must restore the original spelling");
+    assert!(failure.cleanup_taken, "{failure:?}");
+    assert!(!failure.preserve_backup);
+    assert_eq!(launched, vec![destination.clone(), fixture.target.clone()]);
+    assert_entry_spelling(fixture.root.path(), &fixture.target, &destination);
+    assert!(is_original(&fixture.target, &fixture.identity));
+    assert_eq!(fs::read(&fixture.stage).unwrap(), REPLACEMENT);
+    assert!(!fixture.backup.exists());
+}
+
+#[test]
+fn case_only_rename_race_never_clobbers_a_new_entry_or_loses_the_backup() {
+    let (fixture, destination) = case_rename_fixture();
+    if resolve_destination(&fixture.target, &destination).unwrap() != Destination::SameEntry {
+        // On a case-sensitive directory this is a normal vacant-name move,
+        // already covered by destination_created_after_preflight.
+        return;
+    }
+    replace_file(&fixture.target, &fixture.stage, Some(&fixture.backup)).unwrap();
+    let replacement = open_rename_source(&fixture.target, &fixture.stage_identity, false).unwrap();
+    rename_open_file(&replacement, &fixture.stage).unwrap();
+    let displaced = fixture.root.path().join("displaced.exe");
+    assert!(fs::rename(&fixture.stage, &displaced).is_err());
+    fs::write(&destination, b"concurrent foreign file").unwrap();
+    assert!(rename_open_file(&replacement, &destination).is_err());
+    drop(replacement);
+
+    let failure = recovery_failure(
+        &fixture.target,
+        &fixture.backup,
+        &fixture.identity,
+        &fixture.stage_identity,
+        "case-only destination appeared".into(),
+        &mut |_| panic!("a foreign original path must not be launched"),
+    );
+    assert!(failure.preserve_backup, "{failure:?}");
+    assert!(!failure.cleanup_taken);
+    assert_eq!(fs::read(&destination).unwrap(), b"concurrent foreign file");
+    assert_eq!(fs::read(&fixture.stage).unwrap(), REPLACEMENT);
+    assert!(is_original(&fixture.backup, &fixture.identity));
+}
+
+#[test]
+fn case_only_post_spawn_handoff_failure_keeps_new_spelling_and_backup() {
+    let (fixture, destination) = case_rename_fixture();
+    let mut launches = 0;
+    let failure = publish_replacement(
+        (&fixture.target, &destination),
+        &fixture.stage,
+        &fixture.backup,
+        &fixture.identity,
+        &fixture.stage_identity,
+        replace_file,
+        |path| {
+            launches += 1;
+            assert_eq!(path, destination.as_path());
+            Err(LaunchFailure::Handoff("withheld acknowledgement".into()))
+        },
+    )
+    .expect_err("post-spawn failure must not roll back");
+    assert_eq!(launches, 1);
+    assert!(failure.preserve_backup);
+    assert!(!failure.cleanup_taken);
+    assert_entry_spelling(fixture.root.path(), &destination, &fixture.target);
+    assert_eq!(fs::read(&destination).unwrap(), REPLACEMENT);
+    assert!(is_original(&fixture.backup, &fixture.identity));
+}
+
+#[test]
+fn case_only_stage_collision_leaves_foreign_file_and_backup_untouched() {
+    let (fixture, destination) = case_rename_fixture();
+    if resolve_destination(&fixture.target, &destination).unwrap() != Destination::SameEntry {
+        return;
+    }
+    let failure = publish_replacement(
+        (&fixture.target, &destination),
+        &fixture.stage,
+        &fixture.backup,
+        &fixture.identity,
+        &fixture.stage_identity,
+        |target, stage, backup| {
+            replace_file(target, stage, backup)?;
+            fs::write(stage, b"foreign stage").unwrap();
+            Ok(())
+        },
+        |_| panic!("a foreign stage must not be launched or overwritten"),
+    )
+    .expect_err("a stage collision must preserve the backup");
+    assert!(failure.preserve_backup, "{failure:?}");
+    assert!(!failure.cleanup_taken);
+    assert_eq!(fs::read(&fixture.stage).unwrap(), b"foreign stage");
+    assert_eq!(fs::read(&fixture.target).unwrap(), REPLACEMENT);
+    assert!(is_original(&fixture.backup, &fixture.identity));
+    assert_entry_spelling(fixture.root.path(), &fixture.target, &destination);
+}
+
+#[test]
+fn failed_case_only_spawn_does_not_replace_substituted_recovery_entries() {
+    for substituted in ["destination", "backup", "stage"] {
+        let (fixture, destination) = case_rename_fixture();
+        let displaced = fixture.root.path().join("displaced.exe");
+        let foreign = b"foreign recovery entry";
+        let mut launches = 0;
+        let failure = publish_replacement(
+            (&fixture.target, &destination),
+            &fixture.stage,
+            &fixture.backup,
+            &fixture.identity,
+            &fixture.stage_identity,
+            replace_file,
+            |path| {
+                launches += 1;
+                assert_eq!(path, destination.as_path());
+                match substituted {
+                    "destination" => {
+                        fs::rename(&destination, &displaced).unwrap();
+                        fs::write(&destination, foreign).unwrap();
+                    }
+                    "backup" => {
+                        fs::rename(&fixture.backup, &displaced).unwrap();
+                        fs::write(&fixture.backup, foreign).unwrap();
+                    }
+                    "stage" => fs::write(&fixture.stage, foreign).unwrap(),
+                    _ => unreachable!(),
+                }
+                Err(LaunchFailure::Spawn("simulated spawn failure".into()))
+            },
+        )
+        .expect_err("substituted recovery entries must stop rollback");
+        assert_eq!(launches, 1, "{substituted}");
+        assert!(failure.preserve_backup, "{substituted}: {failure:?}");
+        assert!(!failure.cleanup_taken);
+        let foreign_path = match substituted {
+            "destination" => &destination,
+            "backup" => &fixture.backup,
+            "stage" => &fixture.stage,
+            _ => unreachable!(),
+        };
+        assert_eq!(fs::read(foreign_path).unwrap(), foreign, "{substituted}");
+        if substituted == "backup" {
+            assert!(is_original(&displaced, &fixture.identity));
+        } else {
+            assert!(is_original(&fixture.backup, &fixture.identity));
+        }
+        if substituted == "destination" {
+            assert_eq!(fs::read(&displaced).unwrap(), REPLACEMENT);
+        } else {
+            assert_eq!(fs::read(&destination).unwrap(), REPLACEMENT);
         }
     }
 }

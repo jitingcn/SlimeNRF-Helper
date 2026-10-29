@@ -16,7 +16,7 @@ use std::{
         io::{AsRawHandle, FromRawHandle, OwnedHandle},
         process::CommandExt,
     },
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         Mutex, OnceLock,
@@ -29,12 +29,13 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use windows_sys::Win32::{
-    Foundation::{FILETIME, HANDLE, WAIT_OBJECT_0},
+    Foundation::{FILETIME, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0},
     Security::Cryptography::{BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom},
     Storage::FileSystem::{
-        BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
-        FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-        GetFileInformationByHandle, MoveFileExW, ReplaceFileW,
+        BY_HANDLE_FILE_INFORMATION, DELETE, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_RENAME_INFO, FILE_SHARE_DELETE,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, FileRenameInfo, FindClose, FindFirstFileW,
+        GetFileInformationByHandle, ReplaceFileW, SetFileInformationByHandle, WIN32_FIND_DATAW,
     },
     System::Pipes::{CreatePipe, PIPE_NOWAIT, PeekNamedPipe, SetNamedPipeHandleState},
     System::Threading::{
@@ -45,7 +46,7 @@ use windows_sys::Win32::{
     UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MB_TOPMOST, MessageBoxW},
 };
 
-use super::DownloadedUpdate;
+use super::{DownloadedUpdate, release::Target};
 
 const HELPER_FLAG: &str = "--slimenrf-internal-update-helper";
 const INTERNAL_PREFIX: &str = "--slimenrf-internal-update-";
@@ -155,6 +156,7 @@ struct HelperConfig {
     nonce: [u8; 16],
     locale: String,
     target: Vec<u16>,
+    final_name: Vec<u16>,
     working_directory: Vec<u16>,
     arguments: Vec<Vec<u16>>,
     target_identity: FileIdentity,
@@ -241,6 +243,25 @@ fn optional_identity(path: &Path) -> Result<Option<FileIdentity>, String> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(format!("Cannot inspect {}: {error}", path.display())),
     }
+}
+
+fn authorized_stage_identity(
+    path: &Path,
+    admitted: Option<&FileIdentity>,
+    size: u64,
+    sha256: &[u8; 32],
+) -> Result<Option<FileIdentity>, String> {
+    let actual = optional_identity(path)?;
+    let Some(expected) = admitted else {
+        return Ok(None);
+    };
+    if !actual.is_some_and(|identity| same_file_id(&identity, expected)) {
+        return Ok(None);
+    }
+    // A changed stage must remain evidence, not become eligible for cleanup.
+    Ok(verify_staged(path, size, sha256)
+        .ok()
+        .filter(|identity| same_file_id(identity, expected)))
 }
 
 fn identity_from_info(
@@ -493,6 +514,12 @@ fn prepare_helper(downloaded: &DownloadedUpdate) -> Result<Helper, String> {
     let parent = target
         .parent()
         .ok_or("The executable has no parent directory")?;
+    let final_name = Target::current()?.installation_name(
+        target.file_name().ok_or("The executable has no filename")?,
+        &downloaded.release,
+    )?;
+    let final_target = destination_from_name(target, &wide(&final_name))?;
+    resolve_destination(target, &final_target)?;
     if file_identity(target)? != image.identity {
         return Err(
             "The executable changed after this application started; the update was not installed"
@@ -520,6 +547,7 @@ fn prepare_helper(downloaded: &DownloadedUpdate) -> Result<Helper, String> {
         nonce: random_nonce()?,
         locale: rust_i18n::locale().to_string(),
         target: wide(target.as_os_str()),
+        final_name: wide(&final_name),
         working_directory: wide(
             std::env::current_dir()
                 .map_err(|error| format!("Cannot retain the current directory: {error}"))?
@@ -678,6 +706,126 @@ fn validate_layout(directory: &Path, target: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn destination_from_name(target: &Path, name: &[u16]) -> Result<PathBuf, String> {
+    let name = path_from_wide(name)?;
+    let mut components = name.components();
+    if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
+        return Err("Invalid update destination filename".into());
+    }
+    let original = target.file_name().ok_or("The executable has no filename")?;
+    if name.as_os_str() != original {
+        let platform = Target::current()?;
+        if !platform.is_canonical_asset_name(original)
+            || !platform.is_canonical_asset_name(name.as_os_str())
+        {
+            return Err("Invalid update destination for this executable".into());
+        }
+    }
+    Ok(target.with_file_name(name))
+}
+
+fn directory_entry_name(path: &Path) -> Option<OsString> {
+    // FindFirstFile searches both long and short names, so reject wildcard
+    // patterns and compare the actual directory entry returned by the OS.
+    if wide(path.file_name()?)
+        .iter()
+        .any(|unit| *unit == b'*' as u16 || *unit == b'?' as u16)
+    {
+        return None;
+    }
+    let path = nul_wide(path).ok()?;
+    let mut data = WIN32_FIND_DATAW::default();
+    // SAFETY: path is NUL-terminated and data points to writable storage.
+    let search = unsafe { FindFirstFileW(path.as_ptr(), &mut data) };
+    if search == INVALID_HANDLE_VALUE {
+        return None;
+    }
+    // SAFETY: search is a valid FindFirstFile search handle.
+    unsafe { FindClose(search) };
+    let end = data.cFileName.iter().position(|unit| *unit == 0)?;
+    Some(OsString::from_wide(&data.cFileName[..end]))
+}
+
+fn same_directory_entry(target: &Path, destination: &Path) -> bool {
+    if target.parent() != destination.parent() {
+        return false;
+    }
+    let Some((left, right)) = directory_entry_name(target).zip(directory_entry_name(destination))
+    else {
+        return false;
+    };
+    if left != right
+        || !file_identity(target)
+            .ok()
+            .zip(file_identity(destination).ok())
+            .is_some_and(|(left, right)| left == right)
+    {
+        return false;
+    }
+    let Some(name) = left.to_str() else {
+        return false;
+    };
+    let Some(parent) = target.parent() else {
+        return false;
+    };
+    let Ok(entries) = fs::read_dir(parent) else {
+        return false;
+    };
+    // Case-sensitive directories may contain distinct entries differing only
+    // in case, including hardlinks. Refuse an ambiguous case-insensitive match.
+    let mut matches = 0;
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|entry| entry.eq_ignore_ascii_case(name))
+        {
+            matches += 1;
+            if matches > 1 {
+                return false;
+            }
+        }
+    }
+    matches == 1
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Destination {
+    InPlace,
+    Vacant,
+    SameEntry,
+}
+
+fn resolve_destination(target: &Path, destination: &Path) -> Result<Destination, String> {
+    if destination == target {
+        return Ok(Destination::InPlace);
+    }
+    match fs::symlink_metadata(destination) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Destination::Vacant),
+        Err(error) => Err(format!(
+            "Cannot inspect update destination {}: {error}",
+            destination.display()
+        )),
+        Ok(metadata) => {
+            // Matching file IDs are insufficient: distinct hardlinks are
+            // separate entries and must remain collisions.
+            if metadata.is_file()
+                && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0
+                && same_directory_entry(target, destination)
+            {
+                return Ok(Destination::SameEntry);
+            }
+            Err(format!(
+                "The update destination already exists: {}",
+                destination.display()
+            ))
+        }
+    }
+}
+
 fn read_config(input: &mut impl Read) -> Result<HelperConfig, String> {
     let mut length = [0_u8; 4];
     input
@@ -745,6 +893,7 @@ fn abandon_uncommitted(
     target: &Path,
     helper: &Path,
     directory: &Path,
+    stage_identity: &FileIdentity,
 ) {
     // SAFETY: this is the exact authenticated parent handle; a zero timeout
     // only observes whether its process has already exited.
@@ -774,6 +923,7 @@ fn abandon_uncommitted(
             directory,
             cleanup::TakeoverMode::CleanupOnly,
             LaunchImage::Original(&config.target_identity),
+            Some(stage_identity),
         )
     } else {
         Err(LaunchFailure::Spawn(
@@ -801,12 +951,14 @@ fn helper_main() -> Result<(), String> {
         let config = read_config(&mut input)?;
         let target = path_from_wide(&config.target)?;
         validate_layout(&directory, &target)?;
+        let final_target = destination_from_name(&target, &config.final_name)?;
+        resolve_destination(&target, &final_target)?;
         let parent = open_parent(&config, &target)?;
         let stage = directory.join(STAGED_NAME);
-        verify_staged(&stage, config.size, &config.sha256)?;
-        Ok::<_, String>((config, target, parent))
+        let stage_identity = verify_staged(&stage, config.size, &config.sha256)?;
+        Ok::<_, String>((config, target, final_target, parent, stage_identity))
     })();
-    let (config, target, parent) = match preparation {
+    let (config, target, final_target, parent, stage_identity) = match preparation {
         Ok(value) => value,
         Err(error) => {
             if send_line(&mut output, &error).is_err() {
@@ -819,7 +971,14 @@ fn helper_main() -> Result<(), String> {
         }
     };
     if send_line(&mut output, &response(READY, &config.nonce)).is_err() {
-        abandon_uncommitted(&parent, &config, &target, &helper, &directory);
+        abandon_uncommitted(
+            &parent,
+            &config,
+            &target,
+            &helper,
+            &directory,
+            &stage_identity,
+        );
         return Ok(());
     }
     if !read_commit(
@@ -828,11 +987,25 @@ fn helper_main() -> Result<(), String> {
         parent.as_raw_handle().cast(),
         &config.nonce,
     ) {
-        abandon_uncommitted(&parent, &config, &target, &helper, &directory);
+        abandon_uncommitted(
+            &parent,
+            &config,
+            &target,
+            &helper,
+            &directory,
+            &stage_identity,
+        );
         return Ok(());
     }
     if send_line(&mut output, &response(ACK, &config.nonce)).is_err() {
-        abandon_uncommitted(&parent, &config, &target, &helper, &directory);
+        abandon_uncommitted(
+            &parent,
+            &config,
+            &target,
+            &helper,
+            &directory,
+            &stage_identity,
+        );
         return Ok(());
     }
     drop(output);
@@ -849,7 +1022,7 @@ fn helper_main() -> Result<(), String> {
         );
         return Err("Cannot wait for original process".into());
     }
-    let outcome = install_after_exit(&config, &target, &directory);
+    let outcome = install_after_exit(&config, &target, &final_target, &directory, &stage_identity);
     if let Err(error) = &outcome {
         let message = if error.cleanup_taken {
             error.message.clone()
@@ -904,15 +1077,90 @@ fn replace_file(target: &Path, replacement: &Path, backup: Option<&Path>) -> Res
     Ok(())
 }
 
-fn move_file_no_replace(source: &Path, target: &Path) -> Result<(), String> {
-    let source = nul_wide(source)?;
-    let target = nul_wide(target)?;
-    // SAFETY: both pointers name NUL-terminated UTF-16 paths. Zero flags
-    // refuse an existing target instead of replacing a concurrently created file.
-    if unsafe { MoveFileExW(source.as_ptr(), target.as_ptr(), 0) } == 0 {
-        return Err(io::Error::last_os_error().to_string());
+fn open_rename_source(source: &Path, expected: &FileIdentity, exact: bool) -> Result<File, String> {
+    let file = OpenOptions::new()
+        .access_mode(DELETE | FILE_READ_ATTRIBUTES)
+        .share_mode(FILE_SHARE_READ)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(source)
+        .map_err(|error| format!("Cannot open {} for rename: {error}", source.display()))?;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: file owns a valid handle and info is a writable output buffer.
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle().cast(), &mut info) } == 0 {
+        return Err(format!(
+            "Cannot identify {}: {}",
+            source.display(),
+            io::Error::last_os_error()
+        ));
+    }
+    if info.dwFileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0 {
+        return Err(format!(
+            "{} is not a regular, non-reparse file",
+            source.display()
+        ));
+    }
+    let actual = identity_from_info(source, &info)?;
+    let matches = if exact {
+        &actual == expected
+    } else {
+        same_file_id(&actual, expected)
+    };
+    if !matches {
+        return Err(format!("The identity of {} changed", source.display()));
+    }
+    Ok(file)
+}
+
+fn rename_open_file(source: &File, destination: &Path) -> Result<(), String> {
+    let name = nul_wide(destination)?;
+    let name_bytes = (name.len() - 1)
+        .checked_mul(std::mem::size_of::<u16>())
+        .and_then(|length| u32::try_from(length).ok())
+        .ok_or("Update destination filename is too long")?;
+    let length = std::mem::offset_of!(FILE_RENAME_INFO, FileName)
+        .checked_add(name.len() * std::mem::size_of::<u16>())
+        .ok_or("Update destination filename is too long")?
+        .max(std::mem::size_of::<FILE_RENAME_INFO>());
+    let buffer_size =
+        u32::try_from(length).map_err(|_| "Update destination filename is too long")?;
+    // usize storage provides the alignment required by FILE_RENAME_INFO.
+    let mut storage = vec![0_usize; length.div_ceil(std::mem::size_of::<usize>())];
+    let info = storage.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+    // SAFETY: storage is aligned and large enough for the header and UTF-16
+    // name, including its terminator. Zero initialization sets ReplaceIfExists
+    // to false and RootDirectory to null.
+    unsafe {
+        (*info).FileNameLength = name_bytes;
+        std::ptr::copy_nonoverlapping(
+            name.as_ptr(),
+            std::ptr::addr_of_mut!((*info).FileName).cast::<u16>(),
+            name.len(),
+        );
+        if SetFileInformationByHandle(
+            source.as_raw_handle().cast(),
+            FileRenameInfo,
+            info.cast(),
+            buffer_size,
+        ) == 0
+        {
+            return Err(format!(
+                "Cannot rename to {} without replacing an existing entry: {}",
+                destination.display(),
+                io::Error::last_os_error()
+            ));
+        }
     }
     Ok(())
+}
+
+fn move_verified_no_replace(
+    source: &Path,
+    destination: &Path,
+    expected: &FileIdentity,
+    exact: bool,
+) -> Result<(), String> {
+    let file = open_rename_source(source, expected, exact)?;
+    rename_open_file(&file, destination)
 }
 
 fn same_file_id(left: &FileIdentity, right: &FileIdentity) -> bool {
@@ -932,41 +1180,37 @@ fn restore_original(
     if is_original(target, expected) {
         return Ok(());
     }
-    if !is_original(backup, expected) {
-        return Err(format!(
-            "The original executable could not be located. Backup retained at: {}",
+    // Keep the checked backup handle pinned through recovery so a substituted
+    // pathname can never be moved over the user's executable.
+    let backup_guard = open_rename_source(backup, expected, true).map_err(|error| {
+        format!(
+            "The original executable could not be safely located: {error}. Backup retained at: {}",
             backup.display()
-        ));
-    }
+        )
+    })?;
     match fs::symlink_metadata(target) {
         Ok(metadata)
             if metadata.is_file()
                 && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0 =>
         {
-            let admitted = allowed_replacement.is_some_and(|replacement| {
-                file_identity(target).is_ok_and(|current| same_file_id(&current, replacement))
-            });
-            if !admitted {
-                return Err(format!(
+            let replacement = allowed_replacement.ok_or_else(|| {
+                format!(
                     "The executable path now names a different file. Backup retained at: {}",
                     backup.display()
-                ));
-            }
-            replace_file(target, backup, None).map_err(|error| {
+                )
+            })?;
+            let stage = backup
+                .parent()
+                .ok_or("The backup has no parent directory")?
+                .join(STAGED_NAME);
+            move_verified_no_replace(target, &stage, replacement, false).map_err(|error| {
                 format!(
-                    "Cannot restore the original executable: {error}. Backup retained at: {}",
+                    "Cannot safely retain the replacement during recovery: {error}. Backup retained at: {}",
                     backup.display()
                 )
             })?;
         }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            move_file_no_replace(backup, target).map_err(|error| {
-                format!(
-                    "Cannot restore the original executable: {error}. Backup retained at: {}",
-                    backup.display()
-                )
-            })?;
-        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Ok(_) => {
             return Err(format!(
                 "The executable path is no longer a regular file. Backup retained at: {}",
@@ -980,6 +1224,12 @@ fn restore_original(
             ));
         }
     }
+    rename_open_file(&backup_guard, target).map_err(|error| {
+        format!(
+            "Cannot restore the original executable: {error}. Backup retained at: {}",
+            backup.display()
+        )
+    })?;
     if !is_original(target, expected) {
         return Err(format!(
             "Cannot confirm the restored executable. Backup retained at: {}",
@@ -1147,6 +1397,7 @@ fn launch(
     directory: &Path,
     mode: cleanup::TakeoverMode,
     admitted: LaunchImage<'_>,
+    admitted_stage: Option<&FileIdentity>,
 ) -> Result<(), LaunchFailure> {
     // Keep this handle open through CreateProcess so neither an in-place
     // writer nor a rename can substitute the executable we just admitted.
@@ -1202,7 +1453,12 @@ fn launch(
             helper_path: wide(helper.as_os_str()),
             helper_identity: file_identity(helper)?,
             directory_identity: cleanup::directory_identity(directory)?,
-            stage_identity: optional_identity(&directory.join(STAGED_NAME))?,
+            stage_identity: authorized_stage_identity(
+                &directory.join(STAGED_NAME),
+                admitted_stage,
+                config.size,
+                &config.sha256,
+            )?,
             backup_identity,
             target: wide(target.as_os_str()),
             target_identity: actual.clone(),
@@ -1301,7 +1557,9 @@ fn backup_present(path: &Path) -> bool {
 fn install_after_exit(
     config: &HelperConfig,
     target: &Path,
+    final_target: &Path,
     directory: &Path,
+    admitted_stage: &FileIdentity,
 ) -> Result<(), InstallFailure> {
     let stage = directory.join(STAGED_NAME);
     let backup = directory.join(BACKUP_NAME);
@@ -1320,7 +1578,14 @@ fn install_after_exit(
             cleanup_taken: false,
         });
     }
-    let stage_identity = match verify_staged(&stage, config.size, &config.sha256) {
+    let verified_stage = verify_staged(&stage, config.size, &config.sha256).and_then(|identity| {
+        if same_file_id(&identity, admitted_stage) {
+            Ok(identity)
+        } else {
+            Err("The staged executable identity changed; the update was not installed".into())
+        }
+    });
+    let stage_identity = match verified_stage {
         Ok(identity) => identity,
         Err(error) => {
             let result = launch(
@@ -1330,6 +1595,7 @@ fn install_after_exit(
                 directory,
                 cleanup::TakeoverMode::Restart,
                 LaunchImage::Original(&config.target_identity),
+                None,
             );
             let cleanup_taken = result.is_ok();
             return Err(InstallFailure {
@@ -1360,10 +1626,11 @@ fn install_after_exit(
             directory,
             cleanup::TakeoverMode::Restart,
             admitted,
+            Some(&stage_identity),
         )
     };
     publish_replacement(
-        target,
+        (target, final_target),
         &stage,
         &backup,
         &config.target_identity,
@@ -1413,8 +1680,32 @@ fn recovery_failure(
     }
 }
 
-fn publish_replacement(
+fn restore_renamed_original(
     target: &Path,
+    final_target: &Path,
+    stage: &Path,
+    backup: &Path,
+    identity: &FileIdentity,
+    stage_identity: &FileIdentity,
+) -> Result<(), String> {
+    let backup_guard = open_rename_source(backup, identity, true)?;
+    match fs::symlink_metadata(target) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Ok(_) if same_directory_entry(target, final_target) => {}
+        Err(error) => return Err(format!("Cannot inspect the original path: {error}")),
+        Ok(_) => return Err("The original executable path is occupied".into()),
+    }
+    let replacement = open_rename_source(final_target, stage_identity, false)?;
+    rename_open_file(&replacement, stage)?;
+    rename_open_file(&backup_guard, target)?;
+    if !is_original(target, identity) {
+        return Err("Cannot confirm the restored original executable".into());
+    }
+    Ok(())
+}
+
+fn publish_replacement(
+    (target, final_target): (&Path, &Path),
     stage: &Path,
     backup: &Path,
     identity: &FileIdentity,
@@ -1444,6 +1735,19 @@ fn publish_replacement(
             cleanup_taken: false,
         });
     }
+    let destination = match resolve_destination(target, final_target) {
+        Ok(destination) => destination,
+        Err(error) => {
+            return Err(recovery_failure(
+                target,
+                backup,
+                identity,
+                stage_identity,
+                error,
+                &mut launch,
+            ));
+        }
+    };
     if let Err(error) = replace(target, stage, Some(backup)) {
         return Err(recovery_failure(
             target,
@@ -1464,16 +1768,80 @@ fn publish_replacement(
             cleanup_taken: false,
         });
     }
-    match launch(target) {
+    if destination != Destination::InPlace {
+        let renamed = match destination {
+            Destination::SameEntry => {
+                open_rename_source(target, stage_identity, false).and_then(|replacement| {
+                    // The destination is an alias for the current entry, so
+                    // make both moves without replacement while retaining the
+                    // same identity-pinned handle.
+                    rename_open_file(&replacement, stage)?;
+                    rename_open_file(&replacement, final_target)
+                })
+            }
+            Destination::Vacant => {
+                move_verified_no_replace(target, final_target, stage_identity, false)
+            }
+            Destination::InPlace => unreachable!(),
+        };
+        if let Err(error) = renamed {
+            return Err(recovery_failure(
+                target,
+                backup,
+                identity,
+                stage_identity,
+                format!("The update could not be renamed: {error}"),
+                &mut launch,
+            ));
+        }
+        let original_path_safe = match destination {
+            Destination::SameEntry => {
+                same_directory_entry(target, final_target)
+                    && directory_entry_name(final_target).as_deref() == final_target.file_name()
+            }
+            Destination::Vacant => !backup_present(target),
+            Destination::InPlace => unreachable!(),
+        };
+        if !file_identity(final_target).is_ok_and(|current| same_file_id(&current, stage_identity))
+            || !is_original(backup, identity)
+            || !original_path_safe
+        {
+            return Err(InstallFailure {
+                message: "The renamed executable, original path or backup changed; no application was launched".into(),
+                preserve_backup: true,
+                cleanup_taken: false,
+            });
+        }
+    }
+    match launch(final_target) {
         Ok(()) => Ok(()),
-        Err(LaunchFailure::Spawn(error)) => Err(recovery_failure(
-            target,
-            backup,
-            identity,
-            stage_identity,
-            format!("The updated application could not start: {error}"),
-            &mut launch,
-        )),
+        Err(LaunchFailure::Spawn(error)) => {
+            let reason = format!("The updated application could not start: {error}");
+            if destination != Destination::InPlace
+                && let Err(recovery) = restore_renamed_original(
+                    target,
+                    final_target,
+                    stage,
+                    backup,
+                    identity,
+                    stage_identity,
+                )
+            {
+                return Err(InstallFailure {
+                    message: format!("{reason}. Cannot safely restore the original: {recovery}"),
+                    preserve_backup: true,
+                    cleanup_taken: false,
+                });
+            }
+            Err(recovery_failure(
+                target,
+                backup,
+                identity,
+                stage_identity,
+                reason,
+                &mut launch,
+            ))
+        }
         Err(LaunchFailure::Handoff(error)) => Err(InstallFailure {
             message: format!(
                 "The updated application started, but cleanup handoff failed: {error}. No rollback was attempted; the original backup is at {}.",

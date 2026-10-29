@@ -278,6 +278,152 @@ fn asset_selection_requires_the_exact_architecture_variant_and_filename() {
 }
 
 #[test]
+fn installation_name_updates_only_canonical_names_for_the_current_target() {
+    let targets = [
+        (x64_full(), X64_FULL),
+        (
+            Target {
+                arch: Architecture::X64,
+                variant: Variant::NoFirmware,
+            },
+            X64_NO_FIRMWARE,
+        ),
+        (
+            Target {
+                arch: Architecture::Arm64,
+                variant: Variant::Full,
+            },
+            ARM64_FULL,
+        ),
+        (
+            Target {
+                arch: Architecture::Arm64,
+                variant: Variant::NoFirmware,
+            },
+            ARM64_NO_FIRMWARE,
+        ),
+    ];
+    for (target, selected_name) in targets {
+        let release = frozen(newer_release(), selected_name, target);
+        for old_version in ["0.1.0", "0.3.0", "1.2.3", "2.0.0-rc.1+build.7"] {
+            let old_name = target.asset_name(&Version::parse(old_version).unwrap());
+            assert_eq!(
+                target
+                    .installation_name(OsStr::new(&old_name), &release)
+                    .unwrap(),
+                OsString::from(selected_name),
+                "{target:?}, stale filename {old_name:?}"
+            );
+        }
+        for other in [
+            "application.exe",
+            "slimenrf-helper-v0.3.0-windows-x64.exe",
+            "slimenrf-helper-01.2.3-windows-x64.exe",
+            "slimenrf-helper-0.3.0-windows-x64-upx.exe",
+            "slimenrf-helper-0.3.0-windows-x64.EXE",
+            "other/slimenrf-helper-0.3.0-windows-x64.exe",
+            "slimenrf-helper-0.3.0-linux-x64.exe",
+            "slimenrf-helper-0.3.0-windows-x86.exe",
+        ] {
+            assert_eq!(
+                target
+                    .installation_name(OsStr::new(other), &release)
+                    .unwrap(),
+                OsString::from(other),
+                "{target:?}, custom filename {other:?}"
+            );
+        }
+        for (other_target, _) in targets {
+            if other_target == target {
+                continue;
+            }
+            let other = other_target.asset_name(&Version::parse("0.3.0").unwrap());
+            assert_eq!(
+                target
+                    .installation_name(OsStr::new(&other), &release)
+                    .unwrap(),
+                OsString::from(other.as_str()),
+                "{target:?}, foreign filename {other:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn installation_name_uses_the_frozen_full_prerelease_and_build_name() {
+    let target = x64_full();
+    let selected_name = "slimenrf-helper-2.0.0-rc.1+build.7-windows-x64.exe";
+    let candidate = selected("v2.0.0-rc.1+build.7", Channel::Preview, "1.0.0").unwrap();
+    let release = frozen(candidate, selected_name, target);
+    assert_eq!(
+        target
+            .installation_name(
+                OsStr::new("slimenrf-helper-0.3.0-windows-x64.exe"),
+                &release
+            )
+            .unwrap(),
+        OsString::from(selected_name)
+    );
+}
+
+#[test]
+fn preview_semver_case_change_selects_the_exact_new_asset_name() {
+    let target = x64_full();
+    let name = "slimenrf-helper-2.0.0-alpha-windows-x64.exe";
+    let candidate = selected("v2.0.0-alpha", Channel::Preview, "2.0.0-Alpha")
+        .expect("lowercase alpha has greater SemVer precedence");
+    let release = frozen(candidate, name, target);
+    assert_eq!(
+        target
+            .installation_name(
+                OsStr::new("slimenrf-helper-2.0.0-Alpha-windows-x64.exe"),
+                &release,
+            )
+            .unwrap(),
+        OsString::from(name)
+    );
+}
+
+#[test]
+fn installation_name_rejects_unmatched_or_invalid_frozen_metadata() {
+    let target = x64_full();
+    let mut release = frozen(newer_release(), X64_FULL, target);
+    for name in [
+        X64_NO_FIRMWARE,
+        ARM64_FULL,
+        "slimenrf-helper-1.2.2-windows-x64.exe",
+        "../slimenrf-helper-1.2.3-windows-x64.exe",
+    ] {
+        release.asset.name = name.into();
+        assert!(
+            target
+                .installation_name(OsStr::new("custom.exe"), &release)
+                .is_err()
+        );
+    }
+    release.asset.name = X64_FULL.into();
+    for version in ["v1.2.3", "01.2.3", "1.2.2", "1.2.3+other"] {
+        release.version = version.into();
+        assert!(
+            target
+                .installation_name(OsStr::new("custom.exe"), &release)
+                .is_err()
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn installation_name_preserves_non_unicode_custom_filename() {
+    use std::os::windows::ffi::OsStringExt;
+
+    let target = x64_full();
+    let release = frozen(newer_release(), X64_FULL, target);
+    let name = OsString::from_wide(&[b'a' as u16, 0xd800, b'.' as u16, b'e' as u16]);
+    assert_eq!(target.installation_name(&name, &release).unwrap(), name);
+}
+
+#[test]
 fn exact_asset_name_uses_normalized_full_semver_including_suffixes() {
     for (tag, expected, prerelease) in [
         ("v1.2.3", X64_FULL, false),

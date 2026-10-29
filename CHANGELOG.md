@@ -13,6 +13,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - Source builds now require Rust 1.99 or newer, aligning the declared minimum with the pinned development toolchain's minor release.
 
+### Fixed
+
+- Windows portable updates rename official versioned executables to the new release's filename while preserving custom names and refusing destination collisions. This takes effect when updating from a version containing the fix.
+
 ## [0.3.0] - 2026-10-29
 
 ### Added
