@@ -22,6 +22,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Fixed
 
 - Wireless firmware-information query failures appear only on the affected device card, without duplicate warnings in the top results area.
+- Builds from the exact matching release tag display the version without a commit hash, including prereleases. Development builds and modified local release checkouts retain their build identity.
 
 ## [0.2.0] - 2026-10-28
 

@@ -97,6 +97,26 @@ impl Git<'_> {
         let output = String::from_utf8(output).ok()?;
         Some(output.trim_end_matches(['\r', '\n']).to_owned())
     }
+
+    fn tag_points_at(&self, reference: &str, head: &str) -> bool {
+        // Enumerate the actual ref name first: a loose ref lookup can otherwise
+        // match a differently cased filename on a case-insensitive filesystem.
+        let Some(refs) = self.text(&[
+            "for-each-ref",
+            "--format=%(refname) %(objectname)",
+            reference,
+        ]) else {
+            return false;
+        };
+        let Some(object) = refs.lines().find_map(|line| {
+            let (name, object) = line.split_once(' ')?;
+            (name == reference && valid_sha(object)).then_some(object)
+        }) else {
+            return false;
+        };
+        self.text(&["rev-parse", "--verify", &format!("{object}^{{commit}}")])
+            .is_some_and(|commit| commit == head)
+    }
 }
 
 fn resolve_version(
@@ -111,8 +131,9 @@ fn resolve_version(
         root,
         executable: git_executable,
     };
+    let release_tag = format!("refs/tags/v{base}");
     let sha = repository(&git).and_then(|repository| {
-        repository.watch_git_files(&git, &mut watched);
+        repository.watch_git_files(&git, &release_tag, &mut watched);
         let missing = if in_actions {
             BTreeSet::new()
         } else {
@@ -136,10 +157,11 @@ fn resolve_version(
                     watch_deleted_files(&git, &status, &missing, &mut watched);
                     !status.is_empty()
                 });
-        Some((head, dirty))
+        let release = !dirty && git.tag_points_at(&release_tag, &head);
+        Some((head, dirty, release))
     });
     let (sha, dirty) = match sha.as_ref() {
-        Some((head, dirty)) => (Some(head.as_str()), *dirty),
+        Some((head, dirty, release)) => ((!*release).then_some(head.as_str()), *dirty),
         None => (actions_sha.filter(|_| in_actions), false),
     };
     BuildVersion {
@@ -176,7 +198,7 @@ fn repository(git: &Git<'_>) -> Option<Repository> {
 }
 
 impl Repository {
-    fn watch_git_files(&self, git: &Git<'_>, watched: &mut BTreeSet<PathBuf>) {
+    fn watch_git_files(&self, git: &Git<'_>, release_tag: &str, watched: &mut BTreeSet<PathBuf>) {
         // Linked worktrees have a .git file whose target can change; normal .git
         // directories must not be watched recursively.
         watch_file(&git.root.join(".git"), watched);
@@ -185,7 +207,16 @@ impl Repository {
         watch_file(&self.git_dir.join("index"), watched);
         watch_file(&self.common_dir.join("packed-refs"), watched);
 
-        let mut next = symbolic_reference(&head);
+        self.watch_ref_chain(git, symbolic_reference(&head), watched);
+        self.watch_ref_chain(git, Some(release_tag.to_owned()), watched);
+    }
+
+    fn watch_ref_chain(
+        &self,
+        git: &Git<'_>,
+        mut next: Option<String>,
+        watched: &mut BTreeSet<PathBuf>,
+    ) {
         let mut seen = BTreeSet::new();
         while let Some(reference) = next {
             if !reference.starts_with("refs/")

@@ -214,6 +214,14 @@ fn assert_watched(snapshot: &super::BuildVersion, path: &Path) {
     );
 }
 
+fn assert_ref_creation_watched(snapshot: &super::BuildVersion, reference: &Path) {
+    let mut parent = reference.parent().expect("ref has a parent");
+    while !parent.is_dir() {
+        parent = parent.parent().expect("refs directory exists");
+    }
+    assert_watched(snapshot, parent);
+}
+
 fn assert_not_watched(snapshot: &super::BuildVersion, path: &Path) {
     assert!(
         !is_watched(snapshot, path),
@@ -383,6 +391,107 @@ fn tracked_changes_reverts_and_exclusions_update_the_version() {
 }
 
 #[test]
+fn exact_release_tags_use_the_base_version_only_when_clean() {
+    if !isolated_git_test("exact_release_tags_use_the_base_version_only_when_clean") {
+        return;
+    }
+    let Some(fixture) = GitFixture::new() else {
+        return;
+    };
+    let root = &fixture.root;
+    let head = fixture.head(root);
+    let dev = format!("1.2.3+{}", short(&head));
+    let dirty = format!("{dev}.dirty");
+    let other_event_sha = if short(&head) == "aaaaaaa" {
+        "b".repeat(40)
+    } else {
+        "a".repeat(40)
+    };
+
+    assert_eq!(version(root, "1.2.3", false, None).display, dev);
+    fixture.git(root, &["tag", "v1.2.30"]);
+    fixture.git(root, &["tag", "V1.2.3"]);
+    assert_eq!(version(root, "1.2.3", false, None).display, dev);
+    fixture.git(root, &["tag", "-d", "V1.2.3"]);
+
+    fixture.git(root, &["tag", "v1.2.3"]);
+    let snapshot = version(root, "1.2.3", false, None);
+    assert_eq!(snapshot.display, "1.2.3");
+    assert_watched(&snapshot, &root.join(".git/refs/tags/v1.2.3"));
+    assert_safe_watches(&snapshot, root, &[]);
+    assert_eq!(
+        version(root, "1.2.3", true, Some(&other_event_sha)).display,
+        "1.2.3"
+    );
+
+    fixture.write(TRACKED, b"modified release checkout\n");
+    assert_eq!(version(root, "1.2.3", false, None).display, dirty);
+    assert_eq!(
+        version(root, "1.2.3", true, Some(&other_event_sha)).display,
+        "1.2.3"
+    );
+    fixture.git(root, &["checkout", "--", TRACKED]);
+
+    fixture.git(root, &["tag", "-d", "v1.2.3"]);
+    fixture.git(root, &["tag", "-a", "v1.2.3", "-m", "annotated release"]);
+    assert_eq!(
+        fixture.git(root, &["cat-file", "-t", "refs/tags/v1.2.3"]),
+        "tag"
+    );
+    fixture.git(root, &["checkout", "--quiet", "--detach", "HEAD"]);
+    assert_eq!(version(root, "1.2.3", false, None).display, "1.2.3");
+
+    let prerelease = "1.2.3-rc.1+build.7";
+    fixture.git(root, &["tag", "v1.2.3-rc.1+build.7"]);
+    assert_eq!(version(root, prerelease, false, None).display, prerelease);
+    fixture.write(TRACKED, b"modified prerelease checkout\n");
+    let metadata = version(root, prerelease, false, None).display;
+    assert_eq!(
+        metadata,
+        format!("1.2.3-rc.1+build.7.{}.dirty", short(&head))
+    );
+    semver::Version::parse(&metadata).expect("dirty prerelease remains valid SemVer");
+}
+
+#[test]
+fn annotated_release_tag_must_point_to_head_after_commits_and_moves() {
+    if !isolated_git_test("annotated_release_tag_must_point_to_head_after_commits_and_moves") {
+        return;
+    }
+    let Some(fixture) = GitFixture::new() else {
+        return;
+    };
+    let root = &fixture.root;
+    let original = fixture.head(root);
+    fixture.git(root, &["tag", "-a", "v1.2.3", "-m", "first release"]);
+    assert_eq!(version(root, "1.2.3", false, None).display, "1.2.3");
+
+    fixture.write(TRACKED, b"commit after release\n");
+    fixture.git(root, &["add", "--", TRACKED]);
+    fixture.git(root, &["commit", "--quiet", "-m", "commit after release"]);
+    let head = fixture.head(root);
+    assert_ne!(head, original);
+    let dev = format!("1.2.3+{}", short(&head));
+    let snapshot = version(root, "1.2.3", false, None);
+    assert_eq!(snapshot.display, dev);
+    assert_watched(&snapshot, &root.join(".git/refs/tags/v1.2.3"));
+    assert_eq!(version(root, "1.2.3", true, Some(&original)).display, dev);
+
+    fixture.git(
+        root,
+        &["tag", "-f", "-a", "v1.2.3", "-m", "moved to head", "HEAD"],
+    );
+    assert_eq!(version(root, "1.2.3", false, None).display, "1.2.3");
+    fixture.git(
+        root,
+        &["tag", "-f", "-a", "v1.2.3", "-m", "moved back", &original],
+    );
+    assert_eq!(version(root, "1.2.3", false, None).display, dev);
+    fixture.git(root, &["tag", "-d", "v1.2.3"]);
+    assert_eq!(version(root, "1.2.3", false, None).display, dev);
+}
+
+#[test]
 fn detached_head_and_commits_use_the_checked_out_commit() {
     if !isolated_git_test("detached_head_and_commits_use_the_checked_out_commit") {
         return;
@@ -502,16 +611,24 @@ fn linked_worktree_uses_its_git_dir_and_shared_refs() {
     );
     assert!(worktree.join(".git").is_file());
     let branch_ref = common_dir.join("refs/heads/linked-fixture");
+    let tag_ref = common_dir.join("refs/tags/v1.2.3");
     let snapshot = version(&worktree, "1.2.3", false, None);
     assert_eq!(snapshot.display, format!("1.2.3+{}", short(&original)));
     assert_watched(&snapshot, &worktree.join(".git"));
     assert_watched(&snapshot, &git_dir.join("HEAD"));
     assert_watched(&snapshot, &git_dir.join("index"));
     assert_watched(&snapshot, &branch_ref);
+    assert_ref_creation_watched(&snapshot, &tag_ref);
     assert_watched(&snapshot, &worktree.join(TRACKED));
     assert_not_watched(&snapshot, &git_dir);
     assert_not_watched(&snapshot, &common_dir);
     assert_safe_watches(&snapshot, &worktree, &[]);
+
+    fixture.git(&fixture.root, &["tag", "v1.2.3"]);
+    let snapshot = version(&worktree, "1.2.3", false, None);
+    assert_eq!(snapshot.display, "1.2.3");
+    assert_watched(&snapshot, &tag_ref);
+    assert_not_watched(&snapshot, &common_dir);
 
     fs::write(worktree.join(TRACKED), b"linked worktree change\n").expect("modify linked worktree");
     let snapshot = version(&worktree, "1.2.3", false, None);
@@ -534,6 +651,157 @@ fn linked_worktree_uses_its_git_dir_and_shared_refs() {
     assert_watched(&snapshot, &git_dir.join("index"));
     assert_watched(&snapshot, &branch_ref);
     assert_safe_watches(&snapshot, &worktree, &[]);
+
+    fixture.git(&fixture.root, &["tag", "-f", "v1.2.3", &linked_head]);
+    assert_eq!(version(&worktree, "1.2.3", false, None).display, "1.2.3");
+    fixture.git(&fixture.root, &["pack-refs", "--all", "--prune"]);
+    let snapshot = version(&worktree, "1.2.3", false, None);
+    assert_eq!(snapshot.display, "1.2.3");
+    assert_watched(&snapshot, &common_dir.join("packed-refs"));
+    assert_ref_creation_watched(&snapshot, &tag_ref);
+    assert_not_watched(&snapshot, &tag_ref);
+    assert_not_watched(&snapshot, &common_dir);
+    assert_safe_watches(&snapshot, &worktree, &[]);
+
+    fixture.git(&fixture.root, &["tag", "-f", "v1.2.3", &original]);
+    let snapshot = version(&worktree, "1.2.3", false, None);
+    assert_eq!(snapshot.display, format!("1.2.3+{}", short(&linked_head)));
+    assert_watched(&snapshot, &tag_ref);
+    assert_watched(&snapshot, &common_dir.join("packed-refs"));
+    fixture.git(&fixture.root, &["tag", "-d", "v1.2.3"]);
+    let snapshot = version(&worktree, "1.2.3", false, None);
+    assert_eq!(snapshot.display, format!("1.2.3+{}", short(&linked_head)));
+    assert_ref_creation_watched(&snapshot, &tag_ref);
+    assert_safe_watches(&snapshot, &worktree, &[]);
+}
+
+fn assert_incremental_version(fixture: &GitFixture, expected: &str, expected_runs: usize) {
+    let mut command = Command::new(option_env!("CARGO").unwrap_or("cargo"));
+    command
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .args(["run", "--offline", "--quiet", "--manifest-path"])
+        .arg(fixture.root.join("crates/app/Cargo.toml"))
+        .env(
+            "CARGO_TARGET_DIR",
+            fixture.directory.path().join("incremental target"),
+        )
+        .env_remove("CARGO_BUILD_TARGET")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("RUSTFLAGS")
+        .env_remove("RUSTC_WRAPPER")
+        .env_remove("RUSTC_WORKSPACE_WRAPPER")
+        .env("GITHUB_ACTIONS", "false")
+        .env_remove("GITHUB_SHA");
+    isolate_git_environment(&mut command, fixture.directory.path());
+    // Keep rustup's real home while isolating Git's configuration and variables.
+    for key in ["HOME", "USERPROFILE", "XDG_CONFIG_HOME"] {
+        if let Some(value) = env::var_os(key) {
+            command.env(key, value);
+        } else {
+            command.env_remove(key);
+        }
+    }
+    let output = command.output().expect("run incremental Cargo fixture");
+    let stdout = String::from_utf8(output.stdout).expect("Cargo fixture output is UTF-8");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "incremental Cargo fixture failed: stdout={stdout} stderr={stderr}"
+    );
+    assert_eq!(
+        stdout.trim(),
+        expected,
+        "incremental Cargo output: {stderr}"
+    );
+    let runs = fs::read_to_string(fixture.root.join("version-runs"))
+        .expect("read build-script invocation log")
+        .lines()
+        .count();
+    assert_eq!(runs, expected_runs, "incremental Cargo output: {stderr}");
+}
+
+#[test]
+fn incremental_cargo_build_tracks_tag_creation_packing_moves_and_deletion() {
+    let Some(fixture) = GitFixture::new() else {
+        return;
+    };
+    let app = fixture.root.join("crates/app");
+    fs::create_dir_all(app.join("src")).expect("create incremental fixture");
+    fixture.write(
+        "Cargo.toml",
+        b"[workspace]\nmembers = [\"crates/app\"]\nresolver = \"3\"\n",
+    );
+    fs::write(
+        app.join("Cargo.toml"),
+        b"[package]\nname = \"version-watch-fixture\"\nversion = \"1.2.3\"\nedition = \"2024\"\n",
+    )
+    .expect("write incremental fixture manifest");
+    fs::write(
+        app.join("src/main.rs"),
+        b"fn main() { println!(\"{}\", env!(\"SLIMENRF_BUILD_DISPLAY_VERSION\")); }\n",
+    )
+    .expect("write incremental fixture executable");
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("build_support/build_version.rs");
+    let build_script = format!(
+        "#[path = {source:?}]\nmod build_version;\n\
+         fn main() {{\n\
+         use std::io::Write as _;\n\
+         let root = std::path::PathBuf::from(std::env::var_os(\"CARGO_MANIFEST_DIR\").unwrap()).join(\"../..\");\n\
+         let mut log = std::fs::OpenOptions::new().create(true).append(true).open(root.join(\"version-runs\")).unwrap();\n\
+         writeln!(log, \"run\").unwrap();\n\
+         build_version::emit_build_version();\n\
+         }}\n"
+    );
+    fs::write(app.join("build.rs"), build_script).expect("write incremental fixture build script");
+    fixture.git(&fixture.root, &["add", "--", "Cargo.toml", "crates/app"]);
+    fixture.git(
+        &fixture.root,
+        &["commit", "--quiet", "-m", "incremental Cargo fixture"],
+    );
+    let root = &fixture.root;
+    let head = fixture.head(root);
+    let dev = format!("1.2.3+{}", short(&head));
+    let tree = fixture.git(root, &["rev-parse", "HEAD^{tree}"]);
+    let alternate = fixture.git(
+        root,
+        &["commit-tree", &tree, "-p", &head, "-m", "alternate commit"],
+    );
+
+    assert_incremental_version(&fixture, &dev, 1);
+    assert_incremental_version(&fixture, &dev, 1);
+
+    // Allow coarse filesystem timestamps to advance beyond Cargo's last build.
+    let tick = || std::thread::sleep(std::time::Duration::from_millis(1100));
+    tick();
+    fixture.git(root, &["tag", "-a", "v1.2.3", "-m", "release"]);
+    assert_incremental_version(&fixture, "1.2.3", 2);
+    tick();
+    fixture.git(root, &["pack-refs", "--all", "--prune"]);
+    assert_incremental_version(&fixture, "1.2.3", 3);
+    tick();
+    fixture.git(
+        root,
+        &["tag", "-f", "-a", "v1.2.3", "-m", "move away", &alternate],
+    );
+    assert_incremental_version(&fixture, &dev, 4);
+    tick();
+    fixture.git(
+        root,
+        &["tag", "-f", "-a", "v1.2.3", "-m", "move back", &head],
+    );
+    assert_incremental_version(&fixture, "1.2.3", 5);
+    tick();
+    fixture.git(root, &["tag", "-d", "v1.2.3"]);
+    assert_incremental_version(&fixture, &dev, 6);
+    tick();
+    fixture.git(root, &["tag", "v1.2.3"]);
+    assert_incremental_version(&fixture, "1.2.3", 7);
+    tick();
+    fixture.write(TRACKED, b"incremental dirty change\n");
+    assert_incremental_version(&fixture, &format!("{dev}.dirty"), 8);
+    tick();
+    fixture.git(root, &["checkout", "--", TRACKED]);
+    assert_incremental_version(&fixture, "1.2.3", 9);
 }
 
 #[test]
@@ -786,4 +1054,43 @@ fn emits_cargo_directives_in_a_child_process() {
         Some(&fallback),
     );
     assert_emitted(&stdout, &format!("1.2.3+{}.dirty", short(&head)));
+
+    fixture.git(
+        &fixture.root,
+        &["tag", "-a", "v1.2.3", "-m", "emitter release"],
+    );
+    let stdout = emit_in_child(
+        &manifest,
+        &cwd,
+        directory.path(),
+        Some("true"),
+        Some(&fallback),
+    );
+    assert_emitted(&stdout, "1.2.3");
+    let stdout = emit_in_child(
+        &manifest,
+        &cwd,
+        directory.path(),
+        Some("false"),
+        Some(&fallback),
+    );
+    assert_emitted(&stdout, &format!("1.2.3+{}.dirty", short(&head)));
+    fixture.git(&fixture.root, &["checkout", "--", TRACKED]);
+    let stdout = emit_in_child(
+        &manifest,
+        &cwd,
+        directory.path(),
+        Some("false"),
+        Some(&fallback),
+    );
+    assert_emitted(&stdout, "1.2.3");
+    fixture.git(&fixture.root, &["tag", "-d", "v1.2.3"]);
+    let stdout = emit_in_child(
+        &manifest,
+        &cwd,
+        directory.path(),
+        Some("false"),
+        Some(&fallback),
+    );
+    assert_emitted(&stdout, &format!("1.2.3+{}", short(&head)));
 }

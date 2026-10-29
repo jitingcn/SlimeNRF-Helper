@@ -24,9 +24,9 @@ The scripts support build, run, test, check, clippy, fmt, and clean. Build defau
 
 Cargo automatically chooses build parallelism from the available CPUs; set `CARGO_BUILD_JOBS` to override it. For test actions, nextest's `--build-jobs` controls build parallelism, whereas `-j` / `--jobs` controls concurrent test execution.
 
-The application displays a build identity such as `0.2.0+abcdef0` for a clean checkout and `0.2.0+abcdef0.dirty` when tracked files have staged or unstaged changes. Ignored and untracked files do not make it dirty. CI prefers the actual checkout HEAD; when Git metadata is unavailable, a source archive displays the base version, or a validated GitHub Actions SHA if available. This display identity does not change the Cargo release version, release tags or asset names, or update comparisons.
+When the exact Git tag `v<Cargo version>` points to HEAD, a clean checkout displays only the Cargo version, such as `0.2.0` or `0.2.0-rc.1`. Both lightweight and annotated tags are supported; GitHub's prerelease designation does not add a hash. Other development checkouts display `0.2.0+abcdef0`. Local tracked changes retain `0.2.0+abcdef0.dirty`, even on a matching tag; ignored and untracked files do not make it dirty. CI ignores worktree dirtiness and prefers the actual checkout HEAD. Without Git metadata, a source archive displays the base version, or a validated GitHub Actions SHA suffix if available. This display identity does not change release tags, asset names, or update comparisons.
 
-For incremental builds, Cargo watches individual Git metadata and tracked inputs rather than the entire checkout. A deleted tracked input can cause the build script to rerun while it remains absent; after restoration, unchanged builds can be fresh again.
+For incremental builds, Cargo watches individual Git metadata and tracked inputs rather than the entire checkout. Watches also cover creation, movement, deletion, and packing of the matching release tag. A deleted tracked input can cause the build script to rerun while it remains absent; after restoration, unchanged builds can be fresh again.
 
 <a id="windows"></a>
 ## Windows
