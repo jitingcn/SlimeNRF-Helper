@@ -1,21 +1,11 @@
 use super::*;
 
 pub(super) fn query_failure(receiver: &ReceiverEndpoint, id: u8, error: String) -> QueryFailure {
-    query_failure_identity(&receiver.key, receiver.label.clone(), id, error)
+    query_failure_identity(&receiver.key, id, error)
 }
 
-fn query_failure_identity(
-    receiver_key: &str,
-    receiver_label: String,
-    id: u8,
-    error: String,
-) -> QueryFailure {
-    let label = if id == esb_ota::RECEIVER_ID {
-        receiver_label
-    } else {
-        format!("{} · #{}", receiver_label, id)
-    };
-    (format!("{receiver_key}:{id}"), (label, Err(error)))
+fn query_failure_identity(receiver_key: &str, id: u8, error: String) -> QueryFailure {
+    (format!("{receiver_key}:{id}"), error)
 }
 
 impl From<firmware_update::QueryResults> for OtaQueries {
@@ -26,12 +16,7 @@ impl From<firmware_update::QueryResults> for OtaQueries {
                 .failures
                 .into_iter()
                 .map(|failure| {
-                    query_failure_identity(
-                        &failure.receiver_key,
-                        failure.receiver_label,
-                        failure.id,
-                        failure.error,
-                    )
+                    query_failure_identity(&failure.receiver_key, failure.id, failure.error)
                 })
                 .collect(),
         }
@@ -486,9 +471,7 @@ impl FlashState {
     }
 
     pub(super) fn apply_queries(&mut self, query: OtaQueries) {
-        if std::mem::take(&mut self.reveal_query_results) {
-            self.query_results_dismissed = false;
-        }
+        self.preserve_query_card_layout = false;
         self.review = None;
         self.acknowledged = false;
         let preferred = query

@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - UF2 and OpenDFU updates show a graphical progress bar, transferred bytes, and percentage; unknown totals remain indeterminate, and 100% waits for the final operation result.
 - Receiver self-update uses a three-second activation-observation budget instead of a prolonged reconnect wait. Missing confirmation ends with **Transfer complete; activation not confirmed**, preserving the available diagnostic evidence.
 
+### Fixed
+
+- Wireless firmware-information query failures appear only on the affected device card, without duplicate warnings in the top results area.
+
 ## [0.2.0] - 2026-10-28
 
 ### Added

@@ -10,27 +10,23 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 #[test]
-fn manual_retry_resolves_final_failure_without_showing_an_empty_results_panel() {
+fn manual_retry_resolves_failed_target() {
     let refreshed = target("a", 1, "board");
     let mut state = FlashState {
         query_failures: [query_failure(&refreshed.receiver, 1, "timeout".into())].into(),
         ..FlashState::default()
     };
-    state.dismiss_results(Mode::Esb);
     state.prepare_action_results(&Action::QueryGroups(OtaQueryPlan {
         groups: vec![(refreshed.receiver.clone(), vec![query_link("a", 1)], false)],
         automatic: false,
         incremental: true,
     }));
     assert!(state.query_failures.contains_key("a:1"));
-    assert!(!state.shows_query_results(Mode::Esb));
     state.apply_queries(OtaQueries {
         targets: vec![refreshed],
         failures: vec![],
     });
     assert!(state.query_failures.is_empty());
-    assert!(!state.query_results_dismissed);
-    assert!(!state.shows_query_results(Mode::Esb));
 }
 
 #[test]
@@ -69,23 +65,15 @@ fn manual_scoped_retry_keeps_failed_card_and_unrelated_state_until_result() {
         automatic: false,
         incremental: true,
     });
-    assert!(state.shows_query_results(Mode::Esb));
     state.prepare_action_results(&action);
     state.pending = Some(action.clone());
     state.activity_kind = crate::ui::flash::ActivityKind::Query;
-    assert!(state.shows_query_results(Mode::Esb));
     assert!(state.querying_receiver("a"));
     assert!(!state.querying_receiver("b"));
     assert!(state.preserves_query_layout("a"));
     assert!(!state.preserves_query_layout("b"));
-    assert_eq!(
-        state.query_failures["a:1"].1.as_ref().unwrap_err(),
-        "retry A"
-    );
-    assert_eq!(
-        state.query_failures["b:0"].1.as_ref().unwrap_err(),
-        "keep B"
-    );
+    assert_eq!(state.query_failures["a:1"], "retry A");
+    assert_eq!(state.query_failures["b:0"], "keep B");
     assert_eq!(
         tracker_section(&requested, None, false, true),
         TrackerSection::Error
@@ -111,10 +99,7 @@ fn manual_scoped_retry_keeps_failed_card_and_unrelated_state_until_result() {
         failures: vec![],
     });
     assert!(!state.query_failures.contains_key("a:1"));
-    assert_eq!(
-        state.query_failures["b:0"].1.as_ref().unwrap_err(),
-        "keep B"
-    );
+    assert_eq!(state.query_failures["b:0"], "keep B");
     assert_eq!(state.targets[0].info.version, other.info.version);
     assert_eq!(state.targets[1].info.version, "refreshed");
     assert_eq!(state.selected_targets, [ota_target_key(&other)].into());
@@ -252,10 +237,7 @@ fn incremental_query_preserves_unrelated_failures_and_completed_flash_outcome() 
         incremental: true,
     });
     state.prepare_action_results(&action);
-    assert_eq!(
-        state.query_failures["a:0"].1.as_ref().unwrap_err(),
-        "A timed out"
-    );
+    assert_eq!(state.query_failures["a:0"], "A timed out");
     assert!(!state.query_failures.contains_key("b:0"));
     assert_eq!(state.results[0].0.key, "completed device");
     assert_eq!(state.results[0].1, crate::update::UpdateOutcome::Completed);
@@ -282,14 +264,8 @@ fn incremental_query_preserves_unrelated_failures_and_completed_flash_outcome() 
         failures: vec![query_failure(&b, 0, "new B failure".into())],
     });
     assert_eq!(state.query_failures.len(), 2);
-    assert_eq!(
-        state.query_failures["a:0"].1.as_ref().unwrap_err(),
-        "A timed out"
-    );
-    assert_eq!(
-        state.query_failures["b:0"].1.as_ref().unwrap_err(),
-        "new B failure"
-    );
+    assert_eq!(state.query_failures["a:0"], "A timed out");
+    assert_eq!(state.query_failures["b:0"], "new B failure");
     assert_eq!(state.results[0].0.key, "completed device");
     assert_eq!(state.results[0].1, crate::update::UpdateOutcome::Completed);
     let full = Action::QueryGroups(OtaQueryPlan {
@@ -655,7 +631,7 @@ fn failed_refresh_keeps_successful_information_selection_and_assignment() {
     };
     state.apply_queries(OtaQueries {
         targets: vec![target("a", RECEIVER_ID, "receiver")],
-        failures: vec![("a:0".into(), ("a · #0".into(), Err("timeout".into())))],
+        failures: vec![("a:0".into(), "timeout".into())],
     });
     assert_eq!(state.targets.len(), 2);
     assert_eq!(state.selected_targets, [ota_target_key(&tracker)].into());

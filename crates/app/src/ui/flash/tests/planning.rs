@@ -145,7 +145,7 @@ fn refresh_preserves_explicit_selection_without_selecting_new_targets() {
             requested.clone(),
             receiver.clone(),
         ],
-        failures: vec![("lost".into(), ("lost".into(), Err("disconnected".into())))],
+        failures: vec![("lost".into(), "disconnected".into())],
     });
     assert_eq!(state.selected_targets, [ota_target_key(&previous)].into());
     assert!(!state.selected_targets.contains(&ota_target_key(&receiver)));

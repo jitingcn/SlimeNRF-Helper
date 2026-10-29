@@ -53,7 +53,6 @@ pub(crate) enum ResultIdentity {
 
 pub(crate) struct QueryFailure {
     pub receiver_key: String,
-    pub receiver_label: String,
     pub id: u8,
     pub error: String,
 }
@@ -62,7 +61,6 @@ impl QueryFailure {
     fn new(receiver: &ReceiverEndpoint, id: u8, error: String) -> Self {
         Self {
             receiver_key: receiver.key.clone(),
-            receiver_label: receiver.label.clone(),
             id,
             error,
         }

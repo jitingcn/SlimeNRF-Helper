@@ -89,7 +89,7 @@ impl Workbench {
             .and_then(|serial| receiver.label.strip_suffix(serial))
             .and_then(|label| label.strip_suffix(" · "))
             .unwrap_or(&receiver.label);
-        let mut panel = flash_panel(cx)
+        let panel = flash_panel(cx)
             .border_color(cx.theme().border.opacity(0.45))
             .child(
                 div()
@@ -112,6 +112,11 @@ impl Workbench {
                         )),
                 )
             });
+        #[cfg(test)]
+        let panel = panel
+            .id(SharedString::from(format!("ota-receiver-card-{key}")))
+            .test_support();
+        let mut panel = panel;
         let online = observation.map_or(0, |o| o.trackers.iter().filter(|t| t.online).count());
         let selected = trackers
             .iter()
@@ -142,18 +147,26 @@ impl Workbench {
                 panel = panel.child(self.flash_esb_row(target_index, cx));
             }
         }
-        let query_error = self
-            .flash
-            .query_failures
-            .get(&format!("{}:{}", receiver.key, esb_ota::RECEIVER_ID))
-            .and_then(|(_, result)| result.as_ref().err());
+        let query_error =
+            self.flash
+                .query_failures
+                .get(&format!("{}:{}", receiver.key, esb_ota::RECEIVER_ID));
         if let Some(error) = query_error {
-            panel = panel.child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().warning)
-                    .child(error.clone()),
-            );
+            let diagnostic = div()
+                .text_xs()
+                .text_color(cx.theme().warning)
+                .child(error.clone());
+            #[cfg(test)]
+            let diagnostic = diagnostic
+                .id(SharedString::from(format!(
+                    "ota-query-error-{}-{}",
+                    receiver.key,
+                    esb_ota::RECEIVER_ID
+                )))
+                .role(Role::Label)
+                .aria_label(error.clone())
+                .test_support();
+            panel = panel.child(diagnostic);
         }
         if !has_firmware_info || query_error.is_some() {
             panel = panel.child(
@@ -183,8 +196,7 @@ impl Workbench {
                 let failed = self
                     .flash
                     .query_failures
-                    .get(&format!("{}:{}", receiver.key, tracker.slot))
-                    .is_some_and(|(_, result)| result.is_err());
+                    .contains_key(&format!("{}:{}", receiver.key, tracker.slot));
                 sections
                     .entry(tracker_section(
                         tracker,
@@ -358,8 +370,7 @@ impl Workbench {
         let failed = self
             .flash
             .query_failures
-            .get(&format!("{}:{}", tracker.receiver_key, tracker.slot))
-            .is_some_and(|(_, result)| result.is_err());
+            .contains_key(&format!("{}:{}", tracker.receiver_key, tracker.slot));
         let tps = self
             .monitor
             .observation(&tracker.receiver_key)
@@ -380,7 +391,7 @@ impl Workbench {
         } else {
             tr("firmware.error.wait_tracker_data")
         };
-        let mut card = div()
+        let card = div()
             .id(SharedString::from(format!("ota-card-{key}")))
             .min_w_0()
             .flex()
@@ -412,6 +423,9 @@ impl Workbench {
                 this.toggle_flash_tracker(&click_key);
                 cx.notify();
             }));
+        #[cfg(test)]
+        let card = card.test_support();
+        let mut card = card;
         let mut heading = div()
             .min_w_0()
             .flex()
@@ -509,18 +523,26 @@ impl Workbench {
                     })),
             );
         }
-        if let Some((_, Err(error))) = self
+        if let Some(error) = self
             .flash
             .query_failures
             .get(&format!("{}:{}", tracker.receiver_key, tracker.slot))
         {
             needs_info_refresh = true;
-            card = card.child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().warning)
-                    .child(error.clone()),
-            );
+            let diagnostic = div()
+                .text_xs()
+                .text_color(cx.theme().warning)
+                .child(error.clone());
+            #[cfg(test)]
+            let diagnostic = diagnostic
+                .id(SharedString::from(format!(
+                    "ota-query-error-{}-{}",
+                    tracker.receiver_key, tracker.slot
+                )))
+                .role(Role::Label)
+                .aria_label(error.clone())
+                .test_support();
+            card = card.child(diagnostic);
         }
         if needs_info_refresh {
             card = card.child(

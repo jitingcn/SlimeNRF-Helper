@@ -240,13 +240,28 @@ fn explicit_query_cancel_is_neutral_esb_only_and_preserves_uf2_outcome() {
         targets: vec![],
         failures: vec![query_failure(&receiver, 1, "real timeout".into())],
     });
-    assert!(state.shows_results(Mode::Esb));
+    assert!(!state.shows_results(Mode::Esb));
     assert_eq!(state.results.len(), 1);
     assert_eq!(state.error.as_deref(), Some("retained UF2 error"));
     state.results.clear();
     state.error = None;
     assert!(!state.shows_activity(Mode::Uf2));
     assert!(!state.shows_results(Mode::Uf2));
+}
+
+#[test]
+fn global_query_failure_remains_an_esb_activity_not_an_update_result() {
+    let state = FlashState {
+        query_error: Some("receiver query could not start".into()),
+        ..FlashState::default()
+    };
+    assert!(state.shows_activity(Mode::Esb));
+    assert!(!state.shows_results(Mode::Esb));
+    assert!(!state.shows_activity(Mode::Uf2));
+    assert_eq!(
+        state.query_error.as_deref(),
+        Some("receiver query could not start")
+    );
 }
 
 #[test]

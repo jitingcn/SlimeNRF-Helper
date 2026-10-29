@@ -188,19 +188,16 @@ fn ota_dismissal_and_finished_navigation_survive_queries_and_other_modes() {
     );
     let device = state.targets[0].clone();
     let refreshed_key = format!("{}:{}", device.receiver.key, device.id);
-    state.query_failures.insert(
-        refreshed_key.clone(),
-        ("Tracker".into(), Err("timeout".into())),
-    );
-    // The refreshed target's failure must resolve on success. Keep a different
-    // receiver's failure to exercise dismissed-result visibility independently.
-    state.query_failures.insert(
-        "b:0".into(),
-        ("Other tracker".into(), Err("unrelated timeout".into())),
-    );
+    state
+        .query_failures
+        .insert(refreshed_key.clone(), "timeout".into());
+    // A successful refresh must leave another receiver's failure intact.
+    state
+        .query_failures
+        .insert("b:0".into(), "unrelated timeout".into());
     state.dismiss_results(Mode::Esb);
-    assert!(state.shows_operation_results(Mode::Uf2));
-    assert!(!state.shows_query_results(Mode::Esb));
+    assert!(state.shows_results(Mode::Uf2));
+    assert!(!state.shows_results(Mode::Esb));
     assert_eq!(state.query_failures.len(), 2);
     for mode in [Mode::Uf2, Mode::Ble, Mode::OpenDfu, Mode::Esb] {
         state.transition_mode(mode);
@@ -219,7 +216,6 @@ fn ota_dismissal_and_finished_navigation_survive_queries_and_other_modes() {
             incremental: true,
         });
         state.prepare_action_results(&query);
-        assert!(!state.shows_query_results(Mode::Esb));
         state.activity_kind = crate::ui::flash::ActivityKind::Query;
         state.activity_origin = Mode::Esb;
         state.finish_job_progress(None);
@@ -228,22 +224,19 @@ fn ota_dismissal_and_finished_navigation_survive_queries_and_other_modes() {
             failures: vec![],
         });
         assert!(!state.query_failures.contains_key(&refreshed_key));
-        assert_eq!(
-            state.query_failures["b:0"].1.as_ref().unwrap_err(),
-            "unrelated timeout"
-        );
-        assert_eq!(state.shows_query_results(Mode::Esb), !automatic);
+        assert_eq!(state.query_failures["b:0"], "unrelated timeout");
+        assert!(!state.shows_results(Mode::Esb));
         state.reconcile_ota_step(Mode::Esb);
         assert_eq!(
             state.ota_presentation,
             crate::ui::flash::OtaPresentation::Finished
         );
         assert!(!state.ota_shows_next());
-        assert!(state.shows_operation_results(Mode::Uf2));
+        assert!(state.shows_results(Mode::Uf2));
     }
     state.dismiss_results(Mode::Uf2);
-    assert!(state.shows_query_results(Mode::Esb));
-    assert!(!state.shows_operation_results(Mode::Uf2));
+    assert!(!state.shows_results(Mode::Esb));
+    assert!(!state.shows_results(Mode::Uf2));
     assert_eq!(state.results.len(), 1);
     assert!(state.esb_auto_query.receivers.is_empty());
 }
@@ -549,4 +542,250 @@ fn confirmation_keeps_receivers_and_same_named_firmware_assignments_distinct() {
     assert!(std::ptr::eq(second[0].1, &groups[1]));
     assert_eq!(second[0].1.targets[0].id, first[0].1.targets[0].id);
     assert_ne!(first[0].1.image.digest, first[1].1.image.digest);
+}
+
+struct QueryCardHarness {
+    workbench: gpui_kit::Entity<crate::ui::Workbench>,
+}
+
+impl gpui_kit::Render for QueryCardHarness {
+    fn render(
+        &mut self,
+        _: &mut gpui_kit::Window,
+        cx: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
+        use gpui_kit::prelude::*;
+
+        self.workbench.update(cx, |this, cx| {
+            gpui_kit::div().size_full().child(this.flash_page(cx))
+        })
+    }
+}
+
+#[gpui_kit::test]
+fn query_diagnostics_remain_on_cards_while_flash_failures_remain_in_results(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::app_runtime::AppRuntime;
+    use crate::discovery::ReceiverMonitor;
+    use crate::ui::flash::{ActivityKind, OtaPresentation, ResultTarget, query_failure};
+    use crate::ui::test_support::{UiTestSession, offline_workbench};
+    use crate::ui::{FeaturePage, Workbench};
+    use crate::update::UpdateOutcome;
+    use gpui_kit::{
+        AppContext as _, Bounds, WindowBounds, WindowOptions, px, size, test::TestWindowExt as _,
+    };
+    use std::time::Instant;
+
+    let runtime = AppRuntime::new().expect("create isolated I/O runtime");
+    let preferences = tempfile::tempdir().expect("create isolated preference directory");
+    let _ui_session = UiTestSession::new(cx);
+    let first = target("a", 0, "board");
+    let second = target("a", 1, "board");
+    let receiver = first.receiver.clone();
+    let first_fixture = first.clone();
+    let second_fixture = second.clone();
+    let receiver_fixture = receiver.clone();
+    let executor = runtime.executor();
+    let preferences_path = preferences.path().join("preferences.json");
+    let (window, harness) = cx.update(|cx| {
+        gpui_kit::open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    Default::default(),
+                    size(px(1280.), px(1000.)),
+                ))),
+                ..Default::default()
+            },
+            cx,
+            move |window, cx| {
+                let workbench = cx.new(|cx| {
+                    let mut this: Workbench = offline_workbench(
+                        window,
+                        cx,
+                        crate::sessions::SessionManager::new(),
+                        executor,
+                    );
+                    this.preferences_io =
+                        crate::ui::preferences::PreferenceIo::for_test(preferences_path);
+                    this.active_page = FeaturePage::Ota;
+                    this.flash.mode = Mode::Esb;
+                    this.inventory.receivers.push(receiver_fixture.clone());
+                    this.monitor = ReceiverMonitor::fixture(
+                        receiver_fixture.clone(),
+                        first_fixture.id,
+                        first_fixture.address.as_deref().unwrap(),
+                        true,
+                    );
+                    this.monitor
+                        .fixture_observation_mut(&receiver_fixture)
+                        .trackers
+                        .push(TrackerLink {
+                            receiver_key: receiver_fixture.key.clone(),
+                            slot: second_fixture.id,
+                            address: second_fixture.address.clone(),
+                            online: true,
+                        });
+                    this.flash.targets.push(first_fixture);
+                    this.flash.apply_queries(OtaQueries {
+                        targets: vec![],
+                        failures: vec![
+                            query_failure(
+                                &receiver_fixture,
+                                RECEIVER_ID,
+                                "receiver timeout".into(),
+                            ),
+                            query_failure(&receiver_fixture, 0, "tracker timeout".into()),
+                            query_failure(&receiver_fixture, 1, "other tracker timeout".into()),
+                        ],
+                    });
+                    this
+                });
+                cx.new(|_| QueryCardHarness { workbench })
+            },
+        )
+        .expect("open the production wireless firmware page")
+    });
+    let workbench = cx.update(|cx| harness.read(cx).workbench.clone());
+    cx.update_window(window, |_, window, _| window.activate_window())
+        .expect("activate the wireless fixture");
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("flash-results-panel").is_none());
+        assert!(window.try_find("flash-results-dismiss").is_none());
+        assert!(window.try_find("firmware-activity-message").is_none());
+        let receiver_card = window.find("ota-receiver-card-a").bounds();
+        let receiver_error = window.find("ota-query-error-a-254");
+        assert_eq!(receiver_error.label(), Some("receiver timeout"));
+        assert!(receiver_error.bounds().top() >= receiver_card.top());
+        assert!(receiver_error.bounds().bottom() <= receiver_card.bottom());
+        let receiver_retry = window.find("ota-query-receiver-a");
+        assert!(receiver_retry.visible());
+        assert!(receiver_retry.bounds().top() >= receiver_card.top());
+        assert!(receiver_retry.bounds().bottom() <= receiver_card.bottom());
+        let tracker_card = window.find("ota-card-tracker:a:0").bounds();
+        let tracker_error = window.find("ota-query-error-a-0");
+        assert_eq!(tracker_error.label(), Some("tracker timeout"));
+        assert!(tracker_error.bounds().top() >= tracker_card.top());
+        assert!(tracker_error.bounds().bottom() <= tracker_card.bottom());
+        let retry = window.find("ota-query-tracker-a-0");
+        assert!(retry.visible());
+        assert_eq!(
+            retry.label(),
+            Some(crate::i18n::tr("firmware.query.retry_tracker").as_str())
+        );
+        assert!(retry.bounds().top() >= tracker_card.top());
+        assert!(retry.bounds().bottom() <= tracker_card.bottom());
+        assert_eq!(
+            window.find("ota-query-error-a-1").label(),
+            Some("other tracker timeout")
+        );
+        window.click("ota-query-tracker-a-0", cx);
+    })
+    .expect("inspect and retry the diagnostic on the actual tracker card");
+
+    workbench.read_with(cx, |this, _| {
+        let Some(Action::QueryGroups(plan)) = this.flash.pending.as_ref() else {
+            panic!("the card retry must reserve a scoped query");
+        };
+        assert!(!plan.automatic && plan.incremental);
+        assert_eq!(plan.groups.len(), 1);
+        assert_eq!(plan.groups[0].0.key, receiver.key);
+        assert_eq!(plan.groups[0].1.len(), 1);
+        assert_eq!(plan.groups[0].1[0].slot, first.id);
+        assert!(!plan.groups[0].2);
+        assert!(this.selected.is_empty(), "retry must not select the card");
+        assert_eq!(this.flash.targets[0].info.version, "1");
+        assert_eq!(this.flash.query_failures.len(), 3);
+    });
+    harness.update(cx, |_, cx| cx.notify());
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("flash-results-panel").is_none());
+        assert!(window.find("firmware-activity-message").visible());
+        assert_eq!(
+            window.find("ota-query-error-a-0").label(),
+            Some("tracker timeout")
+        );
+    })
+    .expect("the failed card remains stable through retry handoff");
+
+    let mut refreshed = first.clone();
+    refreshed.info.version = "refreshed".into();
+    workbench.update(cx, |this, cx| {
+        assert!(matches!(
+            this.flash.pending.take(),
+            Some(Action::QueryGroups(_))
+        ));
+        assert!(this.flash.activity_kind == ActivityKind::Query);
+        this.release_flash_lease();
+        this.flash.finish_job_progress(None);
+        this.flash.apply_queries(OtaQueries {
+            targets: vec![refreshed],
+            failures: vec![],
+        });
+        cx.notify();
+    });
+    harness.update(cx, |_, cx| cx.notify());
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("flash-results-panel").is_none());
+        assert!(window.try_find("firmware-activity-message").is_none());
+        assert!(window.try_find("ota-query-error-a-0").is_none());
+        assert!(window.try_find("ota-query-tracker-a-0").is_none());
+        assert_eq!(
+            window.find("ota-query-error-a-1").label(),
+            Some("other tracker timeout")
+        );
+        assert_eq!(
+            window.find("ota-query-error-a-254").label(),
+            Some("receiver timeout")
+        );
+    })
+    .expect("inspect only the successful card clearing its query error");
+    workbench.read_with(cx, |this, _| {
+        assert_eq!(this.flash.targets[0].info.version, "refreshed");
+        assert_eq!(this.flash.query_failures.len(), 2);
+    });
+
+    workbench.update(cx, |this, cx| {
+        this.flash.ota_presentation = OtaPresentation::Finished;
+        cx.notify();
+    });
+    harness.update(cx, |_, cx| cx.notify());
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("ota-query-error-a-1").is_none());
+        assert!(window.try_find("flash-results-panel").is_none());
+        assert!(window.try_find("firmware-activity-message").is_none());
+    })
+    .expect("an unavailable card does not promote its query diagnostic");
+
+    workbench.update(cx, |this, cx| {
+        this.flash.ota_presentation = OtaPresentation::Configuring;
+        this.flash.operation_origin = Mode::Esb;
+        this.flash.apply_joined_operation_results(
+            vec![(
+                ResultTarget::ota(&first),
+                UpdateOutcome::Failed("synthetic flash failure".into()),
+            )],
+            Instant::now(),
+        );
+        cx.notify();
+    });
+    harness.update(cx, |_, cx| cx.notify());
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let result_panel = window.find("flash-results-panel").bounds();
+        let failure = window.find("ota-failure-a-a:0");
+        assert!(failure.label().unwrap().contains("synthetic flash failure"));
+        assert!(failure.bounds().top() >= result_panel.top());
+        assert!(failure.bounds().bottom() <= result_panel.bottom());
+        assert_eq!(
+            window.find("ota-query-error-a-1").label(),
+            Some("other tracker timeout")
+        );
+    })
+    .expect("inspect actual update failure and independent card diagnostic");
 }

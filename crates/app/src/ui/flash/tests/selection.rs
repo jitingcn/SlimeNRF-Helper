@@ -537,8 +537,8 @@ fn a_query_admitted_before_binding_invalidation_cannot_restore_old_tracker_fw_in
         OtaQueries {
             targets: vec![stale, untouched.clone(), receiver.clone()],
             failures: vec![
-                ("a:9".into(), ("old slot".into(), Err("stale".into()))),
-                ("b:9".into(), ("other slot".into(), Err("retained".into()))),
+                ("a:9".into(), "stale".into()),
+                ("b:9".into(), "retained".into()),
             ],
         },
         &[receiver.receiver.clone(), untouched.receiver.clone()],

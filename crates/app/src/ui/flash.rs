@@ -231,7 +231,7 @@ struct OtaQueryPlan {
     incremental: bool,
 }
 
-type QueryFailure = (String, (String, Result<(), String>));
+type QueryFailure = (String, String);
 
 pub(super) struct OtaQueries {
     targets: Vec<esb_ota::Target>,
@@ -391,10 +391,9 @@ pub(super) struct FlashState {
     results: Vec<(ResultTarget, UpdateOutcome)>,
     receiver_result_joined_at: Option<Instant>,
     operation_results_dismissed: bool,
-    query_results_dismissed: bool,
-    reveal_query_results: bool,
+    preserve_query_card_layout: bool,
     operation_targets: Vec<ResultTarget>,
-    query_failures: std::collections::BTreeMap<String, (String, Result<(), String>)>,
+    query_failures: std::collections::BTreeMap<String, String>,
     activity_kind: ActivityKind,
     result_success: &'static str,
     result_notes: HashMap<String, String>,
@@ -468,8 +467,7 @@ impl Default for FlashState {
             results: vec![],
             receiver_result_joined_at: None,
             operation_results_dismissed: false,
-            query_results_dismissed: false,
-            reveal_query_results: false,
+            preserve_query_card_layout: false,
             operation_targets: vec![],
             query_failures: Default::default(),
             activity_kind: ActivityKind::Preparation,
@@ -663,7 +661,7 @@ impl FlashState {
     }
 
     fn preserves_query_layout(&self, key: &str) -> bool {
-        self.querying_receiver(key) && self.reveal_query_results
+        self.querying_receiver(key) && self.preserve_query_card_layout
     }
 }
 

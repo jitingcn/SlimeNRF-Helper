@@ -248,13 +248,11 @@ fn execution_identities_are_presented_by_the_ui() {
         failures: vec![
             QueryFailure {
                 receiver_key: "a".into(),
-                receiver_label: "Receiver A".into(),
                 id: crate::esb_ota::RECEIVER_ID,
                 error: "receiver timeout".into(),
             },
             QueryFailure {
                 receiver_key: "a".into(),
-                receiver_label: "Receiver A".into(),
                 id: 1,
                 error: "tracker timeout".into(),
             },
@@ -266,10 +264,8 @@ fn execution_identities_are_presented_by_the_ui() {
         format!("a:{}", crate::esb_ota::RECEIVER_ID)
     );
     assert_eq!(query.failures[1].0, "a:1");
-    assert_eq!(
-        query.failures[1].1.1.as_ref().unwrap_err(),
-        "tracker timeout"
-    );
+    assert_eq!(query.failures[0].1, "receiver timeout");
+    assert_eq!(query.failures[1].1, "tracker timeout");
 }
 
 #[test]

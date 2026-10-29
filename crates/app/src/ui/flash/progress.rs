@@ -296,27 +296,16 @@ impl FlashState {
         })
     }
 
-    pub(super) fn shows_operation_results(&self, mode: Mode) -> bool {
+    pub(super) fn shows_results(&self, mode: Mode) -> bool {
         self.operation_origin == mode
             && !self.operation_results_dismissed
             && !self.results.is_empty()
-    }
-
-    pub(super) fn shows_query_results(&self, mode: Mode) -> bool {
-        mode == Mode::Esb && !self.query_results_dismissed && !self.query_failures.is_empty()
-    }
-
-    pub(super) fn shows_results(&self, mode: Mode) -> bool {
-        self.shows_operation_results(mode) || self.shows_query_results(mode)
     }
 
     pub(super) fn dismiss_results(&mut self, mode: Mode) {
         if self.operation_origin == mode {
             self.operation_results_dismissed = true;
             self.receiver_result_joined_at = None;
-        }
-        if mode == Mode::Esb {
-            self.query_results_dismissed = true;
         }
     }
 
@@ -425,7 +414,7 @@ impl FlashState {
 
     pub(super) fn prepare_action_results(&mut self, action: &Action) {
         if let Action::QueryGroups(plan) = action {
-            self.reveal_query_results = !plan.automatic;
+            self.preserve_query_card_layout = !plan.automatic;
             self.query_error = None;
             self.query_cancelled = false;
             // Keep a manual scoped retry's error card stable during lease handoff.
@@ -485,10 +474,8 @@ impl FlashState {
         if self.activity_kind == ActivityKind::Operation && self.activity_origin == Mode::Esb {
             self.finish_ota_operation();
         }
-        if self.activity_kind == ActivityKind::Query
-            && std::mem::take(&mut self.reveal_query_results)
-        {
-            self.query_results_dismissed = false;
+        if self.activity_kind == ActivityKind::Query {
+            self.preserve_query_card_layout = false;
         }
         // Read-only work owns only its live progress, never a previous update's
         // retained outcome (including when a download fails or is cancelled).
@@ -990,15 +977,16 @@ impl Workbench {
                         })),
                 ),
         );
-        let operation_results = if self.flash.shows_operation_results(mode) {
+        let operation_results = if self.flash.shows_results(mode) {
             self.flash.results.as_slice()
         } else {
             &[]
         };
-        if let Some(progress) =
-            self.flash.last_progress.as_ref().filter(|progress| {
-                self.flash.shows_operation_results(mode) && !progress.ota.is_empty()
-            })
+        if let Some(progress) = self
+            .flash
+            .last_progress
+            .as_ref()
+            .filter(|progress| self.flash.shows_results(mode) && !progress.ota.is_empty())
         {
             results = results.child(
                 div()
@@ -1095,27 +1083,28 @@ impl Workbench {
                     }
                     UpdateOutcome::Failed(error) => {
                         let identity = target.identity.clone();
-                        group = group.child(
-                            div()
-                                .id(SharedString::from(format!(
-                                    "ota-failure-{}-{}",
-                                    receiver_key, target.key
-                                )))
-                                .text_sm()
-                                .text_color(cx.theme().danger)
-                                .whitespace_normal()
-                                .tooltip(move |window, cx| {
-                                    Tooltip::new(identity.clone()).build(window, cx)
-                                })
-                                .child(format!(
-                                    "{} · {}",
-                                    self.registry_label(
-                                        target.registry_key.as_ref(),
-                                        target.label.clone()
-                                    ),
-                                    error
-                                )),
+                        let message = format!(
+                            "{} · {}",
+                            self.registry_label(target.registry_key.as_ref(), target.label.clone()),
+                            error
                         );
+                        let failure = div()
+                            .id(SharedString::from(format!(
+                                "ota-failure-{}-{}",
+                                receiver_key, target.key
+                            )))
+                            .text_sm()
+                            .text_color(cx.theme().danger)
+                            .whitespace_normal()
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(identity.clone()).build(window, cx)
+                            });
+                        #[cfg(test)]
+                        let failure = failure
+                            .role(Role::Label)
+                            .aria_label(message.clone())
+                            .test_support();
+                        group = group.child(failure.child(message));
                     }
                 }
             }
@@ -1124,18 +1113,6 @@ impl Workbench {
         for (target, result) in operation_results {
             if target.receiver.is_none() {
                 results = results.child(self.flash_result_row(target, result, cx));
-            }
-        }
-        if self.flash.shows_query_results(mode) {
-            for (target, result) in self.flash.query_failures.values() {
-                if let Err(error) = result {
-                    results = results.child(
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().warning)
-                            .child(format!("{target}: {error}")),
-                    );
-                }
             }
         }
         results.into_any_element()
