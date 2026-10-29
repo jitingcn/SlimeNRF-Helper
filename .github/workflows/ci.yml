@@ -46,7 +46,8 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: '. -> target'
-          key: ubuntu-24.04-x64-tools
+          # Preserve the existing source-job prefix and share it with publication.
+          shared-key: ubuntu-24.04-x64-tools-source
           cache-bin: false
 
       - name: Test source tools without building the application
@@ -270,7 +271,8 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: '. -> target'
-          key: ubuntu-24.04-x64-tools
+          # Match the source job instead of adding a separate prerelease job key.
+          shared-key: ubuntu-24.04-x64-tools-source
           cache-bin: false
 
       - name: Prepare exact-version changelog notes

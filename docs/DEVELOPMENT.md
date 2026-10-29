@@ -347,6 +347,8 @@ The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatp
 
 [Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including prerelease preparation tests, and checks publication boundaries and frozen notice inputs. After it passes, the `windows-2022` and `ubuntu-22.04` x64 jobs run independently. Windows also runs the tools tests for native hook coverage; both run the maintained quality entry points before packaging.
 
+The source and prerelease jobs share an explicit Rust cache key, preserving the existing source-job prefix instead of adding separate job IDs. Compiler, environment, and dependency hashes remain enabled. GitHub's cache scope rules still apply; tag builds can restore the default branch's cache, but matching keys do not make caches from other tags globally accessible. Windows and Linux application builds retain separate cache keys.
+
 Windows uploads one UPX-compressed executable under the normal filename. Linux uploads an AppImage. Both omit firmware, use the Cargo version in their filenames, and remain available as Actions artifacts for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets.
 
 A `v<version>` tag push also runs the prerelease job after all three prerequisite jobs succeed. The tag must match the application's Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md). Release notes use that entry and link to the Chinese changelog at the same commit.

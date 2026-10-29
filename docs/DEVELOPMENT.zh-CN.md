@@ -347,6 +347,8 @@ SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架�
 
 [Native no-firmware CI](../.github/workflows/ci.yml)在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括预发布准备测试），并检查公开边界和冻结的版权输入。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。Windows 还运行工具测试以覆盖原生 hook；两者打包前都运行维护的质量入口。
 
+源码和预发布作业使用相同的显式 Rust 缓存 key，沿用已有源码作业的前缀，不再分别追加作业 ID。编译器、环境和依赖哈希仍然启用。GitHub 的缓存作用域限制仍然生效：标签构建可以恢复默认分支的缓存，但相同 key 不会让其他标签的缓存全局可见。Windows 与 Linux 应用构建继续使用独立的缓存 key。
+
 Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage。两个文件均不含固件，文件名包含 Cargo 版本，并作为 Actions artifact 保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。
 
 推送 `v<版本号>` 标签后，还会在三个前置作业全部成功后运行预发布作业。标签必须匹配主应用的 Cargo 版本和英文 `CHANGELOG.md` 中带日期的版本条目。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
