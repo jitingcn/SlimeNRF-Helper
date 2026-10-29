@@ -95,11 +95,11 @@ Focus the transcript with Tab to navigate its text. Use the arrow keys to move t
 
 TPS is the rate of sensor records received by the host. A lack of recent data does not prove that a device is powered off and does not indicate its battery level, signal, or capabilities. A completed serial write is not a device ACK or proof of command completion.
 
-On **Device setup**, tracker cards show TPS at the upper right. The lower row combines the latest HID-reported battery percentage and voltage, for example `100% (4.3V)`, with temperature beside it. Missing battery or temperature data is omitted independently; a reported `0%` remains visible. Going offline or changing the tracker assigned to a receiver slot clears the old readings.
+On **Device setup**, tracker cards show TPS at the upper right and temperature directly below it, on the right of the hardware ID row. The lower row combines the latest HID-reported battery percentage and voltage, for example `100%(4.3V)`, with compact power and full-battery indicators. Missing battery or temperature data is omitted independently; a reported `0%` remains visible. Going offline or changing the tracker assigned to a receiver slot clears the old readings.
 
-The plug icon follows the firmware's external-power indication; **Full** requires its explicit full-charge marker, not merely `100%`. Hover for details: the firmware can encode external power by raising the reported voltage to at least 4.31 V, so this may not be the measured battery voltage and does not confirm charging current. Temperature retains its reported sign; a negative value can indicate magnetic interference rather than a physical sub-zero temperature.
+The plug icon follows the firmware's external-power indication; the full-battery icon requires its explicit full-charge marker, not merely `100%`. Hover for details: the firmware can encode external power by raising the reported voltage to at least 4.31 V, so this may not be the measured battery voltage and does not confirm charging current. Temperature retains its reported sign; a negative value can indicate magnetic interference rather than a physical sub-zero temperature.
 
-Cards keep the name and hardware ID above the readings. Online status and **Current** or **Selected** remain at the lower right; the lower row wraps when space is limited.
+Online status and **Current** or **Selected** remain on the same lower row as the power indicators. When space is limited, the battery reading shortens with an ellipsis instead of wrapping the status group. Hover over the reading to see its complete percentage, voltage, and explanation.
 
 The checkbox changes only batch selection, independently of the card body's current-target action. Clicking a disabled checkbox changes neither the selection nor the current target; clicking the body of a uniquely identified offline card still opens that target.
 

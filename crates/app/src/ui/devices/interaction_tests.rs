@@ -261,6 +261,55 @@ fn snapped_edges(window: &Window, bounds: Bounds<Pixels>) -> [i32; 4] {
     ]
 }
 
+fn assert_temperature_position(window: &Window, slot: u8) {
+    let card = window.find(card(slot)).bounds();
+    let tps = window.find(telemetry_id("tps", slot)).bounds();
+    let address = window.find(telemetry_id("address", slot));
+    let temperature = window.find(telemetry_id("temperature", slot));
+    let status = window.find(telemetry_id("status", slot)).bounds();
+    let address_bounds = address.bounds();
+    let temperature_bounds = temperature.bounds();
+    assert!(
+        address.visible()
+            && temperature.visible()
+            && address_bounds.size.width > px(0.)
+            && temperature_bounds.left() >= card.left()
+            && temperature_bounds.right() <= card.right()
+            && address_bounds.right() <= temperature_bounds.left()
+            && address_bounds.top() < temperature_bounds.bottom()
+            && temperature_bounds.top() < address_bounds.bottom(),
+        "slot {slot}: address and temperature must share a non-overlapping row: \
+         address {address_bounds:?}, temperature {temperature_bounds:?}",
+    );
+    assert!(
+        tps.bottom() <= temperature_bounds.top() && temperature_bounds.bottom() <= status.top(),
+        "slot {slot}: temperature must sit between TPS and status: \
+         TPS {tps:?}, temperature {temperature_bounds:?}, status {status:?}",
+    );
+    assert_eq!(
+        snapped_edges(window, temperature_bounds)[2],
+        snapped_edges(window, tps)[2],
+        "slot {slot}: temperature and TPS must share the trailing spine",
+    );
+}
+
+fn assert_battery_indicators_clustered(window: &Window, slot: u8, indicators: &[&str]) {
+    let mut previous = window.find(telemetry_id("battery", slot)).bounds();
+    for &indicator in indicators {
+        let current = window.find(telemetry_id(indicator, slot)).bounds();
+        let gap = current.left() - previous.right();
+        assert!(
+            gap >= px(0.)
+                && gap <= window.rem_size() * 0.25 + px(1.)
+                && previous.top() < current.bottom()
+                && current.top() < previous.bottom(),
+            "slot {slot}: {indicator} must stay close to the preceding battery indicator: \
+             previous {previous:?}, current {current:?}",
+        );
+        previous = current;
+    }
+}
+
 fn assert_grid_geometry(window: &Window, slots: [u8; 7], columns: usize) {
     let cards = slots.map(|slot| window.find(card(slot)).bounds());
     let checks = slots.map(|slot| window.find(checkbox(slot)).bounds());
@@ -481,13 +530,25 @@ fn receiver_metadata_wraps_without_losing_counts_at_large_zoom_in_both_locales(
     }
 }
 
+#[test]
+fn full_battery_icon_is_available_from_application_assets() {
+    use gpui_kit::{AssetSource as _, assets::IconName};
+
+    let path = IconName::BatteryFull.path();
+    let svg = crate::ui::AppAssets
+        .load(&path)
+        .expect("read the full-battery asset")
+        .expect("the full-battery icon must be bundled");
+    assert!(svg.starts_with(b"<svg"), "the bundled icon must be an SVG");
+}
+
 #[gpui_kit::test]
-fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
+fn tracker_telemetry_truncates_and_preserves_selection_across_states_and_locales(
     cx: &mut TestAppContext,
 ) {
     let runtime = AppRuntime::new().expect("create isolated I/O runtime");
     let directory = tempfile::tempdir().expect("create private preferences directory");
-    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let ui_session = crate::ui::test_support::UiTestSession::new(cx);
     let fixture = Fixture::new(
         cx,
         runtime.executor(),
@@ -503,20 +564,20 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
         this.monitor.fixture_tps(120);
         this.monitor
             .fixture_telemetry(&fixture.receiver, 0, Some(full), Some(-3.0));
-        this.monitor.fixture_telemetry(
-            &fixture.receiver,
-            1,
-            Some(TrackerBattery {
-                percent: 0,
-                voltage_v: 2.45,
-                charged: false,
-                plugged: false,
-            }),
-            None,
-        );
+        // Temperature must occupy the address row even when battery data is absent.
+        this.monitor
+            .fixture_telemetry(&fixture.receiver, 1, None, Some(33.0));
         // Stale data must not be rendered for an offline tracker.
         this.monitor
             .fixture_telemetry(&fixture.receiver, 2, Some(full), Some(33.0));
+        // An unselected tracker with the same reading supplies a real layout
+        // reference for the space consumed by the selected-state label.
+        this.monitor
+            .fixture_observation_mut(&fixture.receiver)
+            .trackers[3]
+            .online = true;
+        this.monitor
+            .fixture_telemetry(&fixture.receiver, 3, Some(full), None);
         cx.notify();
     });
     settle_roster(cx, &fixture);
@@ -543,26 +604,75 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
             crate::ui::theme::apply(&preferences, cx);
             gpui_kit::component::Theme::update(cx, |theme| theme.font_size = px(20.));
         });
-        for width in [360., 548.] {
+        let mut wide_fixed_widths: Option<[i32; 4]> = None;
+        let mut saw_truncated = false;
+        for width in [360., 548., 524., 500., 488., 476., 468.] {
             cx.simulate_window_resize(fixture.window, size(px(width), px(1200.)));
             settle_roster(cx, &fixture);
-            cx.update_window(fixture.window, |_, window, _| {
+            let (fixed_widths, truncated) = cx.update_window(fixture.window, |_, window, _| {
                 assert_eq!(window.find(card(0)).focused(), Some(true));
                 assert_eq!(window.find(checkbox(0)).checked(), Some(true));
                 assert_eq!(window.find(telemetry_id("tps", 0)).label(), Some("120 TPS"));
                 assert_eq!(
                     window.find(telemetry_id("battery", 0)).label(),
-                    Some("100% (4.3V)")
+                    Some("100%(4.3V)")
                 );
                 assert_eq!(
                     window.find(telemetry_id("temperature", 0)).label(),
                     Some("-3.0°C")
                 );
                 assert_eq!(
-                    window.find(telemetry_id("battery", 1)).label(),
-                    Some("0% (2.5V)")
+                    window.find(telemetry_id("temperature", 1)).label(),
+                    Some("33.0°C")
                 );
+                for part in ["battery", "power", "full"] {
+                    assert!(
+                        window.try_find(telemetry_id(part, 1)).is_none(),
+                        "temperature-only telemetry must not show {part}",
+                    );
+                }
+                let full_label = crate::i18n::tr("devices.tracker.full");
+                assert_eq!(
+                    window.find(telemetry_id("full", 0)).label(),
+                    Some(full_label.as_str()),
+                );
+                let power_label = crate::i18n::tr("devices.tracker.power_indicated");
+                assert_eq!(
+                    window.find(telemetry_id("power", 0)).label(),
+                    Some(power_label.as_str()),
+                );
+                let online_label = crate::i18n::tr("devices.tracker.state.online");
+                let selected_label = crate::i18n::tr("devices.tracker.selection.selected");
+                assert_eq!(
+                    window.find(telemetry_id("status", 0)).label(),
+                    Some(online_label.as_str()),
+                );
+                assert_eq!(
+                    window.find(telemetry_id("selection", 0)).label(),
+                    Some(selected_label.as_str()),
+                );
+                assert_temperature_position(window, 0);
+                assert_temperature_position(window, 1);
+                assert_battery_indicators_clustered(window, 0, &["power", "full"]);
                 let card_bounds = window.find(card(0)).bounds();
+                let reference_card = window.find(card(3)).bounds();
+                let card_edges = snapped_edges(window, card_bounds);
+                let reference_edges = snapped_edges(window, reference_card);
+                assert_eq!(
+                    card_edges[2] - card_edges[0],
+                    reference_edges[2] - reference_edges[0],
+                    "the selected and reference readings must use equally wide cards",
+                );
+                assert_eq!(window.find(checkbox(3)).checked(), Some(false));
+                if width != 360. {
+                    let peer = window.find(card(1)).bounds();
+                    assert!(
+                        snapped_edges(window, peer)[1] == card_edges[1]
+                            && peer.left() >= card_bounds.right(),
+                        "width {width} must exercise the two-column layout: \
+                         first {card_bounds:?}, peer {peer:?}",
+                    );
+                }
                 let parts = [
                     "tps",
                     "battery",
@@ -587,9 +697,45 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
                     );
                     bounds
                 });
+                let bottom_parts = [1, 2, 3, 5, 6];
+                for &index in &bottom_parts {
+                    assert!(
+                        bounds[index].top() < bounds[1].bottom()
+                            && bounds[1].top() < bounds[index].bottom(),
+                        "{} must share the battery's bottom row at width {width}: {:?}",
+                        parts[index],
+                        bounds[index],
+                    );
+                }
+                for pair in bottom_parts.windows(2) {
+                    assert!(
+                        bounds[pair[0]].right() <= bounds[pair[1]].left(),
+                        "{} must precede {} on the same row at width {width}: {:?}, {:?}",
+                        parts[pair[0]],
+                        parts[pair[1]],
+                        bounds[pair[0]],
+                        bounds[pair[1]],
+                    );
+                }
+                let reference = window.find(telemetry_id("battery", 3));
+                assert_eq!(reference.label(), Some("100%(4.3V)"));
+                let truncated = bounds[1].size.width < reference.bounds().size.width;
                 assert!(
                     bounds[0].top() < bounds[1].top() && bounds[0].right() > card_bounds.center().x,
                     "TPS must remain in the trailing header above the battery",
+                );
+                assert_eq!(
+                    bounds[2].size, bounds[3].size,
+                    "the full indicator must have the same compact icon size as the plug",
+                );
+                assert!(
+                    bounds[3].size.width <= window.rem_size(),
+                    "the full indicator must be an icon rather than a text-sized marker",
+                );
+                assert_eq!(
+                    snapped_edges(window, bounds[0])[2],
+                    snapped_edges(window, bounds[6])[2],
+                    "selection must remain aligned with the trailing header",
                 );
                 for (index, first) in bounds.iter().enumerate() {
                     for (other_index, second) in bounds.iter().enumerate().skip(index + 1) {
@@ -612,12 +758,80 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
                     );
                 }
                 assert!(window.find(telemetry_id("status", 2)).visible());
+                (
+                    [2, 3, 5, 6].map(|index| {
+                        let edges = snapped_edges(window, bounds[index]);
+                        edges[2] - edges[0]
+                    }),
+                    truncated,
+                )
             })
-            .expect("inspect wrapped telemetry in the production roster");
+            .expect("inspect single-row telemetry in the production roster");
+            if let Some(wide_fixed_widths) = wide_fixed_widths {
+                for ((part, narrow), wide) in ["power", "full", "status", "selection"]
+                    .into_iter()
+                    .zip(fixed_widths)
+                    .zip(wide_fixed_widths)
+                {
+                    assert!(
+                        (narrow - wide).abs() <= 1,
+                        "{part} must retain its width at narrow card size: \
+                         narrow {narrow}, wide {wide}",
+                    );
+                }
+            } else {
+                wide_fixed_widths = Some(fixed_widths);
+            }
             fixture.assert_target(cx, 0, &[0]);
             fixture.assert_first_identity(cx);
+            if width != 360. && truncated {
+                saw_truncated = true;
+                cx.update_window(fixture.window, |_, window, cx| {
+                    window.hover(card(1), cx);
+                    window.hover(telemetry_id("battery", 0), cx);
+                })
+                .expect("hover the truncated battery reading");
+                cx.run_until_parked();
+                cx.executor()
+                    .advance_clock(std::time::Duration::from_millis(600));
+                settle_roster(cx, &fixture);
+                cx.update_window(fixture.window, |_, window, _| {
+                    let expected = format!(
+                        "100%(4.3V) · {}",
+                        crate::i18n::tr("devices.tracker.power_help")
+                    );
+                    let tooltip = window.find("tracker-telemetry-tooltip");
+                    assert!(tooltip.visible());
+                    assert_eq!(tooltip.label(), Some(expected.as_str()));
+                })
+                .expect("inspect the complete truncated reading and its explanation");
+                break;
+            }
         }
+        assert!(
+            saw_truncated,
+            "a narrow two-column card must truncate the selected reading in {language:?}",
+        );
     }
+
+    // Telemetry remains part of the target button, not the separate selection control.
+    for part in ["battery", "temperature", "full"] {
+        cx.update_window(fixture.window, |_, window, cx| {
+            click_card(window, cx, 1);
+        })
+        .expect("change the current target before clicking telemetry");
+        fixture.assert_target(cx, 1, &[0]);
+        cx.update_window(fixture.window, |_, window, cx| {
+            window.click(telemetry_id(part, 0), cx);
+        })
+        .expect("activate the tracker through its telemetry");
+        fixture.assert_target(cx, 0, &[0]);
+    }
+    cx.update_window(fixture.window, |_, window, cx| {
+        tab_to(0, window, cx);
+        assert_eq!(window.find(checkbox(0)).checked(), Some(true));
+    })
+    .expect("restore keyboard focus without changing batch selection");
 
     fixture.workbench.update(cx, |this, cx| {
         this.monitor.fixture_telemetry(
@@ -632,14 +846,14 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
             None,
         );
         this.monitor
-            .fixture_telemetry(&fixture.receiver, 1, None, Some(33.0));
+            .fixture_telemetry(&fixture.receiver, 1, None, None);
         cx.notify();
     });
     settle_roster(cx, &fixture);
     cx.update_window(fixture.window, |_, window, _| {
         assert_eq!(
             window.find(telemetry_id("battery", 0)).label(),
-            Some("100% (4.3V)")
+            Some("100%(4.3V)")
         );
         for part in ["power", "full", "temperature"] {
             assert!(
@@ -647,11 +861,13 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
                 "ordinary 100% and missing temperature must not show {part}",
             );
         }
-        assert!(window.try_find(telemetry_id("battery", 1)).is_none());
-        assert_eq!(
-            window.find(telemetry_id("temperature", 1)).label(),
-            Some("33.0°C"),
-        );
+        for part in ["battery", "power", "full", "temperature"] {
+            assert!(
+                window.try_find(telemetry_id(part, 1)).is_none(),
+                "missing telemetry must not show {part}",
+            );
+        }
+        assert!(window.find(telemetry_id("status", 1)).visible());
         assert_eq!(window.find(card(0)).focused(), Some(true));
         assert_eq!(window.find(checkbox(0)).checked(), Some(true));
     })
@@ -676,13 +892,15 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
     settle_roster(cx, &fixture);
     cx.update_window(fixture.window, |_, window, _| {
         assert!(window.find(telemetry_id("power", 0)).visible());
+        assert_battery_indicators_clustered(window, 0, &["power"]);
+        assert_temperature_position(window, 0);
         assert!(window.try_find(telemetry_id("full", 0)).is_none());
         assert_eq!(
             window.find(telemetry_id("temperature", 0)).label(),
             Some("-3.0°C")
         );
     })
-    .expect("inspect external power without a full marker");
+    .expect("inspect indicated external power without a full marker");
 
     fixture.workbench.update(cx, |this, cx| {
         this.monitor.fixture_telemetry(
@@ -701,6 +919,13 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
     settle_roster(cx, &fixture);
     cx.update_window(fixture.window, |_, window, _| {
         assert!(window.find(telemetry_id("full", 0)).visible());
+        assert_battery_indicators_clustered(window, 0, &["full"]);
+        assert_temperature_position(window, 0);
+        let full_label = crate::i18n::tr("devices.tracker.full");
+        assert_eq!(
+            window.find(telemetry_id("full", 0)).label(),
+            Some(full_label.as_str()),
+        );
         assert!(window.try_find(telemetry_id("power", 0)).is_none());
         assert_eq!(window.find(card(0)).focused(), Some(true));
         assert_eq!(window.find(checkbox(0)).checked(), Some(true));
@@ -725,6 +950,10 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
     .expect("inspect stale telemetry after the tracker goes offline");
 
     fixture.workbench.update(cx, |this, cx| {
+        this.monitor
+            .fixture_telemetry(&fixture.receiver, 0, Some(full), Some(-3.0));
+        this.monitor
+            .fixture_telemetry(&fixture.receiver, 1, None, Some(33.0));
         this.monitor
             .fixture_observation_mut(&fixture.receiver)
             .trackers[0]
@@ -751,13 +980,20 @@ fn tracker_telemetry_wraps_and_preserves_selection_across_states_and_locales(
         assert_eq!(window.find(checkbox(0)).checked(), Some(true));
     })
     .expect("inspect telemetry after a reader error");
+    let preferences_path = fixture.preferences_path.clone();
+    drop(fixture);
+    drop(ui_session);
+    assert!(
+        !preferences_path.exists(),
+        "tracker telemetry interactions must not write preferences",
+    );
 }
 
 #[gpui_kit::test]
 fn tracker_telemetry_tooltips_wrap_inside_the_window(cx: &mut TestAppContext) {
     let runtime = AppRuntime::new().expect("create isolated I/O runtime");
     let directory = tempfile::tempdir().expect("create private preferences directory");
-    let _ui_session = crate::ui::test_support::UiTestSession::new(cx);
+    let ui_session = crate::ui::test_support::UiTestSession::new(cx);
     let fixture = Fixture::new(
         cx,
         runtime.executor(),
@@ -805,6 +1041,17 @@ fn tracker_telemetry_tooltips_wrap_inside_the_window(cx: &mut TestAppContext) {
         });
         cx.simulate_window_resize(fixture.window, size(px(width), px(1200.)));
         settle_roster(cx, &fixture);
+        cx.update_window(fixture.window, |_, window, _| {
+            assert_temperature_position(window, 0);
+            assert_battery_indicators_clustered(window, 0, &["power", "full"]);
+            let full = window.find(telemetry_id("full", 0));
+            let power = window.find(telemetry_id("power", 0));
+            let full_label = crate::i18n::tr("devices.tracker.full");
+            assert_eq!(full.label(), Some(full_label.as_str()));
+            assert_eq!(full.bounds().size, power.bounds().size);
+            assert!(full.bounds().size.width <= window.rem_size());
+        })
+        .expect("inspect the icon and temperature before hovering");
         for (part, slot, key, should_wrap) in [
             ("battery", 0, "devices.tracker.power_help", true),
             ("power", 0, "devices.tracker.power_help", true),
@@ -824,7 +1071,13 @@ fn tracker_telemetry_tooltips_wrap_inside_the_window(cx: &mut TestAppContext) {
             cx.update_window(fixture.window, |_, window, _| {
                 let tooltip = window.find("tracker-telemetry-tooltip");
                 let bounds = tooltip.bounds();
-                let expected = crate::i18n::tr(key);
+                let hint = crate::i18n::tr(key);
+                let expected = if part == "battery" {
+                    let value = if slot == 0 { "100%(4.3V)" } else { "72%(4.0V)" };
+                    format!("{value} · {hint}")
+                } else {
+                    hint
+                };
                 assert_eq!(tooltip.label(), Some(expected.as_str()));
                 assert!(
                     tooltip.visible()
@@ -846,6 +1099,13 @@ fn tracker_telemetry_tooltips_wrap_inside_the_window(cx: &mut TestAppContext) {
             .expect("inspect the rendered tooltip geometry");
         }
     }
+    let preferences_path = fixture.preferences_path.clone();
+    drop(fixture);
+    drop(ui_session);
+    assert!(
+        !preferences_path.exists(),
+        "tracker telemetry tooltips must not write preferences",
+    );
 }
 
 #[gpui_kit::test]

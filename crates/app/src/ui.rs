@@ -85,6 +85,7 @@ gpui::assets::icon_assets!(
         Wrench,
         House,
         Plug,
+        BatteryFull,
         Usb,
         ArrowLeft,
         Pencil,

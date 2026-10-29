@@ -12,6 +12,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Changed
 
 - Source builds now require Rust 1.99 or newer, aligning the declared minimum with the pinned development toolchain's minor release.
+- Tracker-card temperatures sit below TPS at the right of the hardware ID row. Compact plug and full-battery icons stay beside the tighter battery reading. In narrow cards, the battery reading truncates instead of wrapping online and selection states; hover shows the complete reading and firmware-state explanations.
 
 ### Fixed
 

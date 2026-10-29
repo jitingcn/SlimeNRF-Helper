@@ -665,107 +665,21 @@ impl Workbench {
                                         } else {
                                             cx.theme().muted_foreground
                                         })
-                                        .child(div().flex_1().min_w_0().child(clipped(
-                                            format!("address:{tracker_key}"),
-                                            tracker.address.clone().unwrap_or_else(|| {
-                                                tr("devices.tracker.address_unobserved")
-                                            }),
-                                        ))),
-                                )
-                                .child(
-                                    div()
-                                        .flex()
-                                        .flex_wrap()
-                                        .items_center()
-                                        .gap_x_2()
-                                        .gap_y_1()
-                                        .text_xs()
-                                        .line_height(rems(1.))
-                                        .text_color(if selected || focused {
-                                            cx.theme().accent_foreground
-                                        } else {
-                                            cx.theme().muted_foreground
-                                        })
-                                        .when_some(battery, |row, battery| {
-                                            let value = format!(
-                                                "{}% ({:.1}V)",
-                                                battery.percent, battery.voltage_v
-                                            );
-                                            let hint = tr(if battery.plugged {
-                                                "devices.tracker.power_help"
-                                            } else {
-                                                "devices.tracker.battery_help"
-                                            });
-                                            row.child(
-                                                div()
-                                                    .id(SharedString::from(format!(
-                                                        "tracker-battery:{tracker_key}"
-                                                    )))
-                                                    .role(gpui_kit::Role::Label)
-                                                    .aria_label(value.clone())
-                                                    .test_support()
-                                                    .flex_shrink_0()
-                                                    .font_family(
-                                                        cx.theme().mono_font_family.clone(),
-                                                    )
-                                                    .child(value)
-                                                    .tooltip(move |window, cx| {
-                                                        tracker_telemetry_tooltip(
-                                                            hint.clone(),
-                                                            window,
-                                                            cx,
-                                                        )
+                                        .child(
+                                            div()
+                                                .id(SharedString::from(format!(
+                                                    "tracker-address:{tracker_key}"
+                                                )))
+                                                .test_support()
+                                                .flex_1()
+                                                .min_w_0()
+                                                .child(clipped(
+                                                    format!("address:{tracker_key}"),
+                                                    tracker.address.clone().unwrap_or_else(|| {
+                                                        tr("devices.tracker.address_unobserved")
                                                     }),
-                                            )
-                                            .when(battery.plugged, |row| {
-                                                let hint = tr("devices.tracker.power_help");
-                                                row.child(
-                                                    div()
-                                                        .id(SharedString::from(format!(
-                                                            "tracker-power:{tracker_key}"
-                                                        )))
-                                                        .role(gpui_kit::Role::Label)
-                                                        .aria_label(tr(
-                                                            "devices.tracker.power_indicated",
-                                                        ))
-                                                        .test_support()
-                                                        .flex_shrink_0()
-                                                        .child(Icon::new(IconName::Plug).size_3())
-                                                        .tooltip(move |window, cx| {
-                                                            tracker_telemetry_tooltip(
-                                                                hint.clone(),
-                                                                window,
-                                                                cx,
-                                                            )
-                                                        }),
-                                                )
-                                            })
-                                            .when(
-                                                battery.charged,
-                                                |row| {
-                                                    let hint = tr("devices.tracker.full_help");
-                                                    let label = tr("devices.tracker.full");
-                                                    row.child(
-                                                        div()
-                                                            .id(SharedString::from(format!(
-                                                                "tracker-full:{tracker_key}"
-                                                            )))
-                                                            .role(gpui_kit::Role::Label)
-                                                            .aria_label(label.clone())
-                                                            .test_support()
-                                                            .flex_shrink_0()
-                                                            .child(label)
-                                                            .tooltip(move |window, cx| {
-                                                                tracker_telemetry_tooltip(
-                                                                    hint.clone(),
-                                                                    window,
-                                                                    cx,
-                                                                )
-                                                            }),
-                                                    )
-                                                },
-                                            )
-                                        })
+                                                )),
+                                        )
                                         .when_some(temperature, |row, temperature| {
                                             let value = format!("{temperature:.1}°C");
                                             let hint = tr("devices.tracker.temperature_help");
@@ -790,6 +704,118 @@ impl Workbench {
                                                         )
                                                     }),
                                             )
+                                        }),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .min_w_0()
+                                        .items_center()
+                                        .gap_x_2()
+                                        .text_xs()
+                                        .line_height(rems(1.))
+                                        .text_color(if selected || focused {
+                                            cx.theme().accent_foreground
+                                        } else {
+                                            cx.theme().muted_foreground
+                                        })
+                                        .when_some(battery, |row, battery| {
+                                            let value = format!(
+                                                "{}%({:.1}V)",
+                                                battery.percent, battery.voltage_v
+                                            );
+                                            let hint = format!(
+                                                "{value} · {}",
+                                                tr(if battery.plugged {
+                                                    "devices.tracker.power_help"
+                                                } else {
+                                                    "devices.tracker.battery_help"
+                                                })
+                                            );
+                                            row.child(
+                                                div()
+                                                    .flex()
+                                                    .flex_1()
+                                                    .min_w_0()
+                                                    .items_center()
+                                                    .gap_1()
+                                                    .child(
+                                                        div()
+                                                            .id(SharedString::from(format!(
+                                                                "tracker-battery:{tracker_key}"
+                                                            )))
+                                                            .role(gpui_kit::Role::Label)
+                                                            .aria_label(value.clone())
+                                                            .test_support()
+                                                            .min_w_0()
+                                                            .truncate()
+                                                            .font_family(
+                                                                cx.theme()
+                                                                    .mono_font_family
+                                                                    .clone(),
+                                                            )
+                                                            .child(value)
+                                                            .tooltip(move |window, cx| {
+                                                                tracker_telemetry_tooltip(
+                                                                    hint.clone(),
+                                                                    window,
+                                                                    cx,
+                                                                )
+                                                            }),
+                                                    )
+                                                    .when(battery.plugged, |group| {
+                                                        let hint = tr("devices.tracker.power_help");
+                                                        group.child(
+                                                            div()
+                                                                .id(SharedString::from(format!(
+                                                                    "tracker-power:{tracker_key}"
+                                                                )))
+                                                                .role(gpui_kit::Role::Label)
+                                                                .aria_label(tr(
+                                                                    "devices.tracker.power_indicated",
+                                                                ))
+                                                                .test_support()
+                                                                .flex_shrink_0()
+                                                                .child(
+                                                                    Icon::new(IconName::Plug)
+                                                                        .size_3(),
+                                                                )
+                                                                .tooltip(move |window, cx| {
+                                                                    tracker_telemetry_tooltip(
+                                                                        hint.clone(),
+                                                                        window,
+                                                                        cx,
+                                                                    )
+                                                                }),
+                                                        )
+                                                    })
+                                                    .when(battery.charged, |group| {
+                                                        let hint = tr("devices.tracker.full_help");
+                                                        group.child(
+                                                            div()
+                                                                .id(SharedString::from(format!(
+                                                                    "tracker-full:{tracker_key}"
+                                                                )))
+                                                                .role(gpui_kit::Role::Label)
+                                                                .aria_label(tr(
+                                                                    "devices.tracker.full",
+                                                                ))
+                                                                .test_support()
+                                                                .flex_shrink_0()
+                                                                .child(
+                                                                    Icon::new(IconName::BatteryFull)
+                                                                        .size_3(),
+                                                                )
+                                                                .tooltip(move |window, cx| {
+                                                                    tracker_telemetry_tooltip(
+                                                                        hint.clone(),
+                                                                        window,
+                                                                        cx,
+                                                                    )
+                                                                }),
+                                                        )
+                                                    }),
+                                            )
                                         })
                                         .child(
                                             div()
@@ -797,6 +823,7 @@ impl Workbench {
                                                 .flex_shrink_0()
                                                 .items_center()
                                                 .gap_1()
+                                                .whitespace_nowrap()
                                                 .ml_auto()
                                                 .child(
                                                     div()
