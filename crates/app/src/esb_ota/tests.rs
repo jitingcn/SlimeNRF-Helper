@@ -161,10 +161,14 @@ struct Emulator {
     partial_complete: bool,
     activating_only: bool,
     activation_write_error: Option<String>,
+    activation_write_delay: Duration,
     activation_status: Option<[u8; 16]>,
+    activation_status_delay: Option<Duration>,
     activation_query_status: Option<[u8; 16]>,
     cancel_on_activate: Option<Arc<AtomicBool>>,
+    cancel_during_activation: Option<(Duration, Arc<AtomicBool>)>,
     disconnect_after_activate: bool,
+    activation_disconnect_delay: Duration,
     silent_activation_query: bool,
     wrong_activation_info: bool,
     activation_reconnect_error: Option<super::ReceiverOpenError>,
@@ -247,10 +251,14 @@ impl Emulator {
             partial_complete: false,
             activating_only: false,
             activation_write_error: None,
+            activation_write_delay: Duration::ZERO,
             activation_status: None,
+            activation_status_delay: None,
             activation_query_status: None,
             cancel_on_activate: None,
+            cancel_during_activation: None,
             disconnect_after_activate: false,
+            activation_disconnect_delay: Duration::ZERO,
             silent_activation_query: false,
             wrong_activation_info: false,
             activation_reconnect_error: None,
@@ -481,6 +489,7 @@ impl Transport for Emulator {
             }
             ACTIVATE => {
                 self.activation_attempt_at = Some(self.time);
+                self.time += self.activation_write_delay;
                 assert!(
                     self.staging[&id].verified,
                     "activation before CRC verification"
@@ -489,7 +498,12 @@ impl Transport for Emulator {
                     cancel.store(true, Ordering::Relaxed);
                 }
                 if let Some(record) = self.activation_status.take() {
-                    self.incoming.push_back(record);
+                    if let Some(delay) = self.activation_status_delay {
+                        self.delayed_records =
+                            Some((self.activation_attempt_at.unwrap() + delay, vec![record]));
+                    } else {
+                        self.incoming.push_back(record);
+                    }
                 } else if !(self.silent_activate || id == RECEIVER_ID && self.receiver_reboot) {
                     self.incoming.push_back(status(
                         id,
@@ -519,7 +533,11 @@ impl Transport for Emulator {
         Ok(())
     }
     fn read(&mut self, frame: &mut [u8; 64], timeout_ms: i32) -> Result<usize, String> {
-        if self.disconnect_after_activate && self.writes.iter().any(|r| r[0] == ACTIVATE) {
+        if self.disconnect_after_activate
+            && self
+                .activation_attempt_at
+                .is_some_and(|at| self.time >= at + self.activation_disconnect_delay)
+        {
             self.disconnect_after_activate = false;
             return Err("HID read: injected stale-handle disconnect".into());
         }
@@ -551,6 +569,13 @@ impl Transport for Emulator {
             self.transfer_read_ms.unwrap_or(timeout_ms.max(1) as u64)
         };
         self.time += Duration::from_millis(elapsed);
+        if let Some((delay, cancel)) = &self.cancel_during_activation
+            && self
+                .activation_attempt_at
+                .is_some_and(|at| self.time >= at + *delay)
+        {
+            cancel.store(true, Ordering::Relaxed);
+        }
         if self.query_read_error_at.is_some_and(|at| self.time >= at) {
             self.query_read_error_at = None;
             return Err("HID read: injected query failure".into());
@@ -1416,6 +1441,7 @@ fn receiver_fresh_info_is_unconfirmed_and_crc_failure_never_activates() {
     let cancel = AtomicBool::new(false);
     let mut io = Emulator::new(&[]);
     io.receiver_reboot = true;
+    io.disconnect_after_activate = true;
     let mut session = Session::new(io, &cancel);
     let results = flash_with(
         &mut session,
@@ -1866,10 +1892,7 @@ fn receiver_progress_only_completes_after_confirmed_activation() {
                     .all(|event| event.completed == 0 && event.ota[0].phase != OtaPhase::Completed)
             );
         }
-        assert_eq!(
-            session.io.reconnects,
-            usize::from(reboot || silent_activate)
-        );
+        assert_eq!(session.io.reconnects, 0);
     }
 }
 
@@ -3638,6 +3661,8 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
         Complete,
         Accepted,
         Silent,
+        Responding,
+        Disconnected,
         ShortWrite,
         ErroredWrite,
         ShortWriteAccepted,
@@ -3656,6 +3681,8 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
         Case::Complete,
         Case::Accepted,
         Case::Silent,
+        Case::Responding,
+        Case::Disconnected,
         Case::ShortWrite,
         Case::ErroredWrite,
         Case::ShortWriteAccepted,
@@ -3680,6 +3707,13 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
                 io.activation_status = Some(status(RECEIVER_ID, 5, 3, firmware.data.len()))
             }
             Case::Silent => {}
+            Case::Responding => io.disconnect_after_activate = true,
+            Case::Disconnected => {
+                io.disconnect_after_activate = true;
+                io.activation_reconnect_error = Some(super::ReceiverOpenError::Unavailable(
+                    "receiver disconnected".into(),
+                ));
+            }
             Case::ShortWrite | Case::ShortWriteAccepted => {
                 io.activation_write_error =
                     Some("Short HID write: 12/65 bytes; not retried".into());
@@ -3706,10 +3740,17 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
                     firmware.data.len(),
                 ));
             }
-            Case::NoQueryReply => io.silent_activation_query = true,
+            Case::NoQueryReply => {
+                io.disconnect_after_activate = true;
+                io.silent_activation_query = true;
+            }
             Case::Cancelled => io.cancel_on_activate = Some(cancel.clone()),
-            Case::WrongInfo => io.wrong_activation_info = true,
+            Case::WrongInfo => {
+                io.disconnect_after_activate = true;
+                io.wrong_activation_info = true;
+            }
             Case::WrongNativeIdentity => {
+                io.disconnect_after_activate = true;
                 io.activation_reconnect_error = Some(super::ReceiverOpenError::Identity(
                     "Receiver identity changed".into(),
                 ))
@@ -3779,17 +3820,22 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
                     ),
                     _ => assert_eq!(report.submission, ActivationSubmission::Sent),
                 }
-                if matches!(case, Case::NoQueryReply | Case::Cancelled) {
-                    let ReceiverAvailability::Unconfirmed(reason) = &report.availability else {
-                        panic!("{case:?}: missing availability evidence");
-                    };
-                    assert!(reason.contains(if matches!(case, Case::Cancelled) {
-                        "cancelled"
-                    } else {
-                        "did not return complete firmware information"
-                    }));
-                } else {
-                    assert_eq!(report.availability, ReceiverAvailability::Responding);
+                match case {
+                    Case::Responding => {
+                        assert_eq!(report.availability, ReceiverAvailability::Responding);
+                    }
+                    _ => {
+                        let ReceiverAvailability::Unconfirmed(reason) = &report.availability else {
+                            panic!("{case:?}: missing availability evidence");
+                        };
+                        let expected = match case {
+                            Case::Cancelled => "cancelled",
+                            Case::NoQueryReply => "did not return complete firmware information",
+                            Case::Disconnected => "receiver disconnected",
+                            _ => "activation completion has not been confirmed",
+                        };
+                        assert!(reason.contains(expected), "{case:?}: {reason}");
+                    }
                 }
                 assert_eq!(
                     progress.last().unwrap().ota[0].phase,
@@ -3811,9 +3857,19 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
         );
         assert!(session.unfinished.iter().all(|unfinished| !unfinished));
         assert!(
-            session.io.time - session.io.activation_attempt_at.unwrap() <= Duration::from_secs(30),
+            session.io.time - session.io.activation_attempt_at.unwrap() <= Duration::from_secs(3),
             "{case:?}"
         );
+        if matches!(
+            case,
+            Case::Accepted | Case::Silent | Case::Responding | Case::NoQueryReply
+        ) {
+            assert_eq!(
+                session.io.time - session.io.activation_attempt_at.unwrap(),
+                Duration::from_secs(3),
+                "{case:?}: observation must use one absolute deadline"
+            );
+        }
         let verify = session
             .io
             .writes
@@ -4077,6 +4133,9 @@ fn receiver_activation_query_retries_share_the_original_availability_budget() {
     let cancel = AtomicBool::new(false);
     let mut io = Emulator::new(&[]);
     io.silent_activate = true;
+    io.disconnect_after_activate = true;
+    io.activation_write_delay = Duration::from_millis(700);
+    io.activation_disconnect_delay = Duration::from_millis(1_200);
     io.activation_query_write_error = true;
     io.activation_reconnect_delay = Duration::from_millis(200);
     let mut session = Session::new(io, &cancel);
@@ -4098,9 +4157,151 @@ fn receiver_activation_query_retries_share_the_original_availability_budget() {
     );
     assert_eq!(
         session.io.time - session.io.activation_attempt_at.unwrap(),
-        Duration::from_secs(30)
+        Duration::from_secs(3)
     );
     assert!(session.io.reconnects > 1);
+    let activation_at = session.io.activation_attempt_at.unwrap();
+    assert!(
+        session
+            .io
+            .query_writes
+            .iter()
+            .any(|(_, at)| *at > activation_at)
+    );
+    assert!(
+        session
+            .io
+            .query_writes
+            .iter()
+            .filter(|(_, at)| *at >= activation_at)
+            .all(|(_, at)| *at < activation_at + Duration::from_secs(3))
+    );
+    assert!(session.io.abort_writes.is_empty());
+    assert_eq!(
+        session
+            .io
+            .writes
+            .iter()
+            .filter(|r| r[0] == ACTIVATE)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn receiver_activation_only_accepts_complete_within_the_observation_window() {
+    for (delay_ms, completed) in [(2_900, true), (3_100, false)] {
+        let cancel = AtomicBool::new(false);
+        let firmware = image(3);
+        let mut io = Emulator::new(&[]);
+        io.silent_activate = true;
+        io.activation_status = Some(status(RECEIVER_ID, 6, 3, firmware.data.len()));
+        io.activation_status_delay = Some(Duration::from_millis(delay_ms));
+        let mut session = Session::new(io, &cancel);
+        let outcomes = flash_with(
+            &mut session,
+            &[target(RECEIVER_ID)],
+            &firmware,
+            &info().board_target,
+            &mut |_| {},
+        )
+        .unwrap();
+        if completed {
+            assert_eq!(outcomes[0].outcome, UpdateOutcome::Completed);
+        } else {
+            assert!(matches!(
+                outcomes[0].outcome,
+                UpdateOutcome::ActivationUnconfirmed(_)
+            ));
+        }
+        assert_eq!(
+            session.io.time - session.io.activation_attempt_at.unwrap(),
+            Duration::from_millis(if completed { delay_ms } else { 3_000 })
+        );
+        assert!(session.io.abort_writes.is_empty());
+        assert_eq!(
+            session
+                .io
+                .writes
+                .iter()
+                .filter(|r| r[0] == ACTIVATE)
+                .count(),
+            1
+        );
+    }
+}
+
+#[test]
+fn receiver_activation_cancellation_during_observation_retains_uncertainty() {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let mut io = Emulator::new(&[]);
+    io.silent_activate = true;
+    io.cancel_during_activation = Some((Duration::from_millis(500), cancel.clone()));
+    let mut session = Session::new(io, &cancel);
+    let outcomes = flash_with(
+        &mut session,
+        &[target(RECEIVER_ID)],
+        &image(3),
+        &info().board_target,
+        &mut |_| {},
+    )
+    .unwrap();
+    let UpdateOutcome::ActivationUnconfirmed(report) = &outcomes[0].outcome else {
+        panic!("Cancellation after ACTIVATE must not imply failure or success");
+    };
+    assert_eq!(report.submission, ActivationSubmission::Sent);
+    assert!(
+        matches!(&report.availability, ReceiverAvailability::Unconfirmed(error)
+            if error.contains("cancelled"))
+    );
+    assert_eq!(
+        session.io.time - session.io.activation_attempt_at.unwrap(),
+        Duration::from_millis(500)
+    );
+    assert!(session.io.abort_writes.is_empty());
+    assert_eq!(
+        session
+            .io
+            .writes
+            .iter()
+            .filter(|r| r[0] == ACTIVATE)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn receiver_reopen_at_activation_deadline_does_not_start_another_query() {
+    let cancel = AtomicBool::new(false);
+    let mut io = Emulator::new(&[]);
+    io.silent_activate = true;
+    io.disconnect_after_activate = true;
+    io.activation_write_delay = Duration::from_millis(2_800);
+    io.activation_disconnect_delay = Duration::from_millis(2_800);
+    io.activation_reconnect_delay = Duration::from_millis(200);
+    let mut session = Session::new(io, &cancel);
+    let outcomes = flash_with(
+        &mut session,
+        &[target(RECEIVER_ID)],
+        &image(3),
+        &info().board_target,
+        &mut |_| {},
+    )
+    .unwrap();
+    assert!(matches!(
+        outcomes[0].outcome,
+        UpdateOutcome::ActivationUnconfirmed(_)
+    ));
+    let activation_at = session.io.activation_attempt_at.unwrap();
+    assert_eq!(session.io.time - activation_at, Duration::from_secs(3));
+    assert_eq!(session.io.reconnects, 1);
+    assert!(
+        session
+            .io
+            .query_writes
+            .iter()
+            .all(|(_, at)| *at < activation_at)
+    );
     assert!(session.io.abort_writes.is_empty());
     assert_eq!(
         session

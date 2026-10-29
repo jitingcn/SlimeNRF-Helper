@@ -32,6 +32,8 @@ const SLOTS: usize = 16;
 const WINDOW: usize = 111; // Leave headroom in the receiver's 128-entry shared ring.
 const QUERY_GAP: Duration = Duration::from_millis(100);
 const QUERY_TIMEOUT: Duration = Duration::from_secs(3);
+// Some receivers reset without a COMPLETE status; observation must stay brief.
+const RECEIVER_ACTIVATION_OBSERVATION: Duration = Duration::from_secs(3);
 const PREFLIGHT_QUERY_RETRY_DRAIN: Duration = Duration::from_millis(500);
 // Receiver esb_ota.c retains scoped ABORT tombstones for ten seconds, and
 // connection/esb.c blocks all new radio operations until they expire.
@@ -1641,18 +1643,17 @@ fn activate_receiver<T: Transport>(
     if let Err(error) = check_cancel(session.cancel).and_then(|()| session.check_identity()) {
         return UpdateOutcome::Failed(error);
     }
-    let deadline = session.io.now() + Duration::from_secs(30);
+    let deadline = session.io.now() + RECEIVER_ACTIVATION_OBSERVATION;
     session.retire(RECEIVER_ID);
     let mut submission = match session.io.write(&command(ACTIVATE, RECEIVER_ID)) {
         Ok(()) => ActivationSubmission::Sent,
         Err(error) => ActivationSubmission::DeliveryUncertain(error),
     };
-    let status_deadline = deadline.min(session.io.now() + QUERY_TIMEOUT);
     let mut availability = ReceiverAvailability::Unconfirmed(
         "Receiver activation completion has not been confirmed".into(),
     );
-    while session.io.now() < status_deadline {
-        let remaining = status_deadline.saturating_sub(session.io.now());
+    while session.io.now() < deadline {
+        let remaining = deadline.saturating_sub(session.io.now());
         match session.records(remaining.as_millis().clamp(1, 100) as i32) {
             Ok((records, count)) => {
                 for record in &records[..count] {
@@ -1687,6 +1688,9 @@ fn activate_receiver<T: Transport>(
                 break;
             }
         }
+        if session.io.now() >= deadline {
+            break;
+        }
         if let Err(error) = session.write(&command(QUERY, RECEIVER_ID)) {
             availability = ReceiverAvailability::Unconfirmed(error);
             if session.cancel.load(Ordering::Relaxed) {
@@ -1694,12 +1698,11 @@ fn activate_receiver<T: Transport>(
             }
             continue;
         }
-        let query_deadline = deadline.min(session.io.now() + QUERY_TIMEOUT);
         let mut chunks = InfoChunks::new(RECEIVER_ID);
         let mut current = None;
         let mut unavailable = false;
-        while session.io.now() < query_deadline {
-            let remaining = query_deadline.saturating_sub(session.io.now());
+        while session.io.now() < deadline {
+            let remaining = deadline.saturating_sub(session.io.now());
             match session.records(remaining.as_millis().clamp(1, 100) as i32) {
                 Ok((records, count)) => {
                     for record in &records[..count] {

@@ -767,7 +767,6 @@ impl Workbench {
         let color = match target.phase {
             OtaPhase::Completed => cx.theme().success,
             OtaPhase::Failed => cx.theme().danger,
-            OtaPhase::ActivationUnconfirmed => cx.theme().warning,
             _ => cx.theme().muted_foreground,
         };
         div()
@@ -902,11 +901,7 @@ impl Workbench {
                 .text_sm()
                 .whitespace_normal()
                 .when(
-                    matches!(
-                        result,
-                        UpdateOutcome::ActivationUnconfirmed(_)
-                            | UpdateOutcome::Uf2CopyUnconfirmed(_)
-                    ),
+                    matches!(result, UpdateOutcome::Uf2CopyUnconfirmed(_)),
                     |row| row.text_color(cx.theme().warning),
                 )
                 .map(|row| match result {
@@ -923,13 +918,22 @@ impl Workbench {
                     self.registry_label(target.registry_key.as_ref(), target.label.clone()),
                     match result {
                         UpdateOutcome::Completed => tr(self.flash.result_success),
-                        UpdateOutcome::ActivationUnconfirmed(report) =>
-                            activation_report_label(report),
+                        UpdateOutcome::ActivationUnconfirmed(_) =>
+                            tr("firmware.result.activation.unconfirmed"),
                         UpdateOutcome::Uf2CopyUnconfirmed(_) => tr("firmware.result.uf2.pending"),
                         UpdateOutcome::Failed(error) => error.clone(),
                     }
                 )),
         );
+        if let UpdateOutcome::ActivationUnconfirmed(report) = result {
+            row = row.child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .whitespace_normal()
+                    .child(activation_report_label(report)),
+            );
+        }
         if let UpdateOutcome::Uf2CopyUnconfirmed(report) = result {
             let details = div()
                 .text_xs()
@@ -1062,8 +1066,10 @@ impl Workbench {
                                     "ota-unconfirmed-{}",
                                     target.key
                                 )))
+                                .flex()
+                                .flex_col()
+                                .gap_1()
                                 .text_sm()
-                                .text_color(cx.theme().warning)
                                 .whitespace_normal()
                                 .tooltip(move |window, cx| {
                                     Tooltip::new(tooltip.clone()).build(window, cx)
@@ -1074,8 +1080,14 @@ impl Workbench {
                                         target.registry_key.as_ref(),
                                         target.label.clone()
                                     ),
-                                    activation_report_label(report)
-                                )),
+                                    tr("firmware.result.activation.unconfirmed")
+                                ))
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(activation_report_label(report)),
+                                ),
                         );
                     }
                     UpdateOutcome::Uf2CopyUnconfirmed(_) => {

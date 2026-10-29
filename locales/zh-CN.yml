@@ -909,7 +909,7 @@ firmware:
     magnet_help: "某些批次的 Holyiot 接收器可能无法通过指令进入引导模式，请使用附带的磁铁轻触接口上方指示灯位置来切换到固件更新模式。"
   phase:
     activating: "激活中"
-    activation_unconfirmed: "待核实"
+    activation_unconfirmed: "激活未确认"
     active: "正在更新"
     cancelled: "已取消"
     check_device: "正在检查设备"
@@ -963,6 +963,7 @@ firmware:
     load_versions: "加载版本"
   result:
     activation:
+      unconfirmed: "传输完成；激活未确认"
       accepted: "已接受激活"
       sent: "已提交激活"
       delivery_uncertain: "激活送达情况不确定"

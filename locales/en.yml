@@ -909,7 +909,7 @@ firmware:
     magnet_help: "Some batches of Holyiot receivers may not enter bootloader mode via a command. Gently touch the indicator light above the connector with the supplied magnet to switch to firmware update mode."
   phase:
     activating: "Activating"
-    activation_unconfirmed: "Unverified"
+    activation_unconfirmed: "Activation unconfirmed"
     active: "Active"
     cancelled: "Cancelled"
     check_device: "Checking device"
@@ -963,6 +963,7 @@ firmware:
     load_versions: "Load versions"
   result:
     activation:
+      unconfirmed: "Transfer complete; activation not confirmed"
       accepted: "Activation accepted"
       sent: "Activation submitted"
       delivery_uncertain: "Activation delivery uncertain"

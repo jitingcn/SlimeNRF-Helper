@@ -354,6 +354,68 @@ fn activation_result_uses_submission_and_availability_facts_and_retains_detail()
     assert!(tooltip.contains("short HID write"));
 }
 
+#[gpui_kit::test]
+fn activation_summary_is_neutral_in_both_locales_and_preserves_evidence(cx: &mut TestAppContext) {
+    use crate::ui::flash::progress::{activation_report_label, activation_report_tooltip};
+    use crate::update::{ActivationSubmission, ReceiverActivationReport, ReceiverAvailability};
+
+    let _ui_session = UiTestSession::new(cx);
+    let pending = ReceiverActivationReport {
+        submission: ActivationSubmission::Sent,
+        availability: ReceiverAvailability::Unconfirmed("disconnect detail".into()),
+    };
+    let detected = ReceiverActivationReport {
+        submission: ActivationSubmission::Accepted,
+        availability: ReceiverAvailability::Detected {
+            prior_diagnostic: "earlier disconnect".into(),
+        },
+    };
+    let uncertain = ReceiverActivationReport {
+        submission: ActivationSubmission::DeliveryUncertain("short HID write".into()),
+        availability: ReceiverAvailability::Responding,
+    };
+    for (locale, summary, phase, pending_label, detected_label, uncertain_label) in [
+        (
+            "en",
+            "Transfer complete; activation not confirmed",
+            "Activation unconfirmed",
+            "Activation submitted · Receiver availability unconfirmed",
+            "Activation accepted · Receiver detected after update",
+            "Activation delivery uncertain · Receiver responding",
+        ),
+        (
+            "zh-CN",
+            "传输完成；激活未确认",
+            "激活未确认",
+            "已提交激活 · 尚未确认接收器是否可用",
+            "已接受激活 · 更新后已检测到接收器",
+            "激活送达情况不确定 · 接收器已响应",
+        ),
+    ] {
+        rust_i18n::set_locale(locale);
+        assert_eq!(
+            rust_i18n::t!("firmware.result.activation.unconfirmed"),
+            summary
+        );
+        assert_eq!(
+            rust_i18n::t!("firmware.phase.activation_unconfirmed"),
+            phase
+        );
+        assert_eq!(activation_report_label(&pending), pending_label);
+        assert_eq!(activation_report_label(&detected), detected_label);
+        assert_eq!(activation_report_label(&uncertain), uncertain_label);
+        assert!(
+            activation_report_tooltip(&pending, "Receiver".into()).contains("disconnect detail")
+        );
+        assert!(
+            activation_report_tooltip(&detected, "Receiver".into()).contains("earlier disconnect")
+        );
+        assert!(
+            activation_report_tooltip(&uncertain, "Receiver".into()).contains("short HID write")
+        );
+    }
+}
+
 fn uf2_pending_report() -> crate::update::Uf2CopyReport {
     crate::update::Uf2CopyReport {
         completed: 102400,
