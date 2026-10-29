@@ -9,6 +9,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-29
+
 ### Added
 
 - Command-list search matches command text, names, and descriptions in the current language.
@@ -89,7 +91,8 @@ Initial standalone application version, documented from the repository's initial
 - Gyroscope calibration guides, temperature calibration analysis with SVG export, and RSSI channel analysis.
 - English and Simplified Chinese interfaces, light and dark themes, and Windows and Linux packaging with full-firmware and no-firmware build modes.
 
-[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.1.1
 [0.1.0]: https://github.com/jitingcn/SlimeNRF-Helper/tree/c1534d42a08b71e2bf9acdf0c33892766493080e

@@ -9,6 +9,8 @@
 
 ## [未发布]
 
+## [0.3.0] - 2026-10-29
+
 ### 新增
 
 - 命令列表支持搜索指令文本、名称及当前语言的描述。
@@ -89,7 +91,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.2.0...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.1.1
 [0.1.0]: https://github.com/jitingcn/SlimeNRF-Helper/tree/c1534d42a08b71e2bf9acdf0c33892766493080e
