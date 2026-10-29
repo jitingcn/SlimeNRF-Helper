@@ -2,12 +2,12 @@
   "schema": 1,
   "input_sha256": {
     "Cargo.lock": "2e57adce64cfc65a567b1097e0dfc41b017fc15a50b34cd0e55a06d52ebade41",
-    "Cargo.toml": "69d739db0e2691a3f6e8a935bfd84ac8c8162741c4a706b7143e06baf9ad4a33",
-    "crates/app/Cargo.toml": "068beeba1d3b6a2e352c45b52931b4656822390e13dfdb9c8fb35cc491b01698",
-    "crates/firmware-image/Cargo.toml": "f47e5c8e0f6cd625d914a9ee3896acca87c6c3241e16666464543aa491a69031",
-    "crates/recording/Cargo.toml": "b97713b3affd1a84902192a86bf200055526fde9e93d848e9a7a21eef1c95b68",
-    "crates/terminal-core/Cargo.toml": "c04f89a559ce26e38c06cc87b744b38441afcac52e9f22ed9a9a7db3c7d88671",
-    "crates/tools/Cargo.toml": "8267e2f441ec26465dabca8af2e9f2b6be9dec053edd4e25d2181a9938f486ca",
+    "Cargo.toml": "0aa44b105e7688b437b491f58d0ba1f1d0b82deee061223228a8b44ffe79e9e7",
+    "crates/app/Cargo.toml": "1a2ebbd6edf103000aa71fdb78ad02de7f4fb43ed8221e379cd26bf9643058c7",
+    "crates/firmware-image/Cargo.toml": "e592deac8222fe279cdec3d3d43edd49a9116fe45236770f836f4c01e08546b8",
+    "crates/recording/Cargo.toml": "8887e1a93c436a2d2dea3d88a7f2a9be1a4c5084648faf88a3409cfc4521efba",
+    "crates/terminal-core/Cargo.toml": "a7f9d74185d6bd766eb01779311a3af21e8b57f8c486039efe80b3835a684385",
+    "crates/tools/Cargo.toml": "9d9c85f0d7a3bee4013e3d8a5bb1abee14693d81f4847718a670721aaff45668",
     "crates/recording/vendor/vqf/cmsis/include/arm_math.h": "86b5daafdeeedecd7977f00c8001620003b46bd121d4942f04b72746d2634a97",
     "crates/recording/vendor/vqf/cmsis/include/sqrt_f32.h": "cd1cd5e3dbe322a738abd344b4de3ff872f7d4e20c21d87814720783a82be20e",
     "crates/recording/vendor/vqf/cmsis/LICENSE": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1",
@@ -24,12 +24,12 @@
     "LICENSE-MIT": "984757f3c9a84f012b07ae89dc82cf9f9a711bdd61bca51c1e7c24c2173a0778"
   },
   "manifest_semantic_sha256": {
-    "Cargo.toml": "c5836cf716d473c4714bbc49a0f25573412bd8b03f94e1e7b2e6b5cb7225a2f0",
-    "crates/app/Cargo.toml": "e71fd1ce6d27b9eb9287dfcba59b2fd6aa3a7c0881e4e780e51189e44de0570c",
-    "crates/firmware-image/Cargo.toml": "c67a5cdc0d0993054e44fed2bd6e059ff2ba76caab8c7f09debd27647b1df784",
-    "crates/recording/Cargo.toml": "cd7867af705526b66357d2cc21f1551d4ab22758cdea105526124fdbc7c21f6d",
-    "crates/terminal-core/Cargo.toml": "666dbf7fe2eaf6c469fe49304c945658d75176249b6448ce5430829d7bb62c9c",
-    "crates/tools/Cargo.toml": "dc607cc1a3d77596aff8be467ba35ba2381ea3c758461b5276caba18e89add7b"
+    "Cargo.toml": "d0da450d7b32f999b0534c225ed1c0814a15b66d124d374fb9fdbcc0e0b622a6",
+    "crates/app/Cargo.toml": "c09592d22fbf82074d79e20b52b259c721c435a2fc3be82a829155c8a5c42067",
+    "crates/firmware-image/Cargo.toml": "1c1dcdafb444609da1edf59b12da7cddf151147f8caaf0899c850f6e7d400aa2",
+    "crates/recording/Cargo.toml": "503b2cb089536928c08e043689d2eaacc7b07209b6e5dec9fe154b029ea280a0",
+    "crates/terminal-core/Cargo.toml": "a1ee02d0ee820f9e70a7c312c86f90bca5511d370715ba9aecd6d336a3028e51",
+    "crates/tools/Cargo.toml": "e62c6be9ff4c6075119f8d4d970928b4d3b41785f07981b7cd3cea6a2c9a528b"
   },
   "capture": {
     "targets": [

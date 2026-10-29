@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- Source builds now require Rust 1.99 or newer, aligning the declared minimum with the pinned development toolchain's minor release.
+
 ## [0.3.0] - 2026-10-29
 
 ### Added

@@ -12,7 +12,7 @@ When commands, behavior, or links change, update both the default English docume
 
 ## Toolchain and build modes
 
-For native development, use the stable Rust toolchain pinned in [rust-toolchain.toml](../rust-toolchain.toml), including rustfmt, Clippy, rust-analyzer, and rust-src. rustup selects this toolchain automatically in this directory. Do not change your global default. The manifest's MSRV declares a compatibility floor, not a verified minimum version. [Cargo.lock](../Cargo.lock) fixes dependency versions. The GUI uses the official Fast feature through exports from the same `gpui_kit` source.
+For native development, use the stable Rust toolchain pinned in [rust-toolchain.toml](../rust-toolchain.toml), including rustfmt, Clippy, rust-analyzer, and rust-src. rustup selects this toolchain automatically in this directory. Do not change your global default. The workspace's minimum Rust version in [Cargo.toml](../Cargo.toml) follows the pinned compiler's minor release; development and CI verify the pinned patch version rather than every compiler at or above that floor. Workspace members inherit the shared author, repository, and homepage metadata while retaining their own descriptions. [Cargo.lock](../Cargo.lock) fixes dependency versions. The GUI uses the official Fast feature through exports from the same `gpui_kit` source.
 
 Install cargo-nextest for script test actions and non-format-only quality checks: `cargo install --locked cargo-nextest --version 0.9.150`. It is not installed automatically; build, check, format-only, and explicit doctest-only actions do not require it.
 

@@ -12,7 +12,7 @@
 
 ## 工具链与构建模式
 
-原生开发使用 [rust-toolchain.toml](../rust-toolchain.toml) 固定的 stable Rust（含 rustfmt、Clippy、rust-analyzer、rust-src），rustup 在本目录自动选择，不需改变全局默认。清单 MSRV 是兼容下限声明，不代表当前已验证最低版本。依赖版本以 [Cargo.lock](../Cargo.lock) 为准，GUI 通过同源 `gpui_kit` 导出使用官方 Fast feature。
+原生开发使用 [rust-toolchain.toml](../rust-toolchain.toml) 固定的 stable Rust（含 rustfmt、Clippy、rust-analyzer、rust-src），rustup 在本目录自动选择，不需改变全局默认。[Cargo.toml](../Cargo.toml) 中的 workspace 最低 Rust 版本跟随固定编译器的次版本；开发和 CI 验证固定的补丁版本，不代表验证了兼容下限之上的每个编译器版本。各成员继承共享的作者、仓库和主页信息，同时保留各自的描述。依赖版本以 [Cargo.lock](../Cargo.lock) 为准，GUI 通过同源 `gpui_kit` 导出使用官方 Fast feature。
 
 脚本 test 操作和非纯格式质量检查需要安装 cargo-nextest：`cargo install --locked cargo-nextest --version 0.9.150`。脚本不会自动安装；build、check、纯格式和显式的纯 doctest 操作不需要它。
 
