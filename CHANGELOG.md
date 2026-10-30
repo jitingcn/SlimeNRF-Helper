@@ -9,6 +9,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- Raw capture previews show the latest valid raw acceleration magnitude in g, separately from the X/Y/Z components; missing observations are not treated as zero.
+
+### Fixed
+
+- Capture plots distinguish signed Y-axis ticks from sensor readings and clarify acceleration, dimensionless gyro-integral quaternion, angular-rate, and magnetic-field component units and meanings.
+
 ## [0.4.1] - 2026-10-30
 
 ### Fixed

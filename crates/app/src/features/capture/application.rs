@@ -15,6 +15,7 @@ use gpui_kit::component::{
     checkbox::Checkbox,
     input::Input,
 };
+use gpui_kit::{relative, rems};
 use slimenrf_recording::capture::{Gyro, Sample};
 use std::{path::PathBuf, sync::Arc};
 
@@ -848,10 +849,6 @@ impl Workbench {
             .position(|t| Some(t.identity.slot) == slot)
         {
             let track = &snapshot.tracks[index];
-            let quaternion = track
-                .latest
-                .back()
-                .is_some_and(|s| matches!(s.gyro, Gyro::IntegratedQuat(_)));
             if self.capture.details {
                 panel = panel.child(
                     div().text_sm().child(
@@ -865,31 +862,9 @@ impl Workbench {
                     ),
                 );
             }
-            panel = panel.child(live_curve(
-                snapshot.clone(),
-                index,
-                0,
-                if quaternion {
-                    "capture.plot.gyro_quaternion"
-                } else {
-                    "capture.plot.gyro_rate"
-                },
-                cx,
-            ));
-            panel = panel.child(live_curve(
-                snapshot.clone(),
-                index,
-                1,
-                "capture.plot.acceleration",
-                cx,
-            ));
-            panel = panel.child(live_curve(
-                snapshot.clone(),
-                index,
-                2,
-                "capture.plot.magnetic",
-                cx,
-            ));
+            panel = panel.child(live_curve(snapshot.clone(), index, 0, cx));
+            panel = panel.child(live_curve(snapshot.clone(), index, 1, cx));
+            panel = panel.child(live_curve(snapshot.clone(), index, 2, cx));
         }
         panel.into_any_element()
     }
@@ -913,30 +888,114 @@ fn signal(sample: &Sample, kind: u8, axis: usize) -> Option<f32> {
     value.is_finite().then_some(value)
 }
 
+fn latest_acceleration_magnitude(samples: &std::collections::VecDeque<Sample>) -> Option<f64> {
+    samples.iter().rev().find_map(|sample| {
+        let [x, y, z] = sample.acceleration_g;
+        (sample.acceleration_fresh && [x, y, z].into_iter().all(f32::is_finite))
+            .then(|| f64::from(x).hypot(f64::from(y)).hypot(f64::from(z)))
+    })
+}
+
+#[inline(never)]
+fn live_curve_axis(extent: Option<f32>, cx: &Context<Workbench>) -> AnyElement {
+    let mut axis = div()
+        .relative()
+        .w_20()
+        .h_full()
+        .flex_shrink_0()
+        .text_xs()
+        .line_height(rems(1.))
+        .font_family(cx.theme().mono_font_family.clone())
+        .text_color(cx.theme().muted_foreground);
+    if let Some(extent) = extent {
+        let value = if extent >= 1_000. {
+            format!("{extent:.3e}")
+        } else if extent >= 1. {
+            format!("{extent:.3}")
+        } else if extent >= 0.1 {
+            format!("{extent:.4}")
+        } else if extent >= 0.01 {
+            format!("{extent:.5}")
+        } else {
+            format!("{extent:.6}")
+        };
+        for (position, label) in [
+            (0.5 - 0.45, format!("+{value}")),
+            (0.5, "0".into()),
+            (0.5 + 0.45, format!("-{value}")),
+        ] {
+            axis = axis
+                .child(
+                    div()
+                        .absolute()
+                        .right_2()
+                        .top(relative(position))
+                        .mt(-rems(0.5))
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .right_0()
+                        .top(relative(position))
+                        .w_1()
+                        .border_t_1()
+                        .border_color(cx.theme().border),
+                );
+        }
+    }
+    axis.into_any_element()
+}
+
 #[inline(never)]
 fn live_curve(
     snapshot: Arc<CaptureSnapshot>,
     index: usize,
     kind: u8,
-    title: &'static str,
     cx: &Context<Workbench>,
 ) -> AnyElement {
     let track = &snapshot.tracks[index];
-    let dimensions = if kind == 0
-        && track
-            .latest
-            .back()
-            .is_some_and(|s| matches!(s.gyro, Gyro::IntegratedQuat(_)))
-    {
-        4
-    } else {
-        3
+    let (title, description, range_label, dimensions) = match kind {
+        0 => match track.latest.back().map(|sample| sample.gyro) {
+            Some(Gyro::IntegratedQuat(_)) => (
+                "capture.plot.gyro_quaternion",
+                "capture.plot.gyro_quaternion_hint",
+                "capture.plot.range_unitless",
+                4,
+            ),
+            Some(Gyro::RatesDps(_)) => (
+                "capture.plot.gyro_rate",
+                "capture.plot.gyro_rate_hint",
+                "capture.plot.range_dps",
+                3,
+            ),
+            None => (
+                "capture.plot.gyro_pending",
+                "capture.plot.gyro_pending_hint",
+                "capture.plot.range_unknown",
+                3,
+            ),
+        },
+        1 => (
+            "capture.plot.acceleration",
+            "capture.plot.acceleration_hint",
+            "capture.plot.range_g",
+            3,
+        ),
+        _ => (
+            "capture.plot.magnetic",
+            "capture.plot.magnetic_hint",
+            "capture.plot.range_gauss",
+            3,
+        ),
     };
     let mut extent = 0.001_f32;
+    let mut has_reading = false;
     for sample in &track.latest {
         for axis in 0..dimensions {
             if let Some(v) = signal(sample, kind, axis) {
                 extent = extent.max(v.abs());
+                has_reading = true;
             }
         }
     }
@@ -957,68 +1016,122 @@ fn live_curve(
         .gap_1()
         .child(
             div()
-                .text_sm()
-                .child(format!("{} · ±{:.3}", tr(title), extent)),
-        )
-        .child(
-            div().flex().flex_wrap().gap_2().text_xs().children(
-                colors
-                    .iter()
-                    .zip(labels)
-                    .map(|(color, label)| div().text_color(*color).child(tr(label))),
-            ),
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_x_2()
+                .gap_y_1()
+                .child(div().text_sm().child(tr(title)))
+                .when(kind == 1, |row| {
+                    let value = latest_acceleration_magnitude(&track.latest)
+                        .map(|value| format!("{value:.3} g"))
+                        .unwrap_or_else(|| "—".into());
+                    row.child(
+                        div().text_sm().font_weight(FontWeight::MEDIUM).child(
+                            rust_i18n::t!("capture.plot.acceleration_magnitude", value = value)
+                                .to_string(),
+                        ),
+                    )
+                })
+                .children(
+                    colors
+                        .iter()
+                        .zip(labels)
+                        .map(|(color, label)| div().text_xs().text_color(*color).child(tr(label))),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(tr(range_label)),
+                )
+                .when(!has_reading, |row| {
+                    row.child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(tr("capture.plot.no_readings")),
+                    )
+                }),
         )
         .child(
             div()
-                .h(px(110.))
+                .min_w_0()
+                .text_xs()
+                .text_color(cx.theme().muted_foreground)
+                .whitespace_normal()
+                .child(tr(description)),
+        )
+        .child(
+            div()
+                .flex()
                 .w_full()
-                .border_1()
-                .border_color(cx.theme().border)
-                .rounded_md()
-                .overflow_hidden()
+                .min_w_0()
+                .h(px(110.))
+                .child(live_curve_axis(has_reading.then_some(extent), cx))
                 .child(
-                    canvas(
-                        move |_, _, _| (),
-                        move |bounds, (), window, _| {
-                            let data = &snapshot.tracks[index].latest;
-                            if data.len() < 2 {
-                                return;
-                            }
-                            for (axis, &color) in colors.iter().enumerate().take(dimensions) {
-                                let mut path = PathBuilder::stroke(px(1.4));
-                                let mut previous = None;
-                                for (i, sample) in data.iter().enumerate() {
-                                    let Some(value) = signal(sample, kind, axis) else {
-                                        previous = None;
-                                        continue;
-                                    };
-                                    let p = point(
-                                        bounds.origin.x
-                                            + bounds.size.width
-                                                * (i as f32 / (data.len() - 1) as f32),
-                                        bounds.origin.y
-                                            + bounds.size.height * (0.5 - 0.45 * value / extent),
-                                    );
-                                    let contiguous = previous.is_some_and(|seq: u16| {
-                                        sample.sequence.wrapping_sub(seq) == 1
-                                    }) && !sample.discontinuity;
-                                    if contiguous {
-                                        path.line_to(p);
-                                    } else {
-                                        // Fresh accel/mag may be sparse. Draw each observation without
-                                        // inventing held values or joining across absent measurements.
-                                        path.move_to(point(p.x - px(1.), p.y));
-                                        path.line_to(p);
+                    div()
+                        .relative()
+                        .flex_1()
+                        .min_w_0()
+                        .h_full()
+                        .rounded_md()
+                        .overflow_hidden()
+                        .child(
+                            canvas(
+                                move |_, _, _| (),
+                                move |bounds, (), window, _| {
+                                    let data = &snapshot.tracks[index].latest;
+                                    if data.len() < 2 {
+                                        return;
                                     }
-                                    previous = Some(sample.sequence);
-                                }
-                                if let Ok(path) = path.build() {
-                                    window.paint_path(path, color);
-                                }
-                            }
-                        },
-                    )
-                    .size_full(),
+                                    for (axis, &color) in colors.iter().enumerate().take(dimensions)
+                                    {
+                                        let mut path = PathBuilder::stroke(px(1.4));
+                                        let mut previous = None;
+                                        for (i, sample) in data.iter().enumerate() {
+                                            let Some(value) = signal(sample, kind, axis) else {
+                                                previous = None;
+                                                continue;
+                                            };
+                                            let p = point(
+                                                bounds.origin.x
+                                                    + bounds.size.width
+                                                        * (i as f32 / (data.len() - 1) as f32),
+                                                bounds.origin.y
+                                                    + bounds.size.height
+                                                        * (0.5 - 0.45 * value / extent),
+                                            );
+                                            let contiguous = previous.is_some_and(|seq: u16| {
+                                                sample.sequence.wrapping_sub(seq) == 1
+                                            }) && !sample.discontinuity;
+                                            if contiguous {
+                                                path.line_to(p);
+                                            } else {
+                                                // Fresh accel/mag may be sparse. Draw each observation without
+                                                // inventing held values or joining across absent measurements.
+                                                path.move_to(point(p.x - px(1.), p.y));
+                                                path.line_to(p);
+                                            }
+                                            previous = Some(sample.sequence);
+                                        }
+                                        if let Ok(path) = path.build() {
+                                            window.paint_path(path, color);
+                                        }
+                                    }
+                                },
+                            )
+                            .size_full(),
+                        )
+                        // Keep canvas and tick gutters on the same bounds; the border is an overlay.
+                        .child(
+                            div()
+                                .absolute()
+                                .inset_0()
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .rounded_md(),
+                        ),
                 ),
         )
         .into_any_element()
@@ -1026,7 +1139,9 @@ fn live_curve(
 
 #[cfg(test)]
 mod tests {
-    use super::{CaptureUiState, capture_source_id, capture_tracker_cards};
+    use super::{
+        CaptureUiState, capture_source_id, capture_tracker_cards, latest_acceleration_magnitude,
+    };
     use crate::discovery::ReceiverMonitor;
     use crate::domain::{
         InterfaceDescription, Inventory, ReceiverEndpoint, SerialEndpoint, SerialPortKind,
@@ -1042,6 +1157,39 @@ mod tests {
     use crate::sessions::test_support;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn acceleration_magnitude_uses_latest_fresh_finite_whole_vector_in_preview() {
+        use slimenrf_recording::capture::Sample;
+        use std::collections::VecDeque;
+
+        let mut samples = VecDeque::new();
+        assert_eq!(latest_acceleration_magnitude(&samples), None);
+        samples.push_back(Sample {
+            acceleration_g: [3., 4., 0.],
+            acceleration_fresh: true,
+            ..Sample::default()
+        });
+        samples.push_back(Sample {
+            acceleration_g: [0., 0., 0.],
+            ..Sample::default()
+        });
+        assert_eq!(latest_acceleration_magnitude(&samples), Some(5.));
+        samples.push_back(Sample {
+            acceleration_g: [f32::NAN, 12., 0.],
+            acceleration_fresh: true,
+            ..Sample::default()
+        });
+        assert_eq!(latest_acceleration_magnitude(&samples), Some(5.));
+        samples.pop_front();
+        assert_eq!(latest_acceleration_magnitude(&samples), None);
+        samples.push_back(Sample {
+            acceleration_g: [f32::MAX, f32::MAX, 0.],
+            acceleration_fresh: true,
+            ..Sample::default()
+        });
+        assert!(latest_acceleration_magnitude(&samples).unwrap().is_finite());
+    }
 
     #[gpui_kit::test]
     fn shutdown_rejects_capture_start_discovery_and_picker(cx: &mut gpui_kit::TestAppContext) {
