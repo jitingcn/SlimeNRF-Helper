@@ -9,6 +9,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- Internal application source is organized by capability, colocating models, services, views and tests. Workbench-owned adapters remain explicit application orchestration; standalone replay and analysis-window owners retain their own state and completion handling. This is an ownership refactor, not a measured performance improvement.
+- Device-command continuation and background completion handling no longer depend on rendering or the active page. HID presentation is initialized through explicit page activation, and replay preset menus prepare their snapshots only when opened.
+
+### Fixed
+
+- Command/history tabs, firmware source choices and capture source cards support semantic keyboard activation as well as pointer input. OTA Retry no longer also changes tracker selection.
+- Playback-speed changes account for elapsed time at the previous speed before applying the new value, keeping keyboard and menu changes consistent without restarting an unchanged speed.
+- UF2 preset controls retain their identity when device lists reorder, and distinct named variants sharing a firmware resource remain independently keyboard-accessible, without changing volume or device authorization checks.
+
 ## [0.3.2] - 2026-10-29
 
 ### Fixed

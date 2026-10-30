@@ -1,0 +1,12 @@
+pub(crate) mod app_update;
+pub(crate) mod calibration;
+pub(crate) mod capture;
+pub(crate) mod commands;
+pub(crate) mod device_registry;
+pub(crate) mod firmware;
+pub(crate) mod home;
+pub(crate) mod notices;
+pub(crate) mod replay;
+pub(crate) mod rssi;
+pub(crate) mod settings;
+pub(crate) mod temperature;

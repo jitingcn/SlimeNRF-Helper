@@ -632,12 +632,12 @@ static REGEX: LazyLock<Patterns> = LazyLock::new(|| Patterns {
 // Values are exact synthetic fixtures, never whole-file exemptions.
 const REVIEWED_VALUES: &[(&str, &str, &str)] = &[
     (
-        "crates/app/src/firmware_source/http_tests.rs",
+        "crates/app/src/features/firmware/source/http_tests.rs",
         "authorization-value",
         concat!("bearer ", "fixture-secret"),
     ),
     (
-        "crates/app/src/app_update/http_tests.rs",
+        "crates/app/src/features/app_update/service/http_tests.rs",
         "authenticated-url",
         concat!(
             "https://",
@@ -645,32 +645,32 @@ const REVIEWED_VALUES: &[(&str, &str, &str)] = &[
         ),
     ),
     (
-        "crates/app/src/app_update/http_tests.rs",
+        "crates/app/src/features/app_update/service/http_tests.rs",
         "signed-credential",
         concat!("?sig", "=FiXture%2Fpart"),
     ),
     (
-        "crates/app/src/app_update/http_tests.rs",
+        "crates/app/src/features/app_update/service/http_tests.rs",
         "signed-credential",
         concat!("?sig", "=fixture-secret"),
     ),
     (
-        "crates/app/src/app_update/http_tests.rs",
+        "crates/app/src/features/app_update/service/http_tests.rs",
         "signed-credential",
         concat!("?sig", "=fixture-secret-signature"),
     ),
     (
-        "crates/app/src/firmware_source/tests.rs",
+        "crates/app/src/features/firmware/source/tests.rs",
         "authorization-value",
         concat!("Bearer ", "ghp_private_token"),
     ),
     (
-        "crates/app/src/firmware_source/http_tests.rs",
+        "crates/app/src/features/firmware/source/http_tests.rs",
         "authenticated-url",
         concat!("https://", "user:password@api.github.com/credentials"),
     ),
     (
-        "crates/app/src/firmware_source/tests.rs",
+        "crates/app/src/features/firmware/source/tests.rs",
         "authenticated-url",
         concat!(
             "https://",
@@ -680,22 +680,22 @@ const REVIEWED_VALUES: &[(&str, &str, &str)] = &[
         ),
     ),
     (
-        "crates/app/src/firmware_source/tests.rs",
+        "crates/app/src/features/firmware/source/tests.rs",
         "authenticated-url",
         concat!("https://", "user:secret@api.github.com/a"),
     ),
     (
-        "crates/app/src/firmware_source/http_tests.rs",
+        "crates/app/src/features/firmware/source/http_tests.rs",
         "signed-credential",
         concat!("?sig", "=fixture-signature"),
     ),
     (
-        "crates/app/src/firmware_source/tests.rs",
+        "crates/app/src/features/firmware/source/tests.rs",
         "signed-credential",
         concat!("?sig", "=private-signature"),
     ),
     (
-        "crates/app/src/firmware_source/tests.rs",
+        "crates/app/src/features/firmware/source/tests.rs",
         "signed-credential",
         concat!("sig", "=detached-signature"),
     ),
@@ -719,92 +719,92 @@ const REVIEWED_VALUES: &[(&str, &str, &str)] = &[
 // Full trimmed-line SHA-256 values prevent an approved path from hiding a suffix.
 const REVIEWED_LINES: &[(&str, &str, &str)] = &[
     (
-        "crates/app/src/app_update/windows/tests.rs",
+        "crates/app/src/features/app_update/service/windows/tests.rs",
         "private-absolute-path",
         "36250d10780c563db98c1482baa76b505ac72e45dbbdd71c9d49c3584cde910c",
     ),
     (
-        "crates/app/src/app_update/windows/tests.rs",
+        "crates/app/src/features/app_update/service/windows/tests.rs",
         "private-absolute-path",
         "2b45a5b35111e442b1db2fedcf72718a3948c3827cf339b6b7a3aa3b68dd817e",
     ),
     (
-        "crates/app/src/bundled_resources/tests.rs",
+        "crates/app/src/features/firmware/bundled_resources/tests.rs",
         "private-absolute-path",
         "ddf69c2c4e85fcd02698314d3fc0fe7f142d9cccb30793083674970efa693e39",
     ),
     (
-        "crates/app/src/firmware_source/tests.rs",
+        "crates/app/src/features/firmware/source/tests.rs",
         "private-absolute-path",
         "2c8c73153f7a4a4f442695e8d039ba3db64a8ca0ee68b4946714ca359366acef",
     ),
     (
-        "crates/app/src/firmware_source/tests.rs",
+        "crates/app/src/features/firmware/source/tests.rs",
         "private-absolute-path",
         "5a59ce6bfe62671241ec414aa91729988dc2c38e3deaa90c8bbd9dbbac91fcab",
     ),
     (
-        "crates/app/src/uf2/linux.rs",
+        "crates/app/src/features/firmware/uf2/linux.rs",
         "private-absolute-path",
         "d1320baad7a8a5d72539d347aa0c66a2f82e18916fe0935e85347217d3872b07",
     ),
     (
-        "crates/app/src/uf2/linux.rs",
+        "crates/app/src/features/firmware/uf2/linux.rs",
         "private-absolute-path",
         "66e66d60df53e41798e5f223537f737d7e3ccc4378ea45a19ba18a108bbacb3d",
     ),
     (
-        "crates/app/src/uf2/linux.rs",
+        "crates/app/src/features/firmware/uf2/linux.rs",
         "private-absolute-path",
         "68b8c9de1d9714feda4e7191d4963d5c366f92b79723e6a6b621f8f9427b8cce",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "5a316d00bdb4939ead3667c550edfe23ea47b6a3f42380a1842719ca7dea8227",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "6f072659367d7cedf4c746c972e1dc0cf05acbaa6e612c1ba32cfff1ab0fc6d6",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "290386f05d64744dc7c21888da104676f03ed56cc38b0e0111f4775b66bb9651",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "e6cfcb1a9a1e65f6c26b52447714f9d93e24c4c372f6741d8ab2575b396518b1",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "2c7f400ef1511ab9ee560371c101c2c584b6833a3d6f58bf55d0b330a205ed26",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "3f4dc059b78e46a964a260700d367ee42051ee52daea8b471596436b8c49ef23",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "a21097572eae3a8d2e93d3d2a1fe81de0ea8ae2aad6d8eea50e697924b1f5dec",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "85ffe7693debced9382c7f3512212b34fc3b35465db843d8d5c5b45f6e97bee9",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "c705c6885bc0b74bb96080749820534dabcae575d760f56623728559645295cd",
     ),
     (
-        "crates/app/src/ui/flash/tests/images.rs",
+        "crates/app/src/features/firmware/application/tests/images.rs",
         "private-absolute-path",
         "c16b4d348f5ce69d1e0c567ac1449062547c13b02e4c4e5aaef98963be627656",
     ),

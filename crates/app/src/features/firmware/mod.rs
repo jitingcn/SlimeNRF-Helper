@@ -1,0 +1,9 @@
+pub(crate) mod ble_ota;
+pub(crate) mod board_catalog;
+pub(crate) mod bundled_resources;
+pub(crate) mod esb_ota;
+pub(crate) mod executor;
+pub(crate) mod opendfu;
+pub(crate) mod remote_config;
+pub(crate) mod source;
+pub(crate) mod uf2;

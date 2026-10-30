@@ -3,8 +3,8 @@ use super::super::{
     CHUNK_BYTES, IO_TIMEOUT, MAX_IDENTITY_LINE, QUEUE_CAPACITY, SessionManager, port_key,
 };
 use super::{completed, connected, stopped, until};
-use crate::commands::{CommandContext, presets};
 use crate::domain::DeviceRole;
+use crate::features::commands::policy::{CommandContext, presets};
 use crate::rssi_scan::Sample;
 use parking_lot::Mutex;
 use std::collections::VecDeque;

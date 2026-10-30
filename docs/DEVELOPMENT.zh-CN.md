@@ -95,9 +95,9 @@ cargo doc --locked --no-deps -p slimenrf-firmware-image
 
 如对单个内核使用 nextest，以 `-p` 选择，例如 `cargo nextest run --locked -p slimenrf-recording`，并用 `cargo test --locked --doc -p slimenrf-recording` 单独运行 doctest。记录内核仍需 C 编译器。终端和镜像库不需要应用构建脚本、GPUI、硬件接口、应用 YAML 或固件载荷。这些定向命令不替代适用的完整和无固件 workspace 覆盖。外部 updater fixture 与完整固件 oracle 为有真实额外输入的独立检查，不把 ignored 当通过。
 
-创建 `Workbench` GUI 测试 fixture 前，在测试函数的最外层创建一个 `ui::test_support::UiTestSession`。同一 `TestAppContext` 的所有 fixture 共用这个会话。让会话保持到回调和断言结束，以隔离进程级语言状态。
+创建 `Workbench` GUI 测试 fixture 前，在测试函数的最外层创建一个 [`crate::test_support::UiTestSession`](../crates/app/src/test_support.rs)。同一 `TestAppContext` 的所有 fixture 共用这个会话。让会话保持到回调和断言结束，以隔离进程级语言状态。各能力的测试与其所有者放在一起，参见[源码与命名空间边界](ARCHITECTURE.zh-CN.md#依赖方向与模块)，不要重新集中到全局 UI 文件夹。
 
-在 `#[gpui_kit::test]` 之外创建上下文时，遵循 [GUI 测试 fixture](../crates/app/src/ui/test_support.rs)中的独立调度器所有权顺序。先销毁上下文，再清理 `TestDispatcher` 的待处理任务，期间保持调度器存活。让 `AppRuntime` 保持到 UI 清理结束。
+在 `#[gpui_kit::test]` 之外创建上下文时，遵循 [GUI 测试 fixture](../crates/app/src/application/test_support.rs)中的独立调度器所有权顺序。先销毁上下文，再清理 `TestDispatcher` 的待处理任务，期间保持调度器存活。让 `AppRuntime` 保持到 UI 清理结束。
 
 `.vscode` 只维护项目级设置。rust-analyzer 使用正常 `check`，并启用 `rust-analyzer.cargo.noDefaultFeatures`，因此编辑器分析不需要固件载荷。此默认值只影响编辑器，不改变 CLI feature。严格 Clippy 在显式质量入口执行。Windows 关闭所有 VS Code 后可运行 `./scripts/open-editor.ps1`，复用 MSVC/CRT 环境与正常缓存；脚本拒绝复用旧 Code 进程，不关闭别人的窗口或改全局设置。
 

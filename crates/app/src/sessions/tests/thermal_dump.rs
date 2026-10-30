@@ -5,8 +5,8 @@ use super::super::{
     ThermalDumpRequest, port_key,
 };
 use super::{completed, connected, fixture, peer, socket_transport, stopped, until};
-use crate::commands::{CommandContext, presets};
 use crate::domain::DeviceRole;
+use crate::features::commands::policy::{CommandContext, presets};
 use parking_lot::Mutex;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};

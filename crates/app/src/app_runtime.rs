@@ -7,7 +7,7 @@ use std::{
 use reqwest::{Certificate, Client, redirect::Policy};
 use tokio::{runtime::Handle, sync::oneshot};
 
-use crate::ble_ota::Backend;
+use crate::features::firmware::ble_ota::Backend;
 
 /// A concrete submission handle, explicitly injected at the application boundary.
 #[derive(Clone)]

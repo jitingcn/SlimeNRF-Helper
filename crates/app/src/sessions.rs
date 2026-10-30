@@ -554,6 +554,10 @@ impl SessionManager {
         self.disconnect(port)
     }
 
+    pub(crate) fn has_close_requests(&self) -> bool {
+        self.entries.values().any(|entry| entry.close_requested)
+    }
+
     pub(crate) fn is_close_requested(&self, port: &str) -> bool {
         self.entries
             .get(&port_key(port))

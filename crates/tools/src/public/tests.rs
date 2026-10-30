@@ -385,13 +385,17 @@ fn secret_forms_and_private_roots_report_only_locations() {
 fn reviewed_synthetic_credentials_do_not_exempt_new_values_or_files() {
     let fixture = ["https://", "user:password@api.github.com/credentials"].concat();
     let bearer = ["bearer", " ", "fixture-secret"].concat();
-    let path = "crates/app/src/firmware_source/http_tests.rs";
+    let path = "crates/app/src/features/firmware/source/http_tests.rs";
     assert!(scan_text(path, &format!("{fixture}\n{bearer}")).is_empty());
     assert_eq!(
         scan_text(path, &fixture.replace("password", "different-password")),
         findings(&[(path, 1, "authenticated-url")])
     );
-    for other in ["src/firmware_source/http_tests.rs", "other.rs"] {
+    for other in [
+        "src/firmware_source/http_tests.rs",
+        "crates/app/src/firmware_source/http_tests.rs",
+        "other.rs",
+    ] {
         assert_eq!(
             scan_text(other, &bearer),
             findings(&[(other, 1, "authorization-value")])
@@ -411,7 +415,7 @@ fn reviewed_synthetic_credentials_do_not_exempt_new_values_or_files() {
 
 #[test]
 fn app_update_credential_fixtures_are_exact_and_file_scoped() {
-    let path = "crates/app/src/app_update/http_tests.rs";
+    let path = "crates/app/src/features/app_update/service/http_tests.rs";
     let scheme = "https://";
     let signature = "sig";
     let token = "token";
@@ -437,6 +441,11 @@ fn app_update_credential_fixtures_are_exact_and_file_scoped() {
             scan_text("other.rs", &value),
             findings(&[("other.rs", 1, category)])
         );
+        let retired = "crates/app/src/app_update/http_tests.rs";
+        assert_eq!(
+            scan_text(retired, &value),
+            findings(&[(retired, 1, category)])
+        );
     }
     let extra = format!("?{signature}=fixture-secret&{token}=unreviewed-value");
     assert_eq!(
@@ -447,7 +456,7 @@ fn app_update_credential_fixtures_are_exact_and_file_scoped() {
 
 #[test]
 fn app_update_windows_fixture_paths_require_exact_complete_lines() {
-    let path = "crates/app/src/app_update/windows/tests.rs";
+    let path = "crates/app/src/features/app_update/service/windows/tests.rs";
     let drive = "C:";
     let target = format!(
         "target: wide(OsString::from(r\"{drive}\\fixture\\application.exe\").as_os_str()),",
@@ -487,7 +496,7 @@ fn reviewed_public_tool_path_requires_the_exact_complete_line() {
 #[test]
 fn reviewed_private_path_does_not_exempt_a_whitespace_suffix() {
     let fixture = Fixture::new();
-    let path = "crates/app/src/bundled_resources/tests.rs";
+    let path = "crates/app/src/features/firmware/bundled_resources/tests.rs";
     let drive = "C:";
     fixture.put(
         path,

@@ -351,9 +351,9 @@ fn receipt_waits_for_actual_complete_write_without_firmware_reply() {
 
 #[test]
 fn forwarded_slots_share_transport_without_deduplicating_writes_or_receipts() {
-    use crate::{
-        commands::{CommandContext, CommandSnapshot, RouteEvidence, presets},
-        operations::{BatchRun, Outcome, TargetOutcome},
+    use crate::features::commands::{
+        batch::{BatchRun, Outcome, TargetOutcome},
+        policy::{CommandContext, CommandSnapshot, RouteEvidence, presets},
     };
     let (mut manager, listener) = fixture();
     manager.connect("shared").unwrap();

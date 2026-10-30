@@ -4,37 +4,23 @@
 )]
 
 mod app_runtime;
-mod app_update;
-mod ble_ota;
-mod board_catalog;
+mod application;
 #[cfg(test)]
 mod build_resource_tests;
-mod bundled_resources;
-mod calibration;
-mod capture_device;
-mod capture_session;
-mod commands;
-mod device_registry;
+mod components;
 mod discovery;
 mod domain;
-mod esb_ota;
+mod features;
 mod file_export;
-mod firmware_source;
-mod firmware_update;
 mod hid_log;
 mod i18n;
-mod opendfu;
-mod operations;
 mod receiver_events;
-mod remote_config;
 mod rssi_scan;
 mod serial_port;
 mod sessions;
-mod settings;
-mod shortcuts;
-mod terminal_view;
-mod uf2;
-mod ui;
+mod storage_path;
+#[cfg(test)]
+mod test_support;
 mod update;
 
 rust_i18n::i18n!("../../locales", fallback = "en");
@@ -67,18 +53,22 @@ fn startup_mode(
 
 fn main() {
     #[cfg(windows)]
-    if let Some(code) =
-        app_update::windows::dispatch(&std::env::args_os().skip(1).collect::<Vec<_>>())
-    {
+    if let Some(code) = features::app_update::service::windows::dispatch(
+        &std::env::args_os().skip(1).collect::<Vec<_>>(),
+    ) {
         std::process::exit(code);
     }
     #[cfg(windows)]
-    app_update::windows::freeze_running_image();
+    features::app_update::service::windows::freeze_running_image();
     #[cfg(windows)]
-    let cleanup_worker = match app_update::windows::cleanup::startup_takeover() {
-        Ok(app_update::windows::cleanup::StartupTakeover::None) => None,
-        Ok(app_update::windows::cleanup::StartupTakeover::Continue(worker)) => Some(worker),
-        Ok(app_update::windows::cleanup::StartupTakeover::CleanupOnly(worker)) => {
+    let cleanup_worker = match features::app_update::service::windows::cleanup::startup_takeover() {
+        Ok(features::app_update::service::windows::cleanup::StartupTakeover::None) => None,
+        Ok(features::app_update::service::windows::cleanup::StartupTakeover::Continue(worker)) => {
+            Some(worker)
+        }
+        Ok(features::app_update::service::windows::cleanup::StartupTakeover::CleanupOnly(
+            worker,
+        )) => {
             drop(worker);
             return;
         }
@@ -92,7 +82,7 @@ fn main() {
         Ok(StartupMode::Gallery) => {
             #[cfg(debug_assertions)]
             {
-                ui::gallery::run();
+                application::gallery::run();
                 return;
             }
             #[cfg(not(debug_assertions))]
@@ -117,7 +107,7 @@ fn main() {
             return;
         }
     };
-    ui::run(runtime.executor());
+    application::run(runtime.executor());
     // The native event loop has ended and UI-owned workers have joined.
     runtime.shutdown();
     #[cfg(windows)]
