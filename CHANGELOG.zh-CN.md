@@ -9,6 +9,8 @@
 
 ## [未发布]
 
+## [0.4.1] - 2026-10-30
+
 ### 修复
 
 - CDC 原始录制在 START 前完成接收器命令控制台初始化，避免在仅打开控制台后才初始化数据接口的固件上一直等待样本。已有终端连接直接复用；否则临时打开控制台，并在开始录制前释放。
@@ -125,7 +127,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.0...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.0...v0.3.1

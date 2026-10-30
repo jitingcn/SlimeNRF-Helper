@@ -9,6 +9,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-30
+
 ### Fixed
 
 - CDC raw recording initializes the receiver's command console before START, avoiding an endless wait for samples on firmware that initializes the data interface only after the console opens. Existing terminal connections are reused; otherwise the console is opened temporarily and released before recording starts.
@@ -125,7 +127,8 @@ Initial standalone application version, documented from the repository's initial
 - Gyroscope calibration guides, temperature calibration analysis with SVG export, and RSSI channel analysis.
 - English and Simplified Chinese interfaces, light and dark themes, and Windows and Linux packaging with full-firmware and no-firmware build modes.
 
-[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.0...v0.3.1
