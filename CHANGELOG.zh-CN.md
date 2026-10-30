@@ -9,6 +9,8 @@
 
 ## [未发布]
 
+## [0.4.2] - 2026-10-30
+
 ### 新增
 
 - 原始采集预览显示最新有效原始加速度的模长（g），与 X/Y/Z 分量明确区分；缺失观测不计为零值。
@@ -135,7 +137,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.1...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.1...v0.3.2
