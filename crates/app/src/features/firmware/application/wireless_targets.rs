@@ -407,6 +407,13 @@ impl Workbench {
         } else {
             tr("firmware.error.wait_tracker_data")
         };
+        let card_background = if selected {
+            cx.theme().accent
+        } else if offline {
+            cx.theme().muted
+        } else {
+            cx.theme().group_box
+        };
         let card = div()
             .id(SharedString::from(format!("ota-card-{key}")))
             .min_w_0()
@@ -416,13 +423,7 @@ impl Workbench {
             .p_3()
             .border_1()
             .border_color(cx.theme().border.opacity(0.18))
-            .bg(if selected {
-                cx.theme().accent
-            } else if offline {
-                cx.theme().muted
-            } else {
-                cx.theme().group_box
-            })
+            .bg(card_background)
             .text_color(if offline {
                 cx.theme().muted_foreground
             } else {
@@ -560,6 +561,7 @@ impl Workbench {
                 .accessibility_label(label)
                 .selected(selected)
                 .toggled(selected)
+                .bg(card_background)
                 .disabled(!enabled)
                 .tooltip(tooltip)
                 .on_click(cx.listener(move |this, _, _, cx| {

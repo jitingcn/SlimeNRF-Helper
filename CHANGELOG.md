@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- Wireless-update tracker cards keep their address and firmware details on the enclosing card background instead of showing a mismatched inner fill when selected.
+
 ## [0.4.2] - 2026-10-30
 
 ### Added
