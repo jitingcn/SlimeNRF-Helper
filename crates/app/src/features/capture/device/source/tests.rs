@@ -42,7 +42,7 @@ fn inventory(ports: Vec<SerialEndpoint>) -> Inventory {
 }
 
 #[test]
-fn only_explicit_raw_interface_becomes_cdc_source_in_either_order() {
+fn uniquely_associated_console_and_raw_interface_are_required_in_either_order() {
     for ports in [
         vec![
             endpoint("console", Some(0), false),
@@ -55,11 +55,19 @@ fn only_explicit_raw_interface_becomes_cdc_source_in_either_order() {
     ] {
         let source = cdc_source(&receiver(), &inventory(ports)).unwrap();
         assert_eq!(source.serial_port(), Some("data"));
+        assert_eq!(source.console().unwrap().port_name, "console");
     }
     assert!(
         cdc_source(
             &receiver(),
             &inventory(vec![endpoint("console", Some(0), false)])
+        )
+        .is_none()
+    );
+    assert!(
+        cdc_source(
+            &receiver(),
+            &inventory(vec![endpoint("data", Some(2), true)])
         )
         .is_none()
     );
@@ -81,14 +89,41 @@ fn ambiguous_native_functions_cannot_become_capture_sources() {
         vec![
             endpoint("data", Some(2), true),
             endpoint("other-data", Some(4), true),
+            endpoint("console", Some(0), false),
+        ],
+        vec![
+            endpoint("data", Some(2), true),
+            endpoint("console", Some(0), false),
+            endpoint("other-console", Some(4), false),
         ],
     ] {
         assert!(cdc_source(&receiver(), &inventory(ports)).is_none());
     }
     let mut ambiguous = endpoint("data", Some(2), true);
     ambiguous.usb_interface.as_mut().unwrap().description = InterfaceDescription::Ambiguous;
-    assert!(cdc_source(&receiver(), &inventory(vec![ambiguous])).is_none());
-    let mut duplicated_receiver = inventory(vec![endpoint("data", Some(2), true)]);
+    assert!(
+        cdc_source(
+            &receiver(),
+            &inventory(vec![ambiguous, endpoint("console", Some(0), false)])
+        )
+        .is_none()
+    );
+    if cfg!(windows) {
+        assert!(
+            cdc_source(
+                &receiver(),
+                &inventory(vec![
+                    endpoint("COM8", Some(0), false),
+                    endpoint(r"\\.\com8", Some(2), true),
+                ])
+            )
+            .is_none()
+        );
+    }
+    let mut duplicated_receiver = inventory(vec![
+        endpoint("data", Some(2), true),
+        endpoint("console", Some(0), false),
+    ]);
     let mut other = receiver();
     other.key = "other-main".into();
     other.path = b"other-path".to_vec();
@@ -100,12 +135,16 @@ fn ambiguous_native_functions_cannot_become_capture_sources() {
 fn frozen_source_ignores_display_changes_but_rejects_native_replacement() {
     let frozen = cdc_source(
         &receiver(),
-        &inventory(vec![endpoint("data", Some(2), true)]),
+        &inventory(vec![
+            endpoint("data", Some(2), true),
+            endpoint("console", Some(0), false),
+        ]),
     )
     .unwrap();
     let mut current = frozen.clone();
     current.receiver.label = "New receiver display".into();
-    if let CaptureTransport::Cdc { endpoint } = &mut current.transport {
+    if let CaptureTransport::Cdc { endpoint, console } = &mut current.transport {
+        console.label = "New console display".into();
         endpoint.label = "New serial display".into();
         endpoint.product = Some("Display product changed".into());
         endpoint.manufacturer = Some("Display manufacturer changed".into());
@@ -126,9 +165,44 @@ fn frozen_source_ignores_display_changes_but_rejects_native_replacement() {
     ] {
         current.transport = CaptureTransport::Cdc {
             endpoint: replacement,
+            console: Box::new(endpoint("console", Some(0), false)),
         };
         assert!(!frozen.matches(&current));
     }
+    for replacement in [
+        endpoint("other-console", Some(0), false),
+        endpoint("console", Some(4), false),
+        endpoint("console", Some(0), true),
+        SerialEndpoint {
+            serial_number: Some("replacement".into()),
+            ..endpoint("console", Some(0), false)
+        },
+    ] {
+        let mut current = frozen.clone();
+        let CaptureTransport::Cdc { console, .. } = &mut current.transport else {
+            unreachable!()
+        };
+        **console = replacement;
+        assert!(!frozen.matches(&current));
+    }
+    let valid = inventory(vec![
+        endpoint("data", Some(2), true),
+        endpoint("console", Some(0), false),
+    ]);
+    assert!(frozen.matches_inventory(&valid));
+    let mut failed_enumeration = valid.clone();
+    failed_enumeration.serial_enumeration_failed = true;
+    assert!(!frozen.matches_inventory(&failed_enumeration));
+    assert!(!frozen.matches_inventory(&inventory(vec![endpoint("data", Some(2), true)])));
+    assert!(!frozen.matches_inventory(&inventory(vec![
+        endpoint("data", Some(2), true),
+        endpoint("replacement-console", Some(0), false),
+    ])));
+    assert!(!frozen.matches_inventory(&inventory(vec![
+        endpoint("data", Some(2), true),
+        endpoint("console", Some(0), false),
+        endpoint("second-console", Some(4), false),
+    ])));
     current = frozen.clone();
     current.receiver.path.push(0);
     assert!(!frozen.matches(&current));
@@ -146,6 +220,8 @@ fn raw_hid_matching_preserves_receiver_and_exact_data_path() {
         receiver: receiver(),
         transport: CaptureTransport::RawHid { path: vec![1, 2] },
     };
+    assert!(source.console().is_none());
+    assert!(source.matches_inventory(&Inventory::default()));
     let mut current = source.clone();
     current.receiver.label = "Renamed".into();
     assert!(source.matches(&current));

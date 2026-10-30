@@ -12,7 +12,10 @@ mod source;
 mod worker;
 
 pub use source::{CaptureSource, CaptureTransport, discover_sources};
+pub(crate) use worker::CaptureConsolePreparation;
 pub use worker::CaptureWorker;
+#[cfg(test)]
+pub(crate) use worker::TestConsoleReleaseWorker;
 
 #[derive(Clone, Debug)]
 pub enum CaptureMode {

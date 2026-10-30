@@ -3,11 +3,12 @@
 use crate::discovery::{ReceiverMonitor, ReceiverReservation};
 use crate::domain::{DeviceIdentity, Inventory, ReceiverEndpoint, SerialEndpoint};
 use crate::features::capture::device::{
-    CaptureMode, CaptureOutcome, CaptureRequest, CaptureSnapshot, CaptureSource, CaptureWorker,
+    CaptureConsolePreparation, CaptureMode, CaptureOutcome, CaptureRequest, CaptureSnapshot,
+    CaptureSource, CaptureWorker,
 };
 use crate::i18n::tr;
 use crate::serial_port::same_port_name;
-use crate::sessions::{SerialReservation, SessionManager};
+use crate::sessions::{ConnectionState, SerialReservation, SessionManager};
 use std::{cell::RefCell, collections::BTreeSet, path::PathBuf, sync::Arc};
 
 type UsbIdentityBinding = (Option<u16>, Option<u16>, String);
@@ -66,6 +67,9 @@ impl CapturePreparation {
         if let Some(port) = source.serial_port() {
             pin.ports.insert(port.to_owned());
         }
+        if let Some(console) = source.console() {
+            pin.ports.insert(console.port_name.clone());
+        }
         for port in &inventory.ports {
             if pin_blocks_port(
                 &pin,
@@ -103,10 +107,16 @@ pub(crate) struct CaptureSession {
     worker: Option<CaptureWorker>,
     hid_lease: Option<ReceiverReservation>,
     serial_leases: Vec<SerialReservation>,
+    console_lease: Option<SerialReservation>,
     pin: Option<CapturePin>,
     final_snapshot: Option<Arc<CaptureSnapshot>>,
     completion: Option<Result<CaptureOutcome, String>>,
     error: Option<String>,
+}
+
+enum CaptureHandoff {
+    RawHid,
+    Console(CaptureConsolePreparation),
 }
 
 impl CaptureSession {
@@ -200,6 +210,11 @@ impl CaptureSession {
         if self.worker.is_some() {
             return;
         }
+        if let Some(token) = self.console_lease.take()
+            && let Err(error) = manager.release(&token)
+        {
+            self.error = Some(error);
+        }
         for token in self.serial_leases.drain(..) {
             if let Err(error) = manager.release(&token) {
                 self.error = Some(error);
@@ -241,12 +256,26 @@ impl CaptureSession {
         }
         let mut changed = self.pending.is_some();
         if self.pending.is_some() {
-            let ready = (|| -> Result<bool, String> {
+            let ready = (|| -> Result<Option<CaptureHandoff>, String> {
+                if let Some(console) = self.pending.as_ref().and_then(|r| r.source.console()) {
+                    if manager.is_close_requested(&console.port_name) {
+                        return Err(format!(
+                            "{} terminal is closing; finish closing it before starting capture",
+                            console.port_name
+                        ));
+                    }
+                    if manager.thermal_dump_needs_reconnect(&console.port_name) {
+                        return Err(format!(
+                            "{} has an interrupted temperature dump; disconnect and reconnect before starting capture",
+                            console.port_name
+                        ));
+                    }
+                }
                 let Some(token) = &self.hid_lease else {
                     return Err(tr("capture.error.source_required"));
                 };
                 if !monitor.reservation_ready(token)? {
-                    return Ok(false);
+                    return Ok(None);
                 }
                 if manager.sessions().any(|session| {
                     self.blocks_port(
@@ -258,9 +287,13 @@ impl CaptureSession {
                             .find(|p| same_port_name(&p.port_name, &session.port)),
                     ) && !manager.writes_idle(&session.port)
                 }) {
-                    return Ok(false);
+                    return Ok(None);
                 }
-                // Gate submissions, drain accepted writes, THEN cancel the CDC
+                let source = &self.pending.as_ref().expect("pending capture").source;
+                if !source.matches_inventory(inventory) {
+                    return Err("Capture source changed before console initialization".into());
+                }
+                // Gate submissions, drain accepted writes, THEN cancel the raw
                 // terminal reader. Earlier reservation could truncate a write.
                 if self.serial_leases.is_empty()
                     && let Some(port) = self.pending.as_ref().and_then(|r| r.source.serial_port())
@@ -269,16 +302,60 @@ impl CaptureSession {
                 }
                 for token in &self.serial_leases {
                     if !manager.reservation_ready(token)? {
-                        return Ok(false);
+                        return Ok(None);
                     }
                 }
-                Ok(true)
+                let Some(console) = source.console() else {
+                    return Ok(Some(CaptureHandoff::RawHid));
+                };
+                if manager.thermal_dump_busy(&console.port_name) {
+                    return Ok(None);
+                }
+                if self.console_lease.is_none() && manager.command_port_reserved(&console.port_name)
+                {
+                    return Ok(None);
+                }
+                if self.console_lease.is_none() {
+                    match manager.session(&console.port_name).map(|view| view.state) {
+                        Some(ConnectionState::Connected) => {
+                            let probe = manager.begin_capture_console_probe(console)?;
+                            return Ok(Some(CaptureHandoff::Console(
+                                CaptureConsolePreparation::Existing(probe),
+                            )));
+                        }
+                        Some(ConnectionState::Connecting | ConnectionState::Closing) => {
+                            return Ok(None);
+                        }
+                        Some(ConnectionState::Disconnected | ConnectionState::Faulted)
+                            if !manager.can_forget(&console.port_name) =>
+                        {
+                            return Err(format!(
+                                "{} console is unavailable; reconnect it before starting capture",
+                                console.port_name
+                            ));
+                        }
+                        _ => {}
+                    }
+                    self.console_lease = Some(manager.reserve(&console.port_name, None)?);
+                }
+                let token = self.console_lease.as_ref().expect("console reservation");
+                if !manager.reservation_ready(token)? {
+                    return Ok(None);
+                }
+                let source = manager.reserved_console_source(token)?;
+                Ok(Some(CaptureHandoff::Console(
+                    CaptureConsolePreparation::Temporary(source),
+                )))
             })();
             match ready {
-                Ok(false) => return false,
-                Ok(true) => {
-                    let request = self.pending.take().unwrap();
-                    match CaptureWorker::start(request) {
+                Ok(None) => return false,
+                Ok(Some(handoff)) => {
+                    let request = self.pending.take().expect("pending capture");
+                    let console = match handoff {
+                        CaptureHandoff::RawHid => None,
+                        CaptureHandoff::Console(console) => Some(console),
+                    };
+                    match CaptureWorker::start(request, console) {
                         Ok(worker) => self.worker = Some(worker),
                         Err(error) => {
                             self.error = Some(error);
@@ -291,6 +368,24 @@ impl CaptureSession {
                     self.error = Some(error);
                     self.release_leases(manager, monitor);
                 }
+            }
+        }
+        if self
+            .worker
+            .as_ref()
+            .is_some_and(CaptureWorker::console_closed)
+        {
+            changed = true;
+            let result = self
+                .console_lease
+                .take()
+                .ok_or_else(|| "Console reservation is missing".to_owned())
+                .and_then(|token| manager.release(&token));
+            if let Err(error) = &result {
+                self.error = Some(error.clone());
+            }
+            if let Some(worker) = &mut self.worker {
+                worker.console_released(result);
             }
         }
         if let Some(result) = self.join_worker() {

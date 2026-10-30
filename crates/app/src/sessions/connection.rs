@@ -26,6 +26,13 @@ impl SessionManager {
     pub fn invalidate_inventory(&mut self) {
         self.inventory_updated_at = None;
         self.inventory_scan_started_at = None;
+        for entry in self.entries.values() {
+            if let Some(worker) = &entry.worker
+                && let Some(cancel) = worker.capture_probe.lock().active.as_ref()
+            {
+                cancel.store(true, Ordering::Release);
+            }
+        }
     }
 
     pub(super) fn update_inventory_at(
@@ -79,6 +86,19 @@ impl SessionManager {
                     console_allowed,
                     usb: endpoint.kind == crate::domain::SerialPortKind::Usb,
                 });
+        }
+        for (key, entry) in &self.entries {
+            if let Some(worker) = &entry.worker
+                && !inventory.get(key).is_some_and(|record| {
+                    record.usb
+                        && record.console_allowed
+                        && entry.captured_usb_identity.is_some()
+                        && record.recovery_identity == entry.captured_usb_identity
+                })
+                && let Some(cancel) = worker.capture_probe.lock().active.as_ref()
+            {
+                cancel.store(true, Ordering::Release);
+            }
         }
         for (key, entry) in &mut self.entries {
             let Some(reconnect) = &mut entry.reconnect else {
@@ -229,6 +249,8 @@ impl SessionManager {
         }));
         let rssi_scan = Arc::new(Mutex::new(None));
         let worker_rssi_scan = Arc::clone(&rssi_scan);
+        let capture_probe = Arc::new(Mutex::new(super::capture_probe::ProbeOwnerState::default()));
+        let worker_probe = Arc::clone(&capture_probe);
         let (command_tx, command_rx) = mpsc::sync_channel(QUEUE_CAPACITY);
         let display = Arc::new(Mutex::new(DisplayQueue::new()));
         let worker_display = Arc::clone(&display);
@@ -245,7 +267,10 @@ impl SessionManager {
                 run_worker(
                     &worker_port,
                     factory,
-                    worker_cancel,
+                    super::worker::WorkerOwner {
+                        cancel: worker_cancel,
+                        probe_guard: super::capture_probe::ProbeOwnerGuard(worker_probe),
+                    },
                     command_rx,
                     worker_display,
                     lifecycle_tx,
@@ -266,6 +291,7 @@ impl SessionManager {
             generation,
             cancel,
             commands: command_tx,
+            capture_probe,
             display,
             lifecycle: lifecycle_rx,
             identity,

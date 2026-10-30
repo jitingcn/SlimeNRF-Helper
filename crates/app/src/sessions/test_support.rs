@@ -77,6 +77,9 @@ pub(crate) fn display_test_session(manager: &mut SessionManager, port: &str) -> 
                 generation: 1,
                 cancel: Arc::new(AtomicBool::new(false)),
                 commands,
+                capture_probe: Arc::new(Mutex::new(
+                    super::capture_probe::ProbeOwnerState::default(),
+                )),
                 display: Arc::clone(&display),
                 lifecycle,
                 identity: Arc::clone(&identity),
@@ -126,6 +129,25 @@ pub(crate) fn display_session_state(
     state: ConnectionState,
 ) {
     manager.entries.get_mut(&port_key(port)).unwrap().view.state = state;
+}
+
+pub(crate) fn exhausted_reconnect_session(
+    manager: &mut SessionManager,
+    endpoint: &crate::domain::SerialEndpoint,
+) {
+    let _display = display_test_session(manager, &endpoint.port_name);
+    let entry = manager
+        .entries
+        .get_mut(&port_key(&endpoint.port_name))
+        .unwrap();
+    entry.worker = None;
+    entry.view.state = ConnectionState::Faulted;
+    entry.reconnect = Some(super::Reconnect {
+        identity: super::UsbIdentity::from_endpoint(endpoint).unwrap(),
+        arrival_pending: false,
+        loss_probe: super::LossProbe::Spent,
+        native_change_after: None,
+    });
 }
 
 pub(crate) fn socket_transport(address: std::net::SocketAddr) -> io::Result<TcpStream> {

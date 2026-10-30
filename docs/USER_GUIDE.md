@@ -322,7 +322,7 @@ Focus the report list with Tab. Use the arrow keys to select a report, Page Up a
 
 In single-tracker mode, use the cards to check online status and TPS before selecting a tracker. The activity outline follows TPS. This is recent main-HID traffic, not the requested raw sampling rate. Paired offline trackers remain selectable. During capture, the page shows the frozen target instead of stale activity cards.
 
-If no source appears, check compatible firmware and the USB connection, then refresh. CDC stays unavailable when the raw-data interface cannot be identified uniquely.
+If no source appears, check compatible firmware and the USB connection, then refresh. CDC requires uniquely identified raw-data and command-console interfaces on the same receiver. Before START, the helper opens the command console to initialize the data interface on older firmware. It reuses an existing terminal connection without disconnecting it, or opens the console temporarily and closes it before START. A read-only `help` request with a unique echo confirms that the console has activated; failure or cancellation prevents START. You do not need to open the console manually or keep it open during recording.
 
 Capture takes exclusive control of the affected HID or CDC interfaces and blocks related commands and updates. Switching pages does not release them. Unrelated devices are expected to remain usable. Physical-device START and ACK, throughput, sample loss, STOP, hotplug, and continuity still await acceptance testing.
 

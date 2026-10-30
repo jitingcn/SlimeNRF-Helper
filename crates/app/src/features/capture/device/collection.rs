@@ -135,6 +135,13 @@ pub(super) fn collect(
         snapshot_dirty: true,
     };
     let result = (|| {
+        if cancel.load(Ordering::Acquire) {
+            return Err("Capture start cancelled".into());
+        }
+        io.initialize(cancel)?;
+        if cancel.load(Ordering::Acquire) {
+            return Err("Capture start cancelled".into());
+        }
         let deadline = io.now() + IDENTITY_TIMEOUT;
         loop {
             if cancel.load(Ordering::Acquire) {

@@ -55,6 +55,9 @@ fn disconnect_after_closed_preserves_terminal_state_before_and_after_reap() {
                     generation: 1,
                     cancel: Arc::clone(&cancel),
                     commands,
+                    capture_probe: Arc::new(Mutex::new(
+                        super::super::capture_probe::ProbeOwnerState::default(),
+                    )),
                     display,
                     lifecycle,
                     identity: Arc::new(Mutex::new(IdentitySnapshot {

@@ -3,7 +3,7 @@ use crate::features::capture::device::collection::tests::{Sim, request};
 use crate::features::capture::device::collection::{collect, expected_roster};
 use parking_lot::Mutex;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 #[test]
 fn join_never_detaches_owned_io_or_releases_external_lease() {
@@ -29,6 +29,8 @@ fn join_never_detaches_owned_io_or_releases_external_lease() {
         cancel,
         state,
         handle: Some(handle),
+        console_release: None,
+        console_cancel: None,
     };
     // External lease remains caller-owned even when cancellation is requested.
     let external_lease = Arc::new(());
@@ -49,6 +51,8 @@ fn snapshot_polling_reuses_immutable_publication_until_worker_replaces_it() {
         cancel: Arc::new(AtomicBool::new(false)),
         state: Arc::clone(&state),
         handle: None,
+        console_release: None,
+        console_cancel: None,
     };
     let first = worker.snapshot();
     assert!(Arc::ptr_eq(&first, &worker.snapshot()));
@@ -61,4 +65,77 @@ fn snapshot_polling_reuses_immutable_publication_until_worker_replaces_it() {
     assert!(Arc::ptr_eq(&next, &worker.snapshot()));
     assert_eq!(first.counters.samples, 0);
     assert_eq!(next.counters.samples, 7);
+}
+
+#[test]
+fn stop_cancels_a_deferred_console_probe_before_native_open_completes() {
+    use crate::domain::{
+        InterfaceDescription, Inventory, SerialEndpoint, SerialPortKind, UsbInterface,
+    };
+    use crate::sessions::ConnectionState;
+    use crate::sessions::test_support::{connected, fixture, peer};
+    use std::io::{self, Read};
+    use std::time::{Duration, Instant};
+
+    let endpoint = SerialEndpoint {
+        port_name: "console".into(),
+        label: "Console".into(),
+        manufacturer: None,
+        product: None,
+        kind: SerialPortKind::Usb,
+        serial_number: Some("receiver".into()),
+        vid: Some(0x1209),
+        pid: Some(0x7690),
+        usb_interface: Some(UsbInterface {
+            number: Some(0),
+            description: InterfaceDescription::Unavailable,
+        }),
+    };
+    let inventory = Inventory {
+        ports: vec![endpoint.clone()],
+        ..Inventory::default()
+    };
+    let (mut manager, listener) = fixture();
+    manager.update_inventory(&inventory, Instant::now());
+    manager.connect(&endpoint.port_name).unwrap();
+    let mut serial_peer = peer(&listener);
+    connected(&mut manager, &endpoint.port_name);
+    let probe = manager.begin_capture_console_probe(&endpoint).unwrap();
+    let probe_cancel = probe.cancel_token();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let thread_cancel = Arc::clone(&cancel);
+    let (release, gate) = mpsc::channel();
+    let handle = std::thread::spawn(move || {
+        gate.recv().map_err(|error| error.to_string())?;
+        probe.wait(&thread_cancel)?;
+        Err("cancelled probe unexpectedly succeeded".into())
+    });
+    let mut worker = CaptureWorker {
+        cancel,
+        state: Arc::new(Mutex::new(Arc::new(CaptureSnapshot::default()))),
+        handle: Some(handle),
+        console_release: None,
+        console_cancel: Some(Arc::clone(&probe_cancel)),
+    };
+    // Drop the sender before the worker on assertion failure.
+    let release = release;
+    worker.stop();
+    assert!(probe_cancel.load(Ordering::Acquire));
+    assert!(!worker.is_finished());
+    release.send(()).unwrap();
+    assert!(worker.handle.take().unwrap().join().unwrap().is_err());
+    serial_peer
+        .set_read_timeout(Some(Duration::from_millis(100)))
+        .unwrap();
+    let error = serial_peer.read(&mut [0]).unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+    ));
+    let _ = manager.poll();
+    assert_eq!(
+        manager.session(&endpoint.port_name).unwrap().state,
+        ConnectionState::Connected
+    );
+    manager.shutdown().unwrap().join().unwrap();
 }

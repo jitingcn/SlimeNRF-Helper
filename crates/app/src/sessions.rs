@@ -9,8 +9,10 @@ use std::sync::{Arc, mpsc};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+mod capture_probe;
 mod connection;
 mod lifecycle;
+pub(crate) mod lines;
 mod native;
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -18,6 +20,7 @@ mod thermal_dump;
 mod transcript;
 mod worker;
 
+pub(crate) use capture_probe::{CaptureConsoleProbe, probe_reserved_capture_console};
 pub(crate) use lifecycle::reap_workers;
 use native::Factory;
 use thermal_dump::{DumpCommand, DumpRequests};
@@ -86,7 +89,8 @@ struct Command {
     bytes: Vec<u8>,
     completion: mpsc::SyncSender<Result<(), String>>,
     thermal_dump: Option<DumpCommand>,
-    _pending: PendingWrite,
+    capture_probe: Option<capture_probe::ProbeRequest>,
+    _pending: Option<PendingWrite>,
 }
 
 /// Count the command, not its receipt: abandoning a receipt cannot make an
@@ -122,6 +126,7 @@ struct Worker {
     generation: u64,
     cancel: Arc<AtomicBool>,
     commands: mpsc::SyncSender<Command>,
+    capture_probe: Arc<Mutex<capture_probe::ProbeOwnerState>>,
     display: Arc<Mutex<DisplayQueue>>,
     lifecycle: mpsc::Receiver<Lifecycle>,
     identity: Arc<Mutex<IdentitySnapshot>>,
@@ -414,6 +419,14 @@ impl SessionManager {
         if self.reservations.contains_key(&key) {
             return Err(format!("{port} is reserved for a firmware operation"));
         }
+        if self
+            .entries
+            .get(&key)
+            .and_then(|entry| entry.worker.as_ref())
+            .is_some_and(|worker| worker.capture_probe.lock().active.is_some())
+        {
+            return Err(format!("{port} has an active console readiness probe"));
+        }
         let generation = self.entries.get(&key).map(|entry| entry.view.generation);
         if expected_generation.is_some() && generation != expected_generation {
             return Err(format!(
@@ -601,6 +614,49 @@ impl SessionManager {
         self.reservations.contains_key(&port_key(port))
     }
 
+    /// Run a read-only readiness transaction on the existing connected owner.
+    pub(crate) fn begin_capture_console_probe(
+        &mut self,
+        endpoint: &SerialEndpoint,
+    ) -> Result<CaptureConsoleProbe, String> {
+        let port = &endpoint.port_name;
+        let key = port_key(port);
+        let entry = self
+            .entries
+            .get(&key)
+            .ok_or_else(|| format!("{port} has no connected console owner"))?;
+        let generation = entry.view.generation;
+        if entry.close_requested
+            || self.connected_identity_for(endpoint, generation).is_none()
+            || !entry
+                .captured_usb_identity
+                .as_ref()
+                .is_some_and(|identity| identity.matches_endpoint(endpoint))
+        {
+            return Err(format!(
+                "{port} console identity or generation is unavailable"
+            ));
+        }
+        if entry.pending_writes.load(Ordering::Acquire) != 0 {
+            return Err(format!("{port} has pending command writes"));
+        }
+        if self.thermal_dumps.lock().busy(port) {
+            return Err(format!(
+                "{port} has an active or incomplete temperature dump"
+            ));
+        }
+        let worker = entry
+            .worker
+            .as_ref()
+            .ok_or_else(|| format!("{port} has no connected console owner"))?;
+        CaptureConsoleProbe::new(
+            &worker.capture_probe,
+            &worker.cancel,
+            &worker.commands,
+            &entry.pending_writes,
+        )
+    }
+
     pub fn send_line(&mut self, port: &str, line: &str) -> Result<WriteReceipt, String> {
         let key = port_key(port);
         if self.reservations.contains_key(&key) {
@@ -629,6 +685,9 @@ impl SessionManager {
             let worker = entry.worker.as_ref().ok_or_else(|| {
                 rust_i18n::t!("serial.session.error.unavailable", port = port).to_string()
             })?;
+            if worker.capture_probe.lock().active.is_some() {
+                return Err(format!("{port} has an active console readiness probe"));
+            }
             let mut dumps = self.thermal_dumps.lock();
             if dumps.needs_reconnect(port) {
                 return Err(format!(
@@ -656,7 +715,8 @@ impl SessionManager {
                     request: request.clone(),
                     requests: Arc::clone(&self.thermal_dumps),
                 }),
-                _pending: PendingWrite::new(&entry.pending_writes),
+                capture_probe: None,
+                _pending: Some(PendingWrite::new(&entry.pending_writes)),
             });
             if queued.is_err()
                 && let Some(request) = &request

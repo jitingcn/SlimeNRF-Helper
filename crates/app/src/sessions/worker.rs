@@ -1,3 +1,4 @@
+use super::capture_probe::{self, ProbeError};
 use super::native::{Factory, Transport};
 use super::thermal_dump::DumpCollector;
 use super::transcript::ConsoleLines;
@@ -9,17 +10,27 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
+pub(super) struct WorkerOwner {
+    pub(super) cancel: Arc<AtomicBool>,
+    pub(super) probe_guard: capture_probe::ProbeOwnerGuard,
+}
+
 pub(super) fn run_worker(
     port: &str,
     factory: Factory,
-    cancel: Arc<AtomicBool>,
+    owner: WorkerOwner,
     commands: mpsc::Receiver<Command>,
     display: Arc<Mutex<DisplayQueue>>,
     lifecycle: mpsc::Sender<Lifecycle>,
     mut parser: ConsoleLines,
 ) {
+    let WorkerOwner {
+        cancel,
+        probe_guard,
+    } = owner;
     let mut read_buffer = [0; CHUNK_BYTES];
     let mut dump: Option<DumpCollector> = None;
+    let mut prior_partial = false;
     let result = (|| -> io::Result<()> {
         if cancel.load(Ordering::Acquire) {
             return Ok(());
@@ -43,6 +54,53 @@ pub(super) fn run_worker(
                 }
                 match commands.try_recv() {
                     Ok(mut command) => {
+                        if let Some(probe) = command.capture_probe.take() {
+                            let result = capture_probe::run(
+                                &mut *transport,
+                                probe.cancel(),
+                                &cancel,
+                                prior_partial,
+                                |bytes| {
+                                    parser.push(bytes);
+                                    if let Some(collector) = &mut dump {
+                                        collector.feed(bytes);
+                                    }
+                                    display.lock().push(bytes);
+                                    if let Some(last) = bytes.last() {
+                                        prior_partial = *last != b'\n';
+                                    }
+                                },
+                            );
+                            let result = if !matches!(&result, Err(ProbeError::Transport(_)))
+                                && (cancel.load(Ordering::Acquire)
+                                    || probe.cancel().load(Ordering::Acquire))
+                            {
+                                Err(ProbeError::Invalid(
+                                    "Console readiness probe cancelled".into(),
+                                ))
+                            } else {
+                                result
+                            };
+                            let (result, fatal) = match result {
+                                Ok(()) => (Ok(()), None),
+                                Err(ProbeError::Invalid(error)) => (Err(error), None),
+                                Err(ProbeError::Transport(error)) => {
+                                    (Err(error.to_string()), Some(error))
+                                }
+                            };
+                            let Command {
+                                completion,
+                                _pending,
+                                ..
+                            } = command;
+                            drop(probe);
+                            drop(_pending);
+                            let _ = completion.try_send(result);
+                            if let Some(error) = fatal {
+                                return Err(error);
+                            }
+                            continue;
+                        }
                         if let Some(request) = command.thermal_dump.take() {
                             let Some(collector) = DumpCollector::arm(request) else {
                                 let _ = command.completion.try_send(Err(
@@ -86,6 +144,7 @@ pub(super) fn run_worker(
                         collector.feed(&read_buffer[..length]);
                     }
                     display.lock().push(&read_buffer[..length]);
+                    prior_partial = read_buffer[length - 1] != b'\n';
                 }
                 Err(error)
                     if matches!(
@@ -104,6 +163,7 @@ pub(super) fn run_worker(
         }
         Ok(())
     })();
+    drop(probe_guard);
     // The transport has already been dropped when the closure returns.
     parser.finish();
     if let Some(collector) = &dump {
@@ -126,7 +186,15 @@ pub(super) fn run_worker(
                 .lock()
                 .finish(&dump.request, ThermalDumpOutcome::Disconnected);
         }
-        let _ = command.completion.try_send(Err(pending_error.clone()));
+        let Command {
+            completion,
+            capture_probe,
+            _pending,
+            ..
+        } = command;
+        drop(capture_probe);
+        drop(_pending);
+        let _ = completion.try_send(Err(pending_error.clone()));
     }
     // Transfer the final gap exactly once. Closed owns it; the consumer must
     // drain all retained blocks before appending this trailing notice.

@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- CDC raw recording initializes the receiver's command console before START, avoiding an endless wait for samples on firmware that initializes the data interface only after the console opens. Existing terminal connections are reused; otherwise the console is opened temporarily and released before recording starts.
+
 ## [0.4.0] - 2026-10-30
 
 ### Changed

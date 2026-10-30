@@ -120,6 +120,8 @@ CSV 与配对元数据 ZIP 导出在写入字节时检查累计解压大小。�
 
 raw HID Usage Page `0xFF00` 的 `0x13` 与 CDC CRC 帧由专用解析器处理。`0x14` 携带 raw 采集会话开始时捕获的不可变校准元数据。`collectmeta` 只请求重传该快照，不获取校准后的新鲜系数，依据[追踪器采集会话快照](https://github.com/jitingcn/SlimeVR-Tracker-nRF/blob/8aa61a6ce0a9e3bc6f45564656f808827da5de01/src/connection/connection.c#L1044-L1088)。校准指引不为取得读回而启动或重启 raw 采集。控制与单批 ACK 走主 HID。raw wxyz float 累积未补偿陀螺积分四元数不是融合姿态；主 HID 融合四元数为 xyzw Q15、线加速度 m/s²，raw 加速度 g，不能混解释。
 
+接收器基线 [`9ee5e788`](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/9ee5e788346018a0b390bdacec372cc6f7ea7000/src/console.c#L834-L850)在首次激活命令控制台时初始化 raw CDC 后端，而非打开原始数据端口或收到 HID START 时；START 后才初始化还会重置采集状态。因此 CDC 采集在 START 前通过已有串口所有者或临时句柄激活唯一关联的控制台，临时句柄在 START 前释放。有界等待新鲜的 `help <nonce>` 回显，证明旧固件控制台已执行到初始化尝试；旧横幅或旧 help 响应不足以证明这一点。固件不提供 CDC 就绪查询，并忽略初始化返回值，因此该证据不证明初始化成功或追踪器已有样本。START/STOP 仍走主 HID，原始数据端口仍是录制传输通道。
+
 <a id="numerics"></a>
 ## 数值与坐标边界
 

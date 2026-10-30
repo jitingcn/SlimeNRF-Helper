@@ -478,7 +478,8 @@ fn abandoned_queued_receipt_fails_once_instead_of_staying_pending() {
             bytes: b"info\n".to_vec(),
             completion,
             thermal_dump: None,
-            _pending: PendingWrite::new(&pending),
+            capture_probe: None,
+            _pending: Some(PendingWrite::new(&pending)),
         })
         .unwrap();
     let mut receipt = WriteReceipt {

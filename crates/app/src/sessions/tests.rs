@@ -1,6 +1,7 @@
 use super::test_support::{completed, connected, fixture, peer, socket_transport, stopped, until};
 
 mod bounded_recovery;
+mod capture_probe;
 mod connected_identity;
 mod lifecycle;
 mod native;

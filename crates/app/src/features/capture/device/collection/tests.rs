@@ -1,10 +1,12 @@
-use super::super::io::CaptureIo;
+use super::super::io::{CaptureIo, ConsoleInitialization};
 use super::super::{
     CaptureMode, CaptureOutcome, CapturePhase, CaptureRequest, CaptureSnapshot, CaptureSource,
     CaptureTransport,
 };
 use super::{collect, expected_roster};
-use crate::domain::ReceiverEndpoint;
+use crate::domain::{
+    InterfaceDescription, ReceiverEndpoint, SerialEndpoint, SerialPortKind, UsbInterface,
+};
 use parking_lot::Mutex;
 use slimenrf_recording::capture::format::load;
 use std::collections::VecDeque;
@@ -27,6 +29,13 @@ pub(in crate::features::capture::device) struct Sim {
     replaced_rf: bool,
     replaced_source: bool,
     cdc: bool,
+    initialized: bool,
+    initialization_error: Option<String>,
+    cancel_during_initialization: bool,
+    initialization_calls: usize,
+    console: Option<ConsoleInitialization>,
+    start_signal: Option<Arc<AtomicBool>>,
+    firmware_frames: Option<VecDeque<Vec<u8>>>,
     stop_after: Duration,
     observe: Option<Arc<Mutex<Arc<CaptureSnapshot>>>>,
     phases: Vec<CapturePhase>,
@@ -53,6 +62,13 @@ impl Sim {
             replaced_rf: false,
             replaced_source: false,
             cdc: false,
+            initialized: false,
+            initialization_error: None,
+            cancel_during_initialization: false,
+            initialization_calls: 0,
+            console: None,
+            start_signal: None,
+            firmware_frames: None,
             stop_after: Duration::ZERO,
             observe: None,
             phases: Vec::new(),
@@ -79,6 +95,24 @@ fn raw(sequence: u16) -> [u8; 64] {
     bytes
 }
 impl CaptureIo for Sim {
+    fn initialize(&mut self, cancel: &AtomicBool) -> Result<(), String> {
+        self.initialization_calls += 1;
+        if self.cancel_during_initialization {
+            self.cancel.store(true, Ordering::Release);
+        }
+        if cancel.load(Ordering::Acquire) {
+            return Err("Capture start cancelled".into());
+        }
+        if let Some(error) = &self.initialization_error {
+            return Err(error.clone());
+        }
+        if let Some(console) = self.console.take() {
+            console.run(cancel)?;
+        }
+        self.initialized = true;
+        Ok(())
+    }
+
     fn now(&self) -> Duration {
         self.clock
     }
@@ -119,7 +153,14 @@ impl CaptureIo for Sim {
         self.commands.push(*report);
         let opcode = report[3];
         if matches!(opcode, 214 | 221) {
+            assert!(
+                !self.cdc || self.initialized,
+                "legacy receiver must initialize before START"
+            );
             self.started = true;
+            if let Some(started) = &self.start_signal {
+                started.store(true, Ordering::Release);
+            }
             if self.cancel_on_start {
                 self.cancel.store(true, Ordering::Release);
             }
@@ -158,6 +199,19 @@ impl CaptureIo for Sim {
         }
         self.clock += Duration::from_millis(10);
         if !self.started {
+            return Ok(0);
+        }
+        if self.cdc && !self.initialized {
+            // Old receiver firmware acknowledges START but drops CDC samples.
+            return Ok(0);
+        }
+        if let Some(frames) = &mut self.firmware_frames {
+            if let Some(frame) = frames.pop_front() {
+                bytes[..frame.len()].copy_from_slice(&frame);
+                self.emitted += 1;
+                return Ok(frame.len());
+            }
+            self.cancel.store(true, Ordering::Release);
             return Ok(0);
         }
         if self.unplug && self.emitted > 0 {
@@ -218,6 +272,33 @@ pub(in crate::features::capture::device) fn request(
         roster: vec![(3, "112233445566".into())],
     }
 }
+
+fn cdc_request(path: std::path::PathBuf, batch: bool) -> CaptureRequest {
+    let mut request = request(path, batch);
+    let endpoint = |port: &str, number, description| SerialEndpoint {
+        port_name: port.into(),
+        label: port.into(),
+        manufacturer: None,
+        product: None,
+        kind: SerialPortKind::Usb,
+        serial_number: Some("unique".into()),
+        vid: Some(0x1209),
+        pid: Some(0x7690),
+        usb_interface: Some(UsbInterface {
+            number: Some(number),
+            description,
+        }),
+    };
+    request.source.transport = CaptureTransport::Cdc {
+        endpoint: endpoint(
+            "data",
+            2,
+            InterfaceDescription::Value("SlimeNRF Raw Data CDC".into()),
+        ),
+        console: Box::new(endpoint("console", 0, InterfaceDescription::Unavailable)),
+    };
+    request
+}
 fn run(request: &CaptureRequest, io: &mut Sim) -> (CaptureOutcome, Arc<CaptureSnapshot>) {
     let state = Mutex::new(Arc::new(CaptureSnapshot::default()));
     let cancel = Arc::clone(&io.cancel);
@@ -236,7 +317,12 @@ fn real_worker_loop_writes_raw_and_cdc_samples_then_matching_stop() {
     for cdc in [false, true] {
         for batch in [false, true] {
             let dir = tempfile::tempdir().unwrap();
-            let request = request(dir.path().join("capture.slimecap"), batch);
+            let path = dir.path().join("capture.slimecap");
+            let request = if cdc {
+                cdc_request(path, batch)
+            } else {
+                request(path, batch)
+            };
             let mut io = Sim::new(Arc::new(AtomicBool::new(false)));
             io.cdc = cdc;
             let (outcome, snapshot) = run(&request, &mut io);
@@ -262,6 +348,226 @@ fn real_worker_loop_writes_raw_and_cdc_samples_then_matching_stop() {
             assert_eq!(io.commands[0][1], 254);
             assert!(io.clock < Duration::from_secs(3));
         }
+    }
+}
+
+fn firmware_frame() -> Vec<u8> {
+    // Produced by the receiver's real CDC writer with a synthetic UART/radio.
+    const FRAME: &str = "aa5539130300010000803f00000000000000000000000000000000000000000000803f000000000000000000000000000000c4410000002c01020304f0";
+    FRAME
+        .as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|digits| u8::from_str_radix(std::str::from_utf8(digits).unwrap(), 16).unwrap())
+        .collect()
+}
+
+#[test]
+fn legacy_receiver_firmware_frame_is_recorded_after_console_initialization() {
+    let dir = tempfile::tempdir().unwrap();
+    let request = cdc_request(dir.path().join("firmware-frame.slimecap"), false);
+    let mut io = Sim::new(Arc::new(AtomicBool::new(false)));
+    io.cdc = true;
+    io.firmware_frames = Some(VecDeque::from([firmware_frame()]));
+    let (outcome, _) = run(&request, &mut io);
+    assert!(outcome.error.is_none(), "{:?}", outcome.error);
+    assert_eq!(io.initialization_calls, 1);
+    assert_eq!(io.opcodes(), vec![214, 215]);
+    assert_eq!(outcome.samples, 1);
+    let recording = load(&outcome.path, &AtomicBool::new(false)).unwrap();
+    assert_eq!(recording.tracks[0].samples.len(), 1);
+    assert_eq!(recording.tracks[0].samples[0].temperature_c, Some(24.5));
+}
+
+fn answer_receiver_help(peer: &mut std::net::TcpStream) {
+    use std::io::{Read, Write};
+
+    let mut command = Vec::new();
+    loop {
+        let mut byte = [0];
+        peer.read_exact(&mut byte).unwrap();
+        if byte[0] == b'\n' {
+            break;
+        }
+        command.push(byte[0]);
+        assert!(command.len() < 128);
+    }
+    assert!(command.starts_with(b"help h"));
+    peer.write_all(&command).unwrap();
+    peer.write_all(b"\r\n").unwrap();
+}
+
+#[test]
+fn connected_console_worker_initializes_real_capture_without_being_stolen() {
+    use crate::domain::Inventory;
+    use crate::sessions::ConnectionState;
+    use crate::sessions::test_support::{connected, fixture, peer};
+    use std::sync::mpsc;
+    use std::time::Instant;
+
+    let dir = tempfile::tempdir().unwrap();
+    let request = cdc_request(dir.path().join("connected-console.slimecap"), false);
+    let CaptureTransport::Cdc { endpoint, console } = &request.source.transport else {
+        unreachable!()
+    };
+    let inventory = Inventory {
+        receivers: vec![request.source.receiver.clone()],
+        ports: vec![endpoint.clone(), console.as_ref().clone()],
+        ..Inventory::default()
+    };
+    let (mut manager, listener) = fixture();
+    manager.update_inventory(&inventory, Instant::now());
+    manager.connect(&console.port_name).unwrap();
+    let mut server = peer(&listener);
+    connected(&mut manager, &console.port_name);
+    let generation = manager.session(&console.port_name).unwrap().generation;
+    let probe = manager.begin_capture_console_probe(console).unwrap();
+    let (finish, wait) = mpsc::channel();
+    let server = std::thread::spawn(move || {
+        answer_receiver_help(&mut server);
+        let _ = wait.recv_timeout(Duration::from_secs(3));
+    });
+
+    let mut io = Sim::new(Arc::new(AtomicBool::new(false)));
+    io.cdc = true;
+    io.console = Some(ConsoleInitialization::Existing(probe));
+    io.firmware_frames = Some(VecDeque::from([firmware_frame()]));
+    let (outcome, _) = run(&request, &mut io);
+    assert!(outcome.error.is_none(), "{:?}", outcome.error);
+    assert_eq!(outcome.samples, 1);
+    assert_eq!(io.opcodes(), vec![214, 215]);
+    let _ = manager.poll();
+    let view = manager.session(&console.port_name).unwrap();
+    assert_eq!(view.state, ConnectionState::Connected);
+    assert_eq!(view.generation, generation);
+    assert!(view.terminal.text().contains("help h"));
+    assert_eq!(
+        load(&outcome.path, &AtomicBool::new(false)).unwrap().tracks[0].samples[0].temperature_c,
+        Some(24.5)
+    );
+    finish.send(()).unwrap();
+    server.join().unwrap();
+}
+
+#[test]
+fn temporary_console_is_closed_and_released_before_real_capture_start() {
+    use crate::sessions::test_support::{fixture, peer};
+    use std::io::Read;
+    use std::sync::mpsc;
+
+    let dir = tempfile::tempdir().unwrap();
+    let request = cdc_request(dir.path().join("temporary-console.slimecap"), false);
+    let (mut manager, listener) = fixture();
+    let raw = manager.reserve("data", None).unwrap();
+    let temporary = manager.reserve("console", None).unwrap();
+    let source = manager.reserved_console_source(&temporary).unwrap();
+    let (peer_closed, observed_close) = mpsc::channel();
+    let server = std::thread::spawn(move || {
+        let mut server = peer(&listener);
+        answer_receiver_help(&mut server);
+        let mut byte = [0];
+        assert_eq!(server.read(&mut byte).unwrap(), 0);
+        peer_closed.send(()).unwrap();
+    });
+    let (closed, closed_rx) = mpsc::channel();
+    let (released, released_rx) = mpsc::channel();
+    let started = Arc::new(AtomicBool::new(false));
+    let mut io = Sim::new(Arc::new(AtomicBool::new(false)));
+    io.cdc = true;
+    io.start_signal = Some(Arc::clone(&started));
+    io.console = Some(ConsoleInitialization::Temporary {
+        source,
+        closed,
+        released: released_rx,
+    });
+    io.firmware_frames = Some(VecDeque::from([firmware_frame()]));
+    let worker = std::thread::spawn(move || {
+        let (outcome, _) = run(&request, &mut io);
+        (outcome, io)
+    });
+
+    closed_rx.recv_timeout(Duration::from_secs(3)).unwrap();
+    observed_close.recv_timeout(Duration::from_secs(3)).unwrap();
+    assert!(!started.load(Ordering::Acquire));
+    assert!(manager.reserve("console", None).is_err());
+    manager.release(&temporary).unwrap();
+    released.send(Ok(())).unwrap();
+    let (outcome, io) = worker.join().unwrap();
+    server.join().unwrap();
+    assert!(started.load(Ordering::Acquire));
+    assert!(outcome.error.is_none(), "{:?}", outcome.error);
+    assert_eq!(outcome.samples, 1);
+    assert_eq!(io.opcodes(), vec![214, 215]);
+    assert!(manager.reserve("data", None).is_err());
+    manager.release(&raw).unwrap();
+    assert!(manager.reserve("console", None).is_ok());
+    assert_eq!(
+        load(&outcome.path, &AtomicBool::new(false)).unwrap().tracks[0].samples[0].temperature_c,
+        Some(24.5)
+    );
+}
+
+#[test]
+fn lost_temporary_console_before_nonce_echo_never_starts_capture() {
+    use crate::sessions::test_support::{fixture, peer};
+    use std::io::{Read, Write};
+    use std::sync::mpsc;
+
+    let dir = tempfile::tempdir().unwrap();
+    let request = cdc_request(dir.path().join("lost-console.slimecap"), false);
+    let (mut manager, listener) = fixture();
+    let temporary = manager.reserve("console", None).unwrap();
+    let source = manager.reserved_console_source(&temporary).unwrap();
+    let server = std::thread::spawn(move || {
+        let mut server = peer(&listener);
+        let mut command = Vec::new();
+        loop {
+            let mut byte = [0];
+            server.read_exact(&mut byte).unwrap();
+            if byte[0] == b'\n' {
+                break;
+            }
+            command.push(byte[0]);
+            assert!(command.len() < 128);
+        }
+        server.write_all(b"*** Receiver ***\r\n").unwrap();
+    });
+    let (closed, closed_rx) = mpsc::channel();
+    let (_released, released_rx) = mpsc::channel();
+    let mut io = Sim::new(Arc::new(AtomicBool::new(false)));
+    io.cdc = true;
+    io.console = Some(ConsoleInitialization::Temporary {
+        source,
+        closed,
+        released: released_rx,
+    });
+    let (outcome, _) = run(&request, &mut io);
+    server.join().unwrap();
+    assert!(closed_rx.try_recv().is_ok());
+    assert!(outcome.error.is_some());
+    assert!(io.opcodes().is_empty());
+    assert_eq!(outcome.samples, 0);
+    manager.release(&temporary).unwrap();
+}
+
+#[test]
+fn failed_or_cancelled_console_initialization_never_sends_start() {
+    for cancelled in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let request = cdc_request(dir.path().join("not-started.slimecap"), false);
+        let mut io = Sim::new(Arc::new(AtomicBool::new(false)));
+        io.cdc = true;
+        if cancelled {
+            io.cancel_during_initialization = true;
+        } else {
+            io.initialization_error = Some("Console initialization timed out".into());
+        }
+        let (outcome, _) = run(&request, &mut io);
+        assert!(outcome.error.is_some());
+        assert_eq!(io.initialization_calls, 1);
+        assert!(io.opcodes().is_empty());
+        assert_eq!(outcome.samples, 0);
     }
 }
 #[test]

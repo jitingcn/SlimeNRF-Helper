@@ -105,6 +105,14 @@ impl CaptureUiState {
     }
 }
 
+fn capture_port_name(name: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(windows) {
+        std::borrow::Cow::Owned(name.trim_start_matches(r"\\.\").to_ascii_lowercase())
+    } else {
+        std::borrow::Cow::Borrowed(name)
+    }
+}
+
 fn capture_source_id(source: &CaptureSource) -> SharedString {
     let receiver = (
         &source.receiver.key,
@@ -115,30 +123,26 @@ fn capture_source_id(source: &CaptureSource) -> SharedString {
         device::CaptureTransport::RawHid { path } => {
             format!("capture-source:{receiver:?}:hid:{path:?}").into()
         }
-        device::CaptureTransport::Cdc { endpoint } => {
-            let port = if cfg!(windows) {
-                std::borrow::Cow::Owned(
-                    endpoint
-                        .port_name
-                        .trim_start_matches(r"\\.\")
-                        .to_ascii_lowercase(),
-                )
-            } else {
-                std::borrow::Cow::Borrowed(endpoint.port_name.as_str())
-            };
-            format!(
-                "capture-source:{receiver:?}:cdc:{:?}",
-                (
-                    port,
-                    endpoint.kind,
-                    endpoint.vid,
-                    endpoint.pid,
-                    &endpoint.serial_number,
-                    &endpoint.usb_interface,
-                )
+        device::CaptureTransport::Cdc { endpoint, console } => format!(
+            "capture-source:{receiver:?}:cdc:{:?}:{:?}",
+            (
+                capture_port_name(&endpoint.port_name),
+                endpoint.kind,
+                endpoint.vid,
+                endpoint.pid,
+                &endpoint.serial_number,
+                &endpoint.usb_interface,
+            ),
+            (
+                capture_port_name(&console.port_name),
+                console.kind,
+                console.vid,
+                console.pid,
+                &console.serial_number,
+                &console.usb_interface,
             )
-            .into()
-        }
+        )
+        .into(),
     }
 }
 
@@ -1097,6 +1101,20 @@ mod tests {
                         description: InterfaceDescription::Value("SlimeNRF Raw Data CDC".into()),
                     }),
                 },
+                console: Box::new(SerialEndpoint {
+                    port_name: "COM7".into(),
+                    label: "Console".into(),
+                    manufacturer: None,
+                    product: None,
+                    kind: SerialPortKind::Usb,
+                    serial_number: Some("USB-A".into()),
+                    vid: Some(0x1209),
+                    pid: Some(0x7690),
+                    usb_interface: Some(UsbInterface {
+                        number: Some(0),
+                        description: InterfaceDescription::Unavailable,
+                    }),
+                }),
             },
         }
     }
@@ -1107,10 +1125,11 @@ mod tests {
         let id = capture_source_id(&source);
         let mut renamed = source.clone();
         renamed.receiver.label = "Receiver nickname".into();
-        let CaptureTransport::Cdc { endpoint } = &mut renamed.transport else {
+        let CaptureTransport::Cdc { endpoint, console } = &mut renamed.transport else {
             unreachable!();
         };
         endpoint.label = "New display name".into();
+        console.label = "New console display name".into();
         assert_eq!(capture_source_id(&renamed), id);
         let mut second = source.clone();
         second.receiver.key = "another-receiver".into();
@@ -1122,7 +1141,7 @@ mod tests {
         state.replace_sources(vec![second, renamed]);
         assert_eq!(state.source, Some(1));
         assert_eq!(capture_source_id(&state.sources[1]), id);
-        let CaptureTransport::Cdc { endpoint } = &mut state.sources[1].transport else {
+        let CaptureTransport::Cdc { endpoint, .. } = &mut state.sources[1].transport else {
             unreachable!();
         };
         endpoint.usb_interface.as_mut().unwrap().number = Some(3);
@@ -1270,7 +1289,7 @@ mod tests {
         };
         let mut renamed = original.clone();
         renamed.receiver.label = "Renamed receiver".into();
-        let CaptureTransport::Cdc { endpoint } = &mut renamed.transport else {
+        let CaptureTransport::Cdc { endpoint, .. } = &mut renamed.transport else {
             unreachable!();
         };
         endpoint.label = "Updated native display name".into();
@@ -1282,14 +1301,14 @@ mod tests {
 
     #[test]
     fn capture_selection_is_revoked_by_receiver_interface_or_role_changes() {
-        for scenario in 0..5 {
+        for scenario in 0..8 {
             let original = cdc_source();
             let mut changed = original.clone();
             match scenario {
                 0 => changed.receiver.path = b"replacement-hid".to_vec(),
                 1 => changed.receiver.serial_number = Some("USB-B".into()),
                 _ => {
-                    let CaptureTransport::Cdc { endpoint } = &mut changed.transport else {
+                    let CaptureTransport::Cdc { endpoint, console } = &mut changed.transport else {
                         unreachable!();
                     };
                     match scenario {
@@ -1299,6 +1318,9 @@ mod tests {
                             endpoint.usb_interface.as_mut().unwrap().description =
                                 InterfaceDescription::Unavailable
                         }
+                        5 => console.port_name = "COM10".into(),
+                        6 => console.usb_interface.as_mut().unwrap().number = Some(5),
+                        7 => console.serial_number = Some("USB-B".into()),
                         _ => unreachable!(),
                     }
                 }
