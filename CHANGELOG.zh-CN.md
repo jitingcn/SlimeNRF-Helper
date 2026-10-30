@@ -9,6 +9,8 @@
 
 ## [未发布]
 
+## [0.4.0] - 2026-10-30
+
 ### 变更
 
 - 应用内部源码按能力组织，将模型、服务、视图和测试放在一起。Workbench 适配器仍显式归属应用编排，独立的回放及分析窗口所有者自持状态和完成处理。这是所有权重构，不是经过测量的性能改进。
@@ -119,7 +121,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.2...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.2.0...v0.3.0

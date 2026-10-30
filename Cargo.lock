@@ -6797,7 +6797,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slimenrf-firmware-image"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "crc32fast",
  "serde",
@@ -6808,7 +6808,7 @@ dependencies = [
 
 [[package]]
 name = "slimenrf-helper"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "btleplug",
  "chrono",
@@ -6843,7 +6843,7 @@ dependencies = [
 
 [[package]]
 name = "slimenrf-recording"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "cc",
  "csv",
@@ -6856,11 +6856,11 @@ dependencies = [
 
 [[package]]
 name = "slimenrf-terminal-core"
-version = "0.3.2"
+version = "0.4.0"
 
 [[package]]
 name = "slimenrf-tools"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
  "csv",
