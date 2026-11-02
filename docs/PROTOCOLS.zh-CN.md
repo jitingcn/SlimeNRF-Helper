@@ -33,6 +33,8 @@ FoxSnackLiteV3 固件使用 `foxsnacklitev3_uf2/nrf52840`，对应 bootloader �
 
 应用写入与 bootloader 写入冻结不同用途。Adafruit nosd updater family `0xd663823c` 同时用于 nRF52833/52840，不是应用 family，也不标识 MCU。配置 `bootloader_mcu` 来自板级证据；写入冻结用途、配置 MCU、卷身份，核对 b43e929b nosd 链接布局及 CF2 flash/RAM/SoC family：bootstart=`flash−0xc000`、CF2=`flash−0x2800`、MBRparams=`flash−0x2000`，仅允许相应 MBR/bootloader/UICR 范围，拒绝 SoftDevice、应用与错芯片镜像。不承诺未来或自定义布局兼容，也不向通用应用白名单加入该 family。
 
+板型无法分类的本地引导程序镜像，只有在每个所选卷均对应明确配置且一致的 `bootloader_mcu` 时，才可通过板型提示准入；已知提示冲突和板型未知的远程镜像仍被拒绝。冻结确认页显示镜像目标未知警告，并要求重新确认风险，不改变内容或挂载身份校验。
+
 Linux UF2 只接纳真实可写 FAT 块设备与 UF2 标记，卷标按 `/dev/disk/by-label` 对应块设备号获取，不把目录名当卷标。写前复核挂载实例与 device identity；同路径换盘、重挂载或 mount incarnation 变化使旧授权失效。全局 mountinfo 可以包含合法伪文件系统 root，只有 UF2 候选才要求原生块设备与绝对路径条件；不能让无关 namespace 挂载破坏全部枚举。
 
 UF2 复制区分主机 I/O 已完成和 `CopyOutcome::ConfirmationPending`。只有全部字节已被接受、取消检查已通过，且 `flush` 或 `sync_all` 返回设备消失错误时，才进入待确认状态。接受的错误码为 Windows 433、1167，以及 Linux 和 macOS 的 `ENODEV`、`ENXIO`。部分写入失败、零字节写入和其他存储错误仍判定为失败。`UpdateOutcome::Uf2CopyUnconfirmed` 保留已接受字节数、收尾阶段、系统错误码和诊断。复制完成和复制待确认都不证明固件已启动。

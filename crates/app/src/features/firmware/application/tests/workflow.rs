@@ -936,3 +936,145 @@ fn query_diagnostics_remain_on_cards_while_flash_failures_remain_in_results(
     })
     .expect("inspect actual update failure and independent card diagnostic");
 }
+
+struct BootloaderReviewHarness {
+    workbench: gpui_kit::Entity<crate::application::Workbench>,
+}
+
+impl gpui_kit::Render for BootloaderReviewHarness {
+    fn render(
+        &mut self,
+        _: &mut gpui_kit::Window,
+        cx: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
+        use gpui_kit::prelude::*;
+
+        self.workbench.update(cx, |this, cx| {
+            gpui_kit::div()
+                .size_full()
+                .when_some(this.flash.review.as_ref(), |panel, action| {
+                    panel.child(this.flash_confirmation(action, cx))
+                })
+        })
+    }
+}
+
+#[gpui_kit::test]
+fn unknown_local_bootloader_review_requires_fresh_single_use_acknowledgment(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use super::planning::{uf2_catalog, uf2_test_image, uf2_volume};
+    use crate::application::flash::{ImageCategory, ImageDestination, planning::plan_uf2_action};
+    use gpui_kit::{
+        AppContext as _, Bounds, WindowBounds, WindowOptions, px, size, test::TestWindowExt as _,
+    };
+    use slimenrf_firmware_image::image::{Nrf52Chip, Uf2ImagePurpose};
+
+    let _ui_session = crate::test_support::UiTestSession::new(cx);
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let catalog = uf2_catalog();
+    let (_volume_directory, volume) = uf2_volume("known");
+    let mut image = uf2_test_image(true);
+    image.name = "custom_bootloader.uf2".into();
+    image.hints = catalog.match_filename(&image.name).into();
+    assert!(image.local && image.hints.is_empty());
+    let action = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Bootloader,
+        vec![volume.clone()],
+        image.clone(),
+    )
+    .expect("a compatible unknown local bootloader can enter explicit review");
+    let initial_action = action.clone();
+    let initial_image = image.clone();
+    let (window, harness) = cx.update(|cx| {
+        gpui_kit::open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    Default::default(),
+                    size(px(1000.), px(900.)),
+                ))),
+                ..Default::default()
+            },
+            cx,
+            move |window, cx| {
+                let workbench = cx.new(|cx| {
+                    let mut this = crate::application::test_support::offline_workbench(
+                        window,
+                        cx,
+                        crate::sessions::SessionManager::new(),
+                        executor,
+                    );
+                    this.flash.mode = Mode::Uf2;
+                    this.flash.catalog = Some(catalog);
+                    this.flash.apply_volumes(vec![volume]);
+                    this.flash
+                        .choose_image(&ImageDestination::Global, initial_image)
+                        .unwrap();
+                    this.review_flash(initial_action);
+                    this
+                });
+                cx.new(|_| BootloaderReviewHarness { workbench })
+            },
+        )
+        .expect("open production bootloader confirmation")
+    });
+    let workbench = harness.read_with(cx, |harness, _| harness.workbench.clone());
+
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("firmware-ack").checked(), Some(false));
+        assert_eq!(window.find("firmware-confirm").disabled(), Some(true));
+        workbench.update(cx, |this, _| {
+            assert!(this.flash.take_confirmed_action().is_none());
+            assert!(this.flash.review.is_some());
+        });
+        window.click("firmware-ack", cx);
+        assert_ne!(window.find("firmware-confirm").disabled(), Some(true));
+        workbench.update(cx, |this, _| {
+            let Action::Uf2(_, frozen_image, purpose) = this.flash.take_confirmed_action().unwrap()
+            else {
+                panic!("review must retain its UF2 bootloader action");
+            };
+            assert_eq!(purpose, Uf2ImagePurpose::Bootloader(Nrf52Chip::Nrf52840));
+            assert!(Arc::ptr_eq(&frozen_image.bytes, &image.bytes));
+            assert!(this.flash.take_confirmed_action().is_none());
+            assert!(!this.flash.acknowledged);
+        });
+
+        for change in ["image", "target", "back"] {
+            workbench.update(cx, |this, _| this.review_flash(action.clone()));
+            window.render_frame(cx);
+            assert_eq!(window.find("firmware-ack").checked(), Some(false));
+            assert_eq!(window.find("firmware-confirm").disabled(), Some(true));
+            window.click("firmware-ack", cx);
+            assert_eq!(window.find("firmware-ack").checked(), Some(true));
+            if change == "back" {
+                window.click("firmware-dismiss", cx);
+            } else {
+                workbench.update(cx, |this, _| match change {
+                    "image" => {
+                        let mut replacement = image.clone();
+                        replacement.name = "replacement_bootloader.uf2".into();
+                        this.flash
+                            .choose_image(&ImageDestination::Global, replacement)
+                            .unwrap();
+                    }
+                    "target" => this.flash.apply_volumes(Vec::new()),
+                    _ => unreachable!(),
+                });
+            }
+            workbench.update(cx, |this, _| {
+                assert!(this.flash.review.is_none(), "changed {change}");
+                assert!(!this.flash.acknowledged, "changed {change}");
+                assert!(
+                    this.flash.take_confirmed_action().is_none(),
+                    "changed {change}"
+                );
+                assert!(this.flash.job.is_none());
+            });
+        }
+    })
+    .expect("exercise confirmation and revocation without starting device work");
+}

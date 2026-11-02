@@ -124,6 +124,15 @@ impl Workbench {
         };
         if let Some(image) = image {
             panel = panel.child(self.flash_image_identity(image, "confirmation", cx));
+            if image.local && image.hints.is_empty() {
+                panel = panel.child(
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().warning)
+                        .whitespace_normal()
+                        .child(tr("firmware.image.unknown_local_target")),
+                );
+            }
             if image_category(&image.name, &image.hints) == ImageCategory::Bootloader {
                 panel = panel.child(
                     div()

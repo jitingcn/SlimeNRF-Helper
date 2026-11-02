@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- Local UF2 bootloader images with an unrecognized board classification can reach explicit risk confirmation when target MCU and content checks pass, instead of being rejected before review. Known conflicts and unknown remote images remain blocked; the review preserves the unknown-board warning. Dawn Mini now includes its explicit nRF52833 bootloader MCU metadata.
+
 ## [0.4.3] - 2026-10-30
 
 ### Fixed

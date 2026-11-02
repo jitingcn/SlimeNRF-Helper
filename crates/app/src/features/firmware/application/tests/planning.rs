@@ -152,7 +152,9 @@ fn refresh_preserves_explicit_selection_without_selecting_new_targets() {
     assert_eq!(state.query_failures.len(), 1);
 }
 
-fn uf2_volume(board: &str) -> (tempfile::TempDir, crate::features::firmware::uf2::Uf2Volume) {
+pub(super) fn uf2_volume(
+    board: &str,
+) -> (tempfile::TempDir, crate::features::firmware::uf2::Uf2Volume) {
     let directory = tempfile::tempdir().unwrap();
     std::fs::write(
         directory.path().join("INFO_UF2.TXT"),
@@ -164,7 +166,7 @@ fn uf2_volume(board: &str) -> (tempfile::TempDir, crate::features::firmware::uf2
     (directory, volume)
 }
 
-fn uf2_catalog() -> crate::features::firmware::board_catalog::Catalog {
+pub(super) fn uf2_catalog() -> crate::features::firmware::board_catalog::Catalog {
     let directory = tempfile::tempdir().unwrap();
     let config = directory.path().join("slimenrf-helper.yaml");
     std::fs::write(
@@ -179,7 +181,7 @@ fn uf2_catalog() -> crate::features::firmware::board_catalog::Catalog {
     crate::features::firmware::board_catalog::Catalog::load(&config).unwrap()
 }
 
-fn uf2_test_image(bootloader: bool) -> crate::application::flash::Image {
+pub(super) fn uf2_test_image(bootloader: bool) -> crate::application::flash::Image {
     let flash = 0x10_0000u32;
     let addresses = if bootloader {
         vec![flash - 0xc000, flash - 0x2800, 0x1000_1000]
@@ -235,48 +237,86 @@ fn uf2_test_image(bootloader: bool) -> crate::application::flash::Image {
 }
 
 #[test]
-fn bootloader_planning_requires_known_preset_mcu_and_matching_hints_even_for_local_images() {
+fn unhinted_local_bootloader_still_requires_known_volume_preset_and_mcu() {
     use crate::application::flash::{ImageCategory, planning::plan_uf2_action};
     let catalog = uf2_catalog();
     let mut image = uf2_test_image(true);
+    image.name = "custom_bootloader.uf2".into();
     image.hints = catalog.match_filename(&image.name).into();
+    assert!(image.hints.is_empty());
     for board in ["unknown", "missing-mcu"] {
         let (_directory, volume) = uf2_volume(board);
-        assert!(
-            plan_uf2_action(
-                Some(&catalog),
-                ImageCategory::Bootloader,
-                vec![volume],
-                image.clone(),
-            )
-            .is_err()
-        );
-    }
-    let (_directory, volume) = uf2_volume("known");
-    image.hints = Arc::from([]);
-    assert!(
-        plan_uf2_action(
-            Some(&catalog),
-            ImageCategory::Bootloader,
-            vec![volume.clone()],
-            image.clone(),
-        )
-        .is_err()
-    );
-    image.hints = catalog.match_filename(&image.name).into();
-    let mut wrong = image.hints.to_vec();
-    for hint in &mut wrong {
-        hint.board_target = "unrelated".into();
-    }
-    image.hints = wrong.into();
-    assert!(
-        plan_uf2_action(
+        let error = plan_uf2_action(
             Some(&catalog),
             ImageCategory::Bootloader,
             vec![volume],
-            image,
+            image.clone(),
         )
-        .is_err()
+        .err()
+        .expect("unidentified bootloader MCU must not be admitted");
+        assert_eq!(
+            error,
+            crate::i18n::tr("firmware.error.bootloader_identity_required"),
+            "volume board {board}"
+        );
+    }
+    let (_directory, volume) = uf2_volume("known");
+    let error = plan_uf2_action(None, ImageCategory::Bootloader, vec![volume], image)
+        .err()
+        .expect("bootloader authorization requires a catalog preset");
+    assert_eq!(
+        error,
+        crate::i18n::tr("firmware.error.bootloader_identity_required")
+    );
+}
+
+#[test]
+fn local_bootloader_with_known_hints_still_rejects_board_mismatch() {
+    use crate::application::flash::{ImageCategory, planning::plan_uf2_action};
+    let catalog = uf2_catalog();
+    let mut image = uf2_test_image(true);
+    let mut hints = catalog.match_filename(&image.name);
+    assert!(!hints.is_empty());
+    for hint in &mut hints {
+        hint.board_target = "unrelated".into();
+    }
+    image.hints = hints.into();
+    let (_directory, volume) = uf2_volume("known");
+    let error = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Bootloader,
+        vec![volume],
+        image,
+    )
+    .err()
+    .expect("known conflicting bootloader hints must not be bypassed");
+    assert_eq!(
+        error,
+        crate::i18n::tr("firmware.error.bootloader_board_mismatch")
+    );
+}
+
+#[test]
+fn unhinted_remote_bootloader_is_not_admitted_for_known_volume() {
+    use crate::application::flash::{ImageCategory, planning::plan_uf2_action};
+    let catalog = uf2_catalog();
+    let mut image = uf2_test_image(true);
+    image.name = "custom_bootloader.uf2".into();
+    image.hints = catalog.match_filename(&image.name).into();
+    image.local = false;
+    assert!(image.hints.is_empty());
+    let (_directory, volume) = uf2_volume("known");
+    let error = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Bootloader,
+        vec![volume],
+        image,
+    )
+    .err()
+    .expect("remote bootloaders require a known board hint");
+    assert_eq!(
+        error,
+        crate::i18n::tr("firmware.error.bootloader_board_mismatch")
     );
 }
 
@@ -285,17 +325,22 @@ fn shared_bootloader_image_cannot_mix_configured_chips() {
     use crate::application::flash::{ImageCategory, planning::plan_uf2_action};
     let catalog = uf2_catalog();
     let mut image = uf2_test_image(true);
+    image.name = "custom_bootloader.uf2".into();
     image.hints = catalog.match_filename(&image.name).into();
+    assert!(image.hints.is_empty());
     let (_known_directory, known) = uf2_volume("known");
     let (_other_directory, other) = uf2_volume("other");
-    assert!(
-        plan_uf2_action(
-            Some(&catalog),
-            ImageCategory::Bootloader,
-            vec![known, other],
-            image,
-        )
-        .is_err()
+    let error = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Bootloader,
+        vec![known, other],
+        image,
+    )
+    .err()
+    .expect("one frozen bootloader purpose cannot cover different MCUs");
+    assert_eq!(
+        error,
+        crate::i18n::tr("firmware.error.bootloader_mcu_mismatch")
     );
 }
 
@@ -329,21 +374,82 @@ fn catalog_classified_nonstandard_bootloader_freezes_purpose_and_shared_bytes_in
 }
 
 #[test]
-fn bootloader_review_rejects_application_payload_despite_catalog_name_and_local_origin() {
+fn unhinted_local_bootloader_freezes_purpose_shared_bytes_and_volume_identity_into_request() {
+    use crate::application::flash::{Action, ImageCategory, planning::plan_uf2_action};
+    use crate::features::firmware::executor::{ExecutionRequest, UpdateRequest};
+    let catalog = uf2_catalog();
+    let mut image = uf2_test_image(true);
+    image.name = "custom_bootloader.uf2".into();
+    image.hints = catalog.match_filename(&image.name).into();
+    assert!(image.local);
+    assert!(image.hints.is_empty());
+    let bytes = image.bytes.clone();
+    let (_directory, volume) = uf2_volume("known");
+    let identity = volume.identity.clone();
+    let mount = volume.mount.clone();
+    let expected = Uf2ImagePurpose::Bootloader(Nrf52Chip::Nrf52840);
+    let action = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Bootloader,
+        vec![volume],
+        image,
+    )
+    .unwrap();
+    assert!(matches!(&action, Action::Uf2(_, _, purpose) if *purpose == expected));
+    let ExecutionRequest::Blocking(UpdateRequest::Uf2(volumes, image, purpose)) =
+        action.into_request()
+    else {
+        panic!("expected the reviewed local bootloader's frozen UF2 request");
+    };
+    assert!(purpose == expected);
+    assert_eq!(volumes.len(), 1);
+    assert_eq!(volumes[0].identity, identity);
+    assert_eq!(volumes[0].mount, mount);
+    assert_eq!(image.name, "custom_bootloader.uf2");
+    assert!(Arc::ptr_eq(&bytes, &image.bytes));
+}
+
+#[test]
+fn unhinted_local_bootloader_still_validates_payload_against_configured_mcu() {
+    use crate::application::flash::{ImageCategory, planning::plan_uf2_action};
+    let catalog = uf2_catalog();
+    let mut image = uf2_test_image(true);
+    image.name = "custom_bootloader.uf2".into();
+    image.hints = catalog.match_filename(&image.name).into();
+    assert!(image.hints.is_empty());
+    let (_directory, volume) = uf2_volume("other");
+    let error = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Bootloader,
+        vec![volume],
+        image,
+    )
+    .err()
+    .expect("nRF52840 content must not be authorized by an nRF52833 preset");
+    assert!(
+        error.contains("outside the Nrf52833 bootloader/MBR layout"),
+        "{error}"
+    );
+}
+
+#[test]
+fn unhinted_local_bootloader_review_still_rejects_application_payload() {
     use crate::application::flash::{ImageCategory, planning::plan_uf2_action};
     let catalog = uf2_catalog();
     let mut image = uf2_test_image(false);
+    image.name = "custom_bootloader.uf2".into();
     image.hints = catalog.match_filename(&image.name).into();
+    assert!(image.hints.is_empty());
     let (_directory, volume) = uf2_volume("known");
-    assert!(
-        plan_uf2_action(
-            Some(&catalog),
-            ImageCategory::Bootloader,
-            vec![volume],
-            image,
-        )
-        .is_err()
-    );
+    let error = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Bootloader,
+        vec![volume],
+        image,
+    )
+    .err()
+    .expect("an unknown local filename cannot turn application bytes into a bootloader");
+    assert!(error.contains("not an application image"), "{error}");
 }
 
 #[test]

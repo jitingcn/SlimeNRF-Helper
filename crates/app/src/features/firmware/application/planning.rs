@@ -205,7 +205,7 @@ pub(super) fn plan_uf2_action(
     let hints = &image.hints;
     let purpose = match category {
         ImageCategory::Bootloader => {
-            if hints.is_empty() || hints.iter().any(|hint| !hint.bootloader) {
+            if (!image.local && hints.is_empty()) || hints.iter().any(|hint| !hint.bootloader) {
                 return Err(tr("firmware.error.bootloader_board_mismatch"));
             }
             let mut requested_chip = None;
@@ -218,7 +218,7 @@ pub(super) fn plan_uf2_action(
                 let chip = preset
                     .bootloader_mcu
                     .ok_or_else(|| tr("firmware.error.bootloader_identity_required"))?;
-                if !uf2_preset_matches(preset, hints) {
+                if !hints.is_empty() && !uf2_preset_matches(preset, hints) {
                     return Err(tr("firmware.error.bootloader_board_mismatch"));
                 }
                 if requested_chip.is_some_and(|previous| previous != chip) {

@@ -217,6 +217,8 @@ board_targets:
   dawn-tracker-mini:
     name: dawn_tracker_mini_uf2/nrf52833
     esb_ota_kind: tracker
+    bootloader_board: dawn-tracker-mini
+    bootloader_mcu: nrf52833
     firmware: dawn_tracker_mini.uf2
     firmware_aliases: [Dawn_Tracker_Mini.uf2]
     success: DAWN TRACKER MINI SUCCESS
