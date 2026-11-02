@@ -9,6 +9,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-02
+
 ### Fixed
 
 - Local UF2 bootloader images with an unrecognized board classification can reach explicit risk confirmation when target MCU and content checks pass, instead of being rejected before review. Known conflicts and unknown remote images remain blocked; the review preserves the unknown-board warning. Dawn Mini now includes its explicit nRF52833 bootloader MCU metadata.
@@ -147,7 +149,8 @@ Initial standalone application version, documented from the repository's initial
 - Gyroscope calibration guides, temperature calibration analysis with SVG export, and RSSI channel analysis.
 - English and Simplified Chinese interfaces, light and dark themes, and Windows and Linux packaging with full-firmware and no-firmware build modes.
 
-[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.0...v0.4.1

@@ -9,6 +9,8 @@
 
 ## [未发布]
 
+## [0.4.4] - 2026-11-02
+
 ### 修复
 
 - 无法识别镜像板型的本地 UF2 引导程序文件，在目标 MCU 和内容检查通过后可进入明确的风险确认，不再在进入确认页前直接拒绝。已知冲突和板型未知的远程镜像仍被拒绝，确认页保留板型未知警告；同时补全 Dawn Mini 的 nRF52833 引导程序 MCU 配置。
@@ -147,7 +149,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.3...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.0...v0.4.1
