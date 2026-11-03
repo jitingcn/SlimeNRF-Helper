@@ -150,7 +150,7 @@ Controls 场景提供可选择的合成卡片、短/长内容和动态详情；T
 ## 更新依赖
 
 1. 修改版本要求前，检查上游发布说明和清单中的 MSRV。保持普通依赖与测试依赖的 `gpui-kit` 版本要求一致。
-2. 同步更新清单与 `Cargo.lock`，使用定向的 `cargo update -p PACKAGE --precise VERSION`，不要无范围限制地更新全部依赖。更新 GPUI 时检查已发布的 Kit 清单，并同步更新完整的 Kit 与 Fast 系列；当前版本要求为 Kit 0.8.1，锁文件选择 Fast 0.1.12。只通过 `gpui_kit` 导出使用同一套 GPUI 类型。在运行下列检查前，审查上游 API 变更，特别是修饰键处理及自定义 `Element` 的布局、prepaint、paint 生命周期。
+2. 同步更新[应用清单](../crates/app/Cargo.toml)与 [Cargo.lock](../Cargo.lock)，使用定向的 `cargo update -p PACKAGE --precise VERSION`，不要无范围限制地更新全部依赖。更新 GPUI 时检查已发布的 Kit 清单，并同步更新完整的 Kit、Fast 与 gpui-pre 系列；当前版本要求为 Kit 0.9.0，锁文件选择 Fast 0.1.13 和 gpui-pre 支持 crate 0.3.11。只通过 `gpui_kit` 导出使用同一套 GPUI 类型。审查 [Kit 0.9.0](https://github.com/longbridge/gpui-kit/releases/tag/v0.9.0) 与 [Fast 0.1.13](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.13) 的迁移说明：主题结构体改为非穷尽，窗口文本系统由 `Arc` 改为 `Rc`，动画使用执行器时钟。在运行下列检查前，还需审查修饰键处理及自定义 `Element` 的布局、prepaint、paint 生命周期。
 3. 按平台运行[质量检查命令](#checks-and-editor)，覆盖完整固件和无固件两种模式。
 4. 运行原生应用，检查终端滚动、自动换行、文本选择、图表交互和远程固件加载。
 5. 根据两个平台锁定的依赖图刷新[许可证声明](#license-notices)。
@@ -381,7 +381,7 @@ CI 成功只证明配置的检查与产物上传已完成。本地构建、WSLg 
 
 `./build.ps1 -Action clean` 和 `bash ./build.sh clean` 清理所选 target 的全部 profile 与嵌套缓存；Debug/Release 不缩小范围。可分别传 `-CargoArguments '--dry-run'` 或 `--cargo-arguments --dry-run` 预览，或显式 `--target-dir`。不删除 dist、配置、固件、全局 Cargo 下载或 Rust 工具链；先退出自己从 target 启动的程序，不例行 clean。
 
-Fast 绘制或滚动排查可仅在单次启动设置 `GPUI_VIEW_RETENTION=0` 或 `GPUI_SCROLL_LAYERS=0`，结束清除；它们是诊断开关，不切换 GUI 后端，也不作为默认配置。软件 Vulkan 仅作兼容排查，不保证性能。macOS 需按上游安装说明配置本机依赖并单独验证；Linux package 入口不生成 macOS 包。
+Fast 绘制或滚动排查可仅在单次启动设置 `GPUI_VIEW_RETENTION=0` 或 `GPUI_SCROLL_LAYERS=0`，结束清除；它们是诊断开关，不切换 GUI 后端，也不作为默认配置。软件 Vulkan 仅作兼容排查，不保证性能。[Fast 0.1.13 的 Apple 渲染器](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.13)要求 macOS 12 或更新版本，原生构建需要 macOS SDK 26。其他本机依赖按上游安装说明配置，macOS 仍需单独验证；Linux package 入口不生成 macOS 包。
 
 ## 上游 bootloader fixture
 

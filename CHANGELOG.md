@@ -9,6 +9,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- Update the GUI framework to GPUI Kit 0.9.0, GPUI Fast 0.1.13, and gpui-pre support crates 0.3.11, incorporating upstream text-selection/layout cleanup, menu accessibility, Windows renderer recovery, and font lookup fixes.
+- The updated Apple renderer requires macOS 12 or newer and macOS SDK 26 for native builds; macOS acceptance remains separate.
+
 ## [0.4.4] - 2026-11-02
 
 ### Fixed
