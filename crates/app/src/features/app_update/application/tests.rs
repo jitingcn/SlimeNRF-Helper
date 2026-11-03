@@ -149,14 +149,16 @@ fn poll_until(cx: &mut TestAppContext, fixture: &Fixture, condition: impl Fn(&Wo
     loop {
         // Give the real worker a chance to publish or finish before joining it.
         std::thread::sleep(Duration::from_millis(1));
-        let finished = cx.update(|cx| {
-            fixture.workbench.update(cx, |this, cx| {
-                if this.poll_app_update(cx) {
-                    cx.notify();
-                }
-                condition(this)
+        let finished = cx
+            .update_window(fixture.window, |_, window, cx| {
+                fixture.workbench.update(cx, |this, cx| {
+                    if this.poll_app_update(window, cx) {
+                        cx.notify();
+                    }
+                    condition(this)
+                })
             })
-        });
+            .expect("poll updater in its owning window");
         cx.run_until_parked();
         if finished {
             break;
@@ -354,23 +356,24 @@ fn release_only_builds_check_preview_metadata_without_automatic_or_install_actio
     );
     // A pending download result must stay unused, including after a check succeeds.
     set_download(cx, &fixture, TestDownload::Success);
-    cx.update(|cx| {
+    cx.update_window(fixture.window, |_, window, cx| {
         fixture.workbench.update(cx, |this, cx| {
             assert!(this.preferences.app_update_include_prereleases);
-            assert!(!this.poll_app_update_at(Some(CHECK_INTERVAL_SECONDS), cx));
+            assert!(!this.poll_app_update_at(Some(CHECK_INTERVAL_SECONDS), window, cx));
             assert!(this.app_update.job.is_none());
             assert!(this.app_update.pending_auto_attempt.is_none());
             assert!(this.app_update.test_check.is_some());
             assert!(this.preferences.app_update_last_attempt.is_none());
             this.preferences.app_update_last_attempt = Some(0);
-            assert!(!this.poll_app_update_at(Some(CHECK_INTERVAL_SECONDS), cx));
+            assert!(!this.poll_app_update_at(Some(CHECK_INTERVAL_SECONDS), window, cx));
             assert!(this.app_update.job.is_none());
             assert!(this.app_update.pending_auto_attempt.is_none());
             assert!(this.app_update.test_check.is_some());
             assert_eq!(this.preferences.app_update_last_attempt, Some(0));
             this.preferences.app_update_last_attempt = None;
         });
-    });
+    })
+    .expect("check release-only automatic admission");
 
     click(cx, &fixture, "app-update-check");
     cx.update(|cx| {
@@ -588,18 +591,19 @@ fn stable_and_preview_checks_follow_the_controlled_preference(cx: &mut TestAppCo
     })
     .expect("inspect initial updater controls");
     // Even a due timestamp cannot cause an automatic check in this explicit fixture.
-    cx.update(|cx| {
+    cx.update_window(fixture.window, |_, window, cx| {
         fixture.workbench.update(cx, |this, cx| {
-            assert!(!this.poll_app_update(cx));
+            assert!(!this.poll_app_update(window, cx));
             assert!(this.app_update.job.is_none());
             assert!(this.preferences.app_update_last_attempt.is_none());
             this.preferences.app_update_last_attempt = Some(0);
-            assert!(!this.poll_app_update(cx));
+            assert!(!this.poll_app_update(window, cx));
             assert!(this.app_update.job.is_none());
             assert_eq!(this.preferences.app_update_last_attempt, Some(0));
             this.preferences.app_update_last_attempt = None;
         });
-    });
+    })
+    .expect("check fixture automatic admission");
 
     let mut preview = app_update::test_release();
     preview.prerelease = true;

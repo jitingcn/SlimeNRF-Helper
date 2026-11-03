@@ -42,7 +42,7 @@ impl Workbench {
             | self.poll_hid_log()
             | self.poll_temperature(cx)
             | self.poll_rssi_scans(cx)
-            | self.poll_app_update(cx);
+            | self.poll_app_update(window, cx);
         if changed {
             self.sync_registry_observations(cx);
         }

@@ -55,6 +55,8 @@ app:
       status_cancelled: "更新操作已取消。"
       status_available: "发现新版本 %{version}（%{tag}）。"
       status_ready: "版本 %{version}（%{tag}）已准备就绪，重启后安装。"
+      notice_available: "SlimeNRF Helper %{version} 可更新。"
+      view_notice: "查看更新…"
       navigation_locked: "取消或安装更新后即可继续切换页面。"
       check_error: "无法检查更新：%{error}"
       auto_save_error: "无法保存检查时间，已跳过自动检查。仍可手动检查更新。"

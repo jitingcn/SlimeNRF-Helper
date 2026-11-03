@@ -12,6 +12,7 @@ use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
+    notification::{Notification, NotificationDelivery},
 };
 use gpui_kit::{
     AnyElement, Context, FontWeight, ScrollHandle, SharedString, Task, Window, div, prelude::*,
@@ -21,6 +22,8 @@ use std::sync::atomic::Ordering;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const CHECK_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
+
+struct UpdateAvailableNotice;
 
 #[derive(Clone, Copy)]
 enum ErrorPhase {
@@ -48,8 +51,17 @@ enum Status {
     Error(ErrorPhase, String),
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum CheckOrigin {
+    Manual,
+    Automatic,
+}
+
 pub(super) enum Outcome {
-    Checked(CheckResult),
+    Checked {
+        result: CheckResult,
+        origin: CheckOrigin,
+    },
     Downloaded(Box<DownloadedUpdate>),
 }
 
@@ -244,7 +256,56 @@ impl Workbench {
         Status::Available
     }
 
-    fn start_app_update_check(&mut self, cx: &mut Context<Self>) {
+    fn show_app_update_notice(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.shutting_down {
+            return;
+        }
+        let Some(release) = &self.app_update.release else {
+            return;
+        };
+        let release = release.details();
+        let owner = cx.weak_entity();
+        window.push_notification(
+            Notification::new()
+                .id::<UpdateAvailableNotice>()
+                .delivery(NotificationDelivery::InApp)
+                .autohide(false)
+                .message(
+                    rust_i18n::t!(
+                        "app.settings.update.notice_available",
+                        version = release.version
+                    )
+                    .into_owned(),
+                )
+                .when(release.prerelease, |notice| {
+                    notice.title(tr("app.settings.update.prerelease_badge"))
+                })
+                .action(move |_, _, cx| {
+                    let owner = owner.clone();
+                    Button::new("app-update-view-notice")
+                        .label(tr("app.settings.update.view_notice"))
+                        .outline()
+                        .on_click(cx.listener(move |notice, _, window, cx| {
+                            let opened = owner
+                                .update(cx, |this, cx| {
+                                    if this.shutting_down
+                                        || !matches!(this.app_update.status, Status::Available)
+                                    {
+                                        return false;
+                                    }
+                                    this.show_settings_about(window, cx)
+                                })
+                                .unwrap_or(false);
+                            if opened {
+                                notice.dismiss(window, cx);
+                            }
+                        }))
+                }),
+            cx,
+        );
+    }
+
+    fn start_app_update_check(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.shutting_down || self.app_update.busy() {
             return;
         }
@@ -258,17 +319,29 @@ impl Workbench {
         };
         self.preferences.app_update_last_attempt = Some(now);
         self.save_preferences(cx);
-        self.launch_app_update_check(cx);
+        self.launch_app_update_check(CheckOrigin::Manual, window, cx);
     }
 
-    fn queue_automatic_app_update_check(&mut self, now: u64, cx: &mut Context<Self>) {
+    fn queue_automatic_app_update_check(
+        &mut self,
+        now: u64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.remove_notification::<UpdateAvailableNotice>(cx);
         self.preferences.app_update_last_attempt = Some(now);
         self.app_update.pending_auto_attempt = Some(now);
         self.app_update.status = Status::SavingAttempt;
         self.save_preferences(cx);
     }
 
-    fn launch_app_update_check(&mut self, cx: &mut Context<Self>) {
+    fn launch_app_update_check(
+        &mut self,
+        origin: CheckOrigin,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.remove_notification::<UpdateAvailableNotice>(cx);
         self.app_update.release = None;
         self.app_update.notes = None;
         self.discard_current_app_update(cx);
@@ -283,11 +356,14 @@ impl Workbench {
         #[cfg(test)]
         if let Some(next) = self.app_update.test_check.take() {
             self.app_update.job = match Job::start(move |cancel, _| match next {
-                TestCheck::Result(result) => Ok(Outcome::Checked(result)),
-                TestCheck::ByChannel { stable, preview } => Ok(Outcome::Checked(match channel {
-                    Channel::Stable => stable,
-                    Channel::Preview => preview,
-                })),
+                TestCheck::Result(result) => Ok(Outcome::Checked { result, origin }),
+                TestCheck::ByChannel { stable, preview } => Ok(Outcome::Checked {
+                    result: match channel {
+                        Channel::Stable => stable,
+                        Channel::Preview => preview,
+                    },
+                    origin,
+                }),
                 TestCheck::WaitForCancel => {
                     while !cancel.load(Ordering::Acquire) {
                         std::thread::sleep(std::time::Duration::from_millis(1));
@@ -319,7 +395,7 @@ impl Workbench {
             move |cancel, progress| async move {
                 app_update::check(executor, channel, cancel, progress)
                     .await
-                    .map(Outcome::Checked)
+                    .map(|result| Outcome::Checked { result, origin })
             },
         ));
         cx.notify();
@@ -341,6 +417,7 @@ impl Workbench {
         if !self.show_settings_about(window, cx) {
             return;
         }
+        window.remove_notification::<UpdateAvailableNotice>(cx);
         self.discard_current_app_update(cx);
         self.app_update.progress = None;
         self.app_update.cancelling = false;
@@ -476,11 +553,16 @@ impl Workbench {
         });
     }
 
-    pub(super) fn poll_app_update(&mut self, cx: &mut Context<Self>) -> bool {
-        self.poll_app_update_at(unix_seconds(), cx)
+    pub(super) fn poll_app_update(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.poll_app_update_at(unix_seconds(), window, cx)
     }
 
-    fn poll_app_update_at(&mut self, now: Option<u64>, cx: &mut Context<Self>) -> bool {
+    fn poll_app_update_at(
+        &mut self,
+        now: Option<u64>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
         self.app_update
             .file_cleanup
             .retain(|task| task.clone().now_or_never().is_none());
@@ -511,7 +593,7 @@ impl Workbench {
                 _ if cancelling => {
                     self.app_update.status = Status::Cancelled;
                 }
-                Ok(Outcome::Checked(result)) => {
+                Ok(Outcome::Checked { result, origin }) => {
                     self.app_update.status = match result {
                         CheckResult::Available(release) => {
                             self.accept_app_update_release(SelectedRelease::Installable(*release))
@@ -528,6 +610,11 @@ impl Workbench {
                         }
                         CheckResult::NoEligibleRelease => Status::NoEligible,
                     };
+                    if matches!(origin, CheckOrigin::Automatic)
+                        && matches!(self.app_update.status, Status::Available)
+                    {
+                        self.show_app_update_notice(window, cx);
+                    }
                 }
                 Ok(Outcome::Downloaded(downloaded)) => {
                     self.app_update.downloaded = Some(*downloaded);
@@ -558,7 +645,7 @@ impl Workbench {
             if !self.preferences_io.busy() {
                 self.app_update.pending_auto_attempt = None;
                 if self.preferences_io.latest_snapshot_saved(&self.preferences) {
-                    self.launch_app_update_check(cx);
+                    self.launch_app_update_check(CheckOrigin::Automatic, window, cx);
                 } else if self.preferences_io.save_error.is_some() {
                     self.app_update.status = Status::AutoSaveError;
                 } else {
@@ -578,7 +665,7 @@ impl Workbench {
             && let Some(now) = now
             && check_due(self.preferences.app_update_last_attempt, now)
         {
-            self.queue_automatic_app_update_check(now, cx);
+            self.queue_automatic_app_update_check(now, window, cx);
             changed = true;
         }
         changed
@@ -721,6 +808,7 @@ impl Workbench {
                         this.update_preferences(preferences, window, cx);
                         this.app_update.release = None;
                         this.app_update.notes = None;
+                        window.remove_notification::<UpdateAvailableNotice>(cx);
                         this.discard_current_app_update(cx);
                         if this.app_update.pending_auto_attempt.is_none() {
                             this.app_update.status = Status::Idle;
@@ -777,7 +865,9 @@ impl Workbench {
             Button::new("app-update-check")
                 .label(tr("app.settings.update.check"))
                 .disabled(busy)
-                .on_click(cx.listener(|this, _, _, cx| this.start_app_update_check(cx))),
+                .on_click(
+                    cx.listener(|this, _, window, cx| this.start_app_update_check(window, cx)),
+                ),
             scroll,
         ));
         if self.app_update.installable

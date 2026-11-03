@@ -55,6 +55,8 @@ app:
       status_cancelled: "Update operation cancelled."
       status_available: "Version %{version} (%{tag}) is available."
       status_ready: "Version %{version} (%{tag}) is ready. Restart to install it."
+      notice_available: "SlimeNRF Helper %{version} is available."
+      view_notice: "View update…"
       navigation_locked: "Cancel or install the update to switch pages."
       check_error: "Could not check for updates: %{error}"
       auto_save_error: "Automatic checking was skipped because the check time could not be saved. You can still check manually."

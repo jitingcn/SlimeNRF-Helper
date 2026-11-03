@@ -3,7 +3,9 @@ use super::{
 };
 use crate::{
     app_runtime::AppRuntime,
-    application::{Workbench, preference_io::PreferenceIo, test_support::offline_workbench},
+    application::{
+        FeaturePage, Workbench, preference_io::PreferenceIo, test_support::offline_workbench,
+    },
     features::{
         app_update::service::{self as app_update, CheckResult},
         settings::store::{AccentColor, Preferences},
@@ -84,7 +86,7 @@ struct Fixture {
     workbench: Entity<Workbench>,
 }
 
-fn fixture(
+fn home_fixture(
     cx: &mut TestAppContext,
     runtime: &AppRuntime,
     path: &Path,
@@ -129,6 +131,26 @@ fn fixture(
     let fixture = Fixture { window, workbench };
     settle(cx, &fixture);
     cx.update_window(window, |_, window, cx| {
+        window.click("nav-home", cx);
+        let this = fixture.workbench.read(cx);
+        assert!(this.active_page == FeaturePage::Home);
+        assert!(this.home_page_focus.is_focused(window));
+    })
+    .expect("leave the isolated updater on Home");
+    settle(cx, &fixture);
+    fixture
+}
+
+fn fixture(
+    cx: &mut TestAppContext,
+    runtime: &AppRuntime,
+    path: &Path,
+    gate: &SaveGate,
+    preferences: Preferences,
+) -> Fixture {
+    let fixture = home_fixture(cx, runtime, path, gate, preferences);
+    let window = fixture.window;
+    cx.update_window(window, |_, window, cx| {
         window.click("nav-settings", cx);
         window.click("settings-section-about", cx);
     })
@@ -156,15 +178,16 @@ fn settle(cx: &mut TestAppContext, fixture: &Fixture) {
 }
 
 fn poll_at(cx: &mut TestAppContext, fixture: &Fixture, now: u64) -> bool {
-    cx.update(|cx| {
+    cx.update_window(fixture.window, |_, window, cx| {
         fixture.workbench.update(cx, |this, cx| {
-            let changed = this.poll_app_update_at(Some(now), cx);
+            let changed = this.poll_app_update_at(Some(now), window, cx);
             if changed {
                 cx.notify();
             }
             changed
         })
     })
+    .expect("poll updater in its owning window")
 }
 
 fn wait_for_job(cx: &mut TestAppContext, fixture: &Fixture, now: u64) {
@@ -368,7 +391,7 @@ fn cancelling_admission_keeps_the_save_and_allows_a_manual_check(cx: &mut TestAp
     .expect("pending admission rejects updater buttons");
     cx.update_window(fixture.window, |_, window, cx| {
         fixture.workbench.update(cx, |this, cx| {
-            this.start_app_update_check(cx);
+            this.start_app_update_check(window, cx);
             this.start_app_update_download(window, cx);
             assert!(this.app_update.job.is_none());
             assert!(this.app_update.test_check.is_some());
@@ -752,5 +775,326 @@ fn pending_preference_save_does_not_block_restart_confirmation(cx: &mut TestAppC
         crate::application::lifecycle::join_background(cleanup);
     }
     assert!(!downloaded_path.exists());
+    assert_quiescent(cx, &fixture, &gate);
+}
+
+#[gpui_kit::test]
+fn automatic_available_check_announces_on_home_without_stealing_focus(cx: &mut TestAppContext) {
+    let runtime = AppRuntime::new().expect("start private app runtime");
+    let directory = tempfile::tempdir().expect("private preferences directory");
+    let path = directory.path().join("preferences.json");
+    let gate = SaveGate::new();
+    let _session = UiTestSession::new(cx);
+    let fixture = home_fixture(
+        cx,
+        &runtime,
+        &path,
+        &gate,
+        Preferences {
+            app_update_include_prereleases: true,
+            ..Preferences::default()
+        },
+    );
+    cx.update(|cx| {
+        fixture.workbench.update(cx, |this, _| {
+            assert!(this.preferences.app_update_auto_check);
+            this.app_update.test_check = Some(TestCheck::Result(CheckResult::Available(Box::new(
+                app_update::test_release(),
+            ))));
+            this.app_update.test_download = Some(TestDownload::WaitForCancel);
+        });
+    });
+    cx.update_window(fixture.window, |_, window, _| {
+        assert!(window.try_find("app-update-view-notice").is_none());
+        assert!(window.try_find("app-update-check").is_none());
+    })
+    .expect("Home starts without an update announcement");
+
+    assert!(poll_at(cx, &fixture, FIRST_CHECK));
+    settle(cx, &fixture);
+    cx.update_window(fixture.window, |_, window, cx| {
+        let this = fixture.workbench.read(cx);
+        assert!(this.active_page == FeaturePage::Home);
+        assert!(this.home_page_focus.is_focused(window));
+        assert!(matches!(this.app_update.status, Status::SavingAttempt));
+        assert_eq!(this.app_update.pending_auto_attempt, Some(FIRST_CHECK));
+        assert!(this.app_update.job.is_none());
+        assert!(this.app_update.test_check.is_some());
+        assert!(this.app_update.downloaded.is_none());
+        assert!(!this.app_update_navigation_locked());
+        assert!(window.try_find("app-update-view-notice").is_none());
+    })
+    .expect("a queued attempt cannot announce before its preference save");
+    gate.run_next();
+    let (stored, _) = saved(&path);
+    assert_eq!(stored.app_update_last_attempt, Some(FIRST_CHECK));
+    assert!(stored.app_update_auto_check);
+    assert!(stored.app_update_include_prereleases);
+    cx.run_until_parked();
+    cx.update_window(fixture.window, |_, window, cx| {
+        assert!(fixture.workbench.read(cx).app_update.job.is_none());
+        assert!(window.try_find("app-update-view-notice").is_none());
+    })
+    .expect("saving an attempt does not itself launch or announce a check");
+    assert!(poll_at(cx, &fixture, FIRST_CHECK));
+    cx.update(|cx| {
+        let this = fixture.workbench.read(cx);
+        assert!(this.app_update.job.is_some());
+        assert!(matches!(this.app_update.status, Status::Checking));
+        assert!(this.app_update.test_check.is_none());
+    });
+    wait_for_job(cx, &fixture, FIRST_CHECK);
+    cx.update_window(fixture.window, |_, window, cx| {
+        let this = fixture.workbench.read(cx);
+        assert!(this.active_page == FeaturePage::Home);
+        assert!(this.home_page_focus.is_focused(window));
+        assert!(matches!(this.app_update.status, Status::Available));
+        assert_eq!(
+            this.app_update
+                .release
+                .as_ref()
+                .and_then(SelectedRelease::installable),
+            Some(&app_update::test_release())
+        );
+        assert!(this.app_update.job.is_none());
+        assert!(this.app_update.downloaded.is_none());
+        assert!(this.app_update.test_download.is_some());
+        assert!(!this.app_update_navigation_locked());
+        let actions = window.find_all("app-update-view-notice");
+        assert_eq!(actions.len(), 1, "announce one completed automatic result");
+        assert!(actions[0].visible());
+        assert_eq!(actions[0].role(), Some(gpui_kit::Role::Button));
+        assert!(window.try_find("app-update-check").is_none());
+    })
+    .expect("announce the available update without leaving or defocusing Home");
+
+    cx.executor().advance_clock(Duration::from_secs(30));
+    for _ in 0..3 {
+        assert!(!poll_at(cx, &fixture, FIRST_CHECK + 30));
+        settle(cx, &fixture);
+    }
+    cx.update_window(fixture.window, |_, window, cx| {
+        let this = fixture.workbench.read(cx);
+        assert!(this.home_page_focus.is_focused(window));
+        let actions = window.find_all("app-update-view-notice");
+        assert_eq!(actions.len(), 1, "polling must not duplicate the notice");
+        assert!(actions[0].visible(), "the notice must not auto-hide");
+    })
+    .expect("retain one nonmodal announcement beyond the ordinary toast timeout");
+    cx.update(|cx| {
+        fixture.workbench.update(cx, |this, _| {
+            this.app_update.test_check = Some(TestCheck::Result(CheckResult::UpToDate));
+        });
+    });
+    click(cx, &fixture, "app-update-view-notice");
+    settle(cx, &fixture);
+    cx.update_window(fixture.window, |_, window, cx| {
+        let this = fixture.workbench.read(cx);
+        assert!(this.active_page == FeaturePage::Settings);
+        assert_eq!(window.find("settings-section-about").checked(), Some(true));
+        assert!(window.find("app-update-status").visible());
+        assert!(window.find("app-update-download").visible());
+        assert!(matches!(this.app_update.status, Status::Available));
+        assert!(
+            this.app_update.job.is_none(),
+            "View must not start a new job"
+        );
+        assert!(this.app_update.test_check.is_some());
+        assert!(this.app_update.test_download.is_some());
+        assert!(this.app_update.downloaded.is_none());
+        assert!(!this.app_update_navigation_locked());
+        assert!(!this.shutting_down);
+    })
+    .expect("the notification Button opens the existing About updater only");
+    click(cx, &fixture, "nav-home");
+    cx.executor().advance_clock(Duration::from_secs(30));
+    for _ in 0..3 {
+        assert!(!poll_at(cx, &fixture, FIRST_CHECK + 60));
+        settle(cx, &fixture);
+    }
+    cx.update_window(fixture.window, |_, window, cx| {
+        let this = fixture.workbench.read(cx);
+        assert!(this.active_page == FeaturePage::Home);
+        assert!(this.home_page_focus.is_focused(window));
+        assert!(window.try_find("app-update-view-notice").is_none());
+        assert!(this.app_update.test_check.is_some());
+        assert!(this.app_update.test_download.is_some());
+    })
+    .expect("a viewed and dismissed notice does not reappear on later polls");
+    assert_quiescent(cx, &fixture, &gate);
+}
+
+#[gpui_kit::test]
+fn automatic_current_and_cancelled_checks_remain_silent(cx: &mut TestAppContext) {
+    let runtime = AppRuntime::new().expect("start private app runtime");
+    let directory = tempfile::tempdir().expect("private preferences directory");
+    let path = directory.path().join("preferences.json");
+    let gate = SaveGate::new();
+    let _session = UiTestSession::new(cx);
+    let fixture = home_fixture(cx, &runtime, &path, &gate, Preferences::default());
+    for (now, result, cancel) in [
+        (FIRST_CHECK, CheckResult::UpToDate, false),
+        (
+            FIRST_CHECK + CHECK_INTERVAL_SECONDS,
+            CheckResult::Available(Box::new(app_update::test_release())),
+            true,
+        ),
+    ] {
+        cx.update(|cx| {
+            fixture.workbench.update(cx, |this, _| {
+                this.app_update.test_check = Some(TestCheck::Result(result));
+                this.app_update.test_download = Some(TestDownload::WaitForCancel);
+            });
+        });
+        assert!(poll_at(cx, &fixture, now));
+        gate.run_next();
+        cx.run_until_parked();
+        assert!(poll_at(cx, &fixture, now));
+        if cancel {
+            // The completed result is not accepted until its owner polls it.
+            cx.update(|cx| {
+                fixture.workbench.update(cx, |this, cx| {
+                    assert!(this.app_update.job.is_some());
+                    this.cancel_app_update(cx);
+                });
+            });
+        }
+        wait_for_job(cx, &fixture, now);
+        cx.update_window(fixture.window, |_, window, cx| {
+            let this = fixture.workbench.read(cx);
+            assert!(this.active_page == FeaturePage::Home);
+            assert!(this.home_page_focus.is_focused(window));
+            if cancel {
+                assert!(matches!(this.app_update.status, Status::Cancelled));
+            } else {
+                assert!(matches!(this.app_update.status, Status::Current));
+            }
+            assert!(this.app_update.release.is_none());
+            assert!(this.app_update.downloaded.is_none());
+            assert!(this.app_update.test_download.is_some());
+            assert!(!this.app_update_navigation_locked());
+            assert!(window.try_find("app-update-view-notice").is_none());
+        })
+        .expect("current or cancelled automatic checks do not announce");
+        assert_quiescent(cx, &fixture, &gate);
+    }
+}
+
+#[gpui_kit::test]
+fn manual_available_check_stays_silent_after_returning_home(cx: &mut TestAppContext) {
+    let runtime = AppRuntime::new().expect("start private app runtime");
+    let directory = tempfile::tempdir().expect("private preferences directory");
+    let path = directory.path().join("preferences.json");
+    let gate = SaveGate::new();
+    let _session = UiTestSession::new(cx);
+    let fixture = fixture(
+        cx,
+        &runtime,
+        &path,
+        &gate,
+        Preferences {
+            app_update_include_prereleases: true,
+            ..Preferences::default()
+        },
+    );
+    cx.update(|cx| {
+        fixture.workbench.update(cx, |this, _| {
+            assert!(this.app_update.automatic);
+            assert!(this.preferences.app_update_auto_check);
+            this.app_update.test_check = Some(TestCheck::Result(CheckResult::Available(Box::new(
+                app_update::test_release(),
+            ))));
+            this.app_update.test_download = Some(TestDownload::WaitForCancel);
+        });
+    });
+    click(cx, &fixture, "app-update-check");
+    cx.update(|cx| {
+        let this = fixture.workbench.read(cx);
+        assert!(this.app_update.job.is_some());
+        assert!(this.app_update.pending_auto_attempt.is_none());
+        assert!(this.preferences_io.busy());
+    });
+    click(cx, &fixture, "nav-home");
+    gate.run_next();
+    cx.run_until_parked();
+    wait_for_job(cx, &fixture, FIRST_CHECK);
+    cx.update_window(fixture.window, |_, window, cx| {
+        let this = fixture.workbench.read(cx);
+        assert!(this.active_page == FeaturePage::Home);
+        assert!(this.home_page_focus.is_focused(window));
+        assert!(matches!(this.app_update.status, Status::Available));
+        assert!(this.app_update.release.is_some());
+        assert!(this.app_update.job.is_none());
+        assert!(this.app_update.downloaded.is_none());
+        assert!(this.app_update.test_download.is_some());
+        assert!(!this.app_update_navigation_locked());
+        assert!(window.try_find("app-update-view-notice").is_none());
+    })
+    .expect("a manually requested result stays silent even after leaving About");
+    assert_quiescent(cx, &fixture, &gate);
+}
+
+#[gpui_kit::test]
+fn a_new_automatic_attempt_retires_the_notice_before_saving(cx: &mut TestAppContext) {
+    let runtime = AppRuntime::new().expect("start private app runtime");
+    let directory = tempfile::tempdir().expect("private preferences directory");
+    let path = directory.path().join("preferences.json");
+    let gate = SaveGate::new();
+    let _session = UiTestSession::new(cx);
+    let fixture = home_fixture(cx, &runtime, &path, &gate, Preferences::default());
+    cx.update(|cx| {
+        fixture.workbench.update(cx, |this, _| {
+            this.app_update.test_check = Some(TestCheck::Result(CheckResult::Available(Box::new(
+                app_update::test_release(),
+            ))));
+        });
+    });
+    assert!(poll_at(cx, &fixture, FIRST_CHECK));
+    gate.run_next();
+    cx.run_until_parked();
+    assert!(poll_at(cx, &fixture, FIRST_CHECK));
+    wait_for_job(cx, &fixture, FIRST_CHECK);
+    cx.update_window(fixture.window, |_, window, _| {
+        assert!(window.find("app-update-view-notice").visible());
+    })
+    .expect("retain the first automatic availability notice");
+
+    let next = FIRST_CHECK + CHECK_INTERVAL_SECONDS;
+    assert!(poll_at(cx, &fixture, next));
+    cx.executor().advance_clock(Duration::from_secs(30));
+    settle(cx, &fixture);
+    cx.update_window(fixture.window, |_, window, cx| {
+        let this = fixture.workbench.read(cx);
+        assert!(matches!(this.app_update.status, Status::SavingAttempt));
+        assert!(this.preferences_io.busy());
+        assert!(this.app_update.job.is_none());
+        assert!(this.app_update.release.is_some());
+        assert!(this.active_page == FeaturePage::Home);
+        assert!(this.home_page_focus.is_focused(window));
+        assert!(
+            window.try_find("app-update-view-notice").is_none(),
+            "pending persistence must not leave an inert previous notice"
+        );
+    })
+    .expect("retire the notice before the next attempt can launch");
+
+    cx.update(|cx| {
+        fixture
+            .workbench
+            .update(cx, |this, cx| this.cancel_app_update(cx));
+    });
+    gate.run_next();
+    cx.run_until_parked();
+    assert!(!poll_at(cx, &fixture, next));
+    settle(cx, &fixture);
+    cx.update_window(fixture.window, |_, window, cx| {
+        assert!(matches!(
+            fixture.workbench.read(cx).app_update.status,
+            Status::Cancelled
+        ));
+        assert!(window.try_find("app-update-view-notice").is_none());
+    })
+    .expect("cancelling admission must not resurrect the retired notice");
+    assert_eq!(saved(&path).0.app_update_last_attempt, Some(next));
     assert_quiescent(cx, &fixture, &gate);
 }
