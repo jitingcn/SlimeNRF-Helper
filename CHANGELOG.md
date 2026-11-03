@@ -9,6 +9,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-11-03
+
 ### Changed
 
 - Update the GUI framework to GPUI Kit 0.9.0, GPUI Fast 0.1.13, and gpui-pre support crates 0.3.11, incorporating upstream text-selection/layout cleanup, menu accessibility, Windows renderer recovery, and font lookup fixes.
@@ -158,7 +160,8 @@ Initial standalone application version, documented from the repository's initial
 - Gyroscope calibration guides, temperature calibration analysis with SVG export, and RSSI channel analysis.
 - English and Simplified Chinese interfaces, light and dark themes, and Windows and Linux packaging with full-firmware and no-firmware build modes.
 
-[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.1...v0.4.2
