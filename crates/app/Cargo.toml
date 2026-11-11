@@ -21,7 +21,7 @@ embed-firmware = []
 slimenrf-firmware-image = { path = "../firmware-image" }
 slimenrf-recording = { path = "../recording" }
 slimenrf-terminal-core = { path = "../terminal-core" }
-gpui-kit = { version = "=0.9.0", features = ["gpui-fast"] }
+gpui-kit = { version = "=0.9.1", features = ["gpui-fast"] }
 serialport = { version = "4.8", features = ["usbportinfo-interface"] }
 hidapi = { version = "2.6", default-features = false, features = ["windows-native", "linux-native"] }
 parking_lot = "0.12"
@@ -47,7 +47,7 @@ glam = "0.34"
 unicode-width = { version = "=0.2.2", default-features = false }
 
 [dev-dependencies]
-gpui-kit = { version = "=0.9.0", features = ["gpui-fast", "test-support"] }
+gpui-kit = { version = "=0.9.1", features = ["gpui-fast", "test-support"] }
 
 [build-dependencies]
 slimenrf-tools = { path = "../tools", default-features = false }

@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- Update the GUI framework to GPUI Kit 0.9.1, GPUI Fast 0.1.14, and gpui-pre support crates 0.3.12, incorporating upstream retained-view rendering, text input and selection, scrolling, accessibility, and native window fixes.
+
 ## [0.4.5] - 2026-11-03
 
 ### Changed

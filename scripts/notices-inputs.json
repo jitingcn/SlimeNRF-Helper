@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "input_sha256": {
-    "Cargo.lock": "3f5ba01c7214113116c838accca2f4a6f84117b7d58914e87819f9b7b65bad28",
+    "Cargo.lock": "d160ff6f604cba3006459bfe2cc4eb7eda8cc2019cda381a4a25f94859905878",
     "Cargo.toml": "9d80ad2e8061d44671a0d2d669737980a30e248cd07e3c0a7c9f29a05f464e81",
-    "crates/app/Cargo.toml": "c940db2daddfc448498c470d460ff98eaff391d93673be727fcc09012899b805",
+    "crates/app/Cargo.toml": "bdf35b87394066396d1dafe6bc41970314097b813385b2d62581e5ce716a03c2",
     "crates/firmware-image/Cargo.toml": "e592deac8222fe279cdec3d3d43edd49a9116fe45236770f836f4c01e08546b8",
     "crates/recording/Cargo.toml": "8887e1a93c436a2d2dea3d88a7f2a9be1a4c5084648faf88a3409cfc4521efba",
     "crates/terminal-core/Cargo.toml": "a7f9d74185d6bd766eb01779311a3af21e8b57f8c486039efe80b3835a684385",
@@ -25,7 +25,7 @@
   },
   "manifest_semantic_sha256": {
     "Cargo.toml": "d64627f465f8b4ad720a1377c12896852ad41b8d42b7d022f12f20ba63a0ab93",
-    "crates/app/Cargo.toml": "2a4b2f3107dbf1b3500209b78080b0a9ad6326bdbcc9a1caff3cc63f9f8f926b",
+    "crates/app/Cargo.toml": "d3466941b65ddf4c1f57a6e98f77a80936721013bf0062252b297e1b8c9bbfae",
     "crates/firmware-image/Cargo.toml": "1c1dcdafb444609da1edf59b12da7cddf151147f8caaf0899c850f6e7d400aa2",
     "crates/recording/Cargo.toml": "503b2cb089536928c08e043689d2eaacc7b07209b6e5dec9fe154b029ea280a0",
     "crates/terminal-core/Cargo.toml": "a1ee02d0ee820f9e70a7c312c86f90bca5511d370715ba9aecd6d336a3028e51",
@@ -230,30 +230,30 @@
         "glob@0.3.4",
         "globset@0.4.20",
         "globwalk@0.8.1",
-        "gpui-base@0.9.0",
-        "gpui-component-macros@0.9.0",
-        "gpui-component@0.9.0",
-        "gpui-fast-macros@0.1.13",
-        "gpui-fast-platform@0.1.13",
-        "gpui-fast-windows@0.1.13",
-        "gpui-fast@0.1.13",
-        "gpui-kit-assets@0.9.0",
-        "gpui-kit@0.9.0",
-        "gpui-pre-bench-metrics@0.3.11",
-        "gpui-pre-collections@0.3.11",
-        "gpui-pre-derive-refineable@0.3.11",
-        "gpui-pre-http-client@0.3.11",
-        "gpui-pre-macros@0.3.11",
-        "gpui-pre-platform@0.3.11",
-        "gpui-pre-refineable@0.3.11",
-        "gpui-pre-scheduler@0.3.11",
-        "gpui-pre-shared-string@0.3.11",
-        "gpui-pre-sum-tree@0.3.11",
-        "gpui-pre-util@0.3.11",
-        "gpui-pre-windows@0.3.11",
-        "gpui-pre-ztracing-macro@0.3.11",
-        "gpui-pre-ztracing@0.3.11",
-        "gpui-pre@0.3.11",
+        "gpui-base@0.9.1",
+        "gpui-component-macros@0.9.1",
+        "gpui-component@0.9.1",
+        "gpui-fast-macros@0.1.14",
+        "gpui-fast-platform@0.1.14",
+        "gpui-fast-windows@0.1.14",
+        "gpui-fast@0.1.14",
+        "gpui-kit-assets@0.9.1",
+        "gpui-kit@0.9.1",
+        "gpui-pre-bench-metrics@0.3.12",
+        "gpui-pre-collections@0.3.12",
+        "gpui-pre-derive-refineable@0.3.12",
+        "gpui-pre-http-client@0.3.12",
+        "gpui-pre-macros@0.3.12",
+        "gpui-pre-platform@0.3.12",
+        "gpui-pre-refineable@0.3.12",
+        "gpui-pre-scheduler@0.3.12",
+        "gpui-pre-shared-string@0.3.12",
+        "gpui-pre-sum-tree@0.3.12",
+        "gpui-pre-util@0.3.12",
+        "gpui-pre-windows@0.3.12",
+        "gpui-pre-ztracing-macro@0.3.12",
+        "gpui-pre-ztracing@0.3.12",
+        "gpui-pre@0.3.12",
         "granit-parser@1.3.0",
         "h2@0.4.20",
         "half@2.7.1",
@@ -853,32 +853,32 @@
         "globwalk@0.8.1",
         "glow@0.17.0",
         "gpu-allocator@0.28.0",
-        "gpui-base@0.9.0",
-        "gpui-component-macros@0.9.0",
-        "gpui-component@0.9.0",
-        "gpui-fast-linux@0.1.13",
-        "gpui-fast-macros@0.1.13",
-        "gpui-fast-platform@0.1.13",
-        "gpui-fast-wgpu@0.1.13",
-        "gpui-fast@0.1.13",
-        "gpui-kit-assets@0.9.0",
-        "gpui-kit@0.9.0",
-        "gpui-pre-bench-metrics@0.3.11",
-        "gpui-pre-collections@0.3.11",
-        "gpui-pre-derive-refineable@0.3.11",
-        "gpui-pre-http-client@0.3.11",
-        "gpui-pre-linux@0.3.11",
-        "gpui-pre-macros@0.3.11",
-        "gpui-pre-platform@0.3.11",
-        "gpui-pre-refineable@0.3.11",
-        "gpui-pre-scheduler@0.3.11",
-        "gpui-pre-shared-string@0.3.11",
-        "gpui-pre-sum-tree@0.3.11",
-        "gpui-pre-util@0.3.11",
-        "gpui-pre-wgpu@0.3.11",
-        "gpui-pre-ztracing-macro@0.3.11",
-        "gpui-pre-ztracing@0.3.11",
-        "gpui-pre@0.3.11",
+        "gpui-base@0.9.1",
+        "gpui-component-macros@0.9.1",
+        "gpui-component@0.9.1",
+        "gpui-fast-linux@0.1.14",
+        "gpui-fast-macros@0.1.14",
+        "gpui-fast-platform@0.1.14",
+        "gpui-fast-wgpu@0.1.14",
+        "gpui-fast@0.1.14",
+        "gpui-kit-assets@0.9.1",
+        "gpui-kit@0.9.1",
+        "gpui-pre-bench-metrics@0.3.12",
+        "gpui-pre-collections@0.3.12",
+        "gpui-pre-derive-refineable@0.3.12",
+        "gpui-pre-http-client@0.3.12",
+        "gpui-pre-linux@0.3.12",
+        "gpui-pre-macros@0.3.12",
+        "gpui-pre-platform@0.3.12",
+        "gpui-pre-refineable@0.3.12",
+        "gpui-pre-scheduler@0.3.12",
+        "gpui-pre-shared-string@0.3.12",
+        "gpui-pre-sum-tree@0.3.12",
+        "gpui-pre-util@0.3.12",
+        "gpui-pre-wgpu@0.3.12",
+        "gpui-pre-ztracing-macro@0.3.12",
+        "gpui-pre-ztracing@0.3.12",
+        "gpui-pre@0.3.12",
         "granit-parser@1.3.0",
         "h2@0.4.20",
         "half@2.7.1",
@@ -7203,12 +7203,12 @@
     },
     {
       "name": "gpui-base",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "license": "Apache-2.0",
-      "checksum": "cff6377e30f0c857681662e7edc7286bf30f5606033390401b0706d7bd930833",
-      "source_archive": "https://static.crates.io/crates/gpui-base/gpui-base-0.9.0.crate",
+      "checksum": "f3e9ae5237737cfd110d0ff513fcd9c20f97d98ebabd0a73164068177f0aca4f",
+      "source_archive": "https://static.crates.io/crates/gpui-base/gpui-base-0.9.1.crate",
       "repository": "https://github.com/longbridge/gpui-kit",
-      "source_commit": "7591a35eced761e3613c01e71ff04c10129dae1a",
+      "source_commit": "39ab849a93b5f15507b969164d49891db8d5b470",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
           "code_candidate"
@@ -7233,12 +7233,12 @@
     },
     {
       "name": "gpui-component-macros",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "license": "Apache-2.0",
-      "checksum": "21ac1d2ca5352973e291b3316c027e603b1e7334755341f44c8231f85fde627a",
-      "source_archive": "https://static.crates.io/crates/gpui-component-macros/gpui-component-macros-0.9.0.crate",
+      "checksum": "9676a5d12c59ce295b5c82cc18365ad8b96cb683682e2e74668a56fb92544300",
+      "source_archive": "https://static.crates.io/crates/gpui-component-macros/gpui-component-macros-0.9.1.crate",
       "repository": null,
-      "source_commit": "7591a35eced761e3613c01e71ff04c10129dae1a",
+      "source_commit": "39ab849a93b5f15507b969164d49891db8d5b470",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
           "compile_tool"
@@ -7257,12 +7257,12 @@
     },
     {
       "name": "gpui-component",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "license": "Apache-2.0",
-      "checksum": "45bbfdba0efa392190f2fd446ec311325302eb047d5ce45dc1bcf189cb18f5eb",
-      "source_archive": "https://static.crates.io/crates/gpui-component/gpui-component-0.9.0.crate",
+      "checksum": "e155c4914bd809d966660610d596f7b57c5cd38979ca2c132215057a91f23f03",
+      "source_archive": "https://static.crates.io/crates/gpui-component/gpui-component-0.9.1.crate",
       "repository": "https://github.com/longbridge/gpui-kit",
-      "source_commit": "7591a35eced761e3613c01e71ff04c10129dae1a",
+      "source_commit": "39ab849a93b5f15507b969164d49891db8d5b470",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
           "code_candidate"
@@ -7287,10 +7287,10 @@
     },
     {
       "name": "gpui-fast-linux",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "license": "Apache-2.0",
-      "checksum": "59c465cccb420a54d2abc14af42ce82ecb1ea473b531ddbd299eb4e15ae2dd83",
-      "source_archive": "https://static.crates.io/crates/gpui-fast-linux/gpui-fast-linux-0.1.13.crate",
+      "checksum": "0409042721bd50ed8c538e13cb13f6d92f5adeade2e2a284a41d32c704c2eef1",
+      "source_archive": "https://static.crates.io/crates/gpui-fast-linux/gpui-fast-linux-0.1.14.crate",
       "repository": "https://github.com/longbridge/gpui-fast",
       "source_commit": null,
       "target_roles": {
@@ -7325,10 +7325,10 @@
     },
     {
       "name": "gpui-fast-macros",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "license": "Apache-2.0",
-      "checksum": "46724abd05d2c874cc31e1996bb862539c5735780dd363cb550469003a6e5140",
-      "source_archive": "https://static.crates.io/crates/gpui-fast-macros/gpui-fast-macros-0.1.13.crate",
+      "checksum": "269fc24ab55f85d5fb90ce812b3e6adcf5ad0bdccc79a08aa9ddd88a3a477494",
+      "source_archive": "https://static.crates.io/crates/gpui-fast-macros/gpui-fast-macros-0.1.14.crate",
       "repository": "https://github.com/longbridge/gpui-fast",
       "source_commit": null,
       "target_roles": {
@@ -7349,10 +7349,10 @@
     },
     {
       "name": "gpui-fast-platform",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "license": "Apache-2.0",
-      "checksum": "eb75fcc655a819d87a75180f32528d26b869b421a53c5974046c6e2948c46ecf",
-      "source_archive": "https://static.crates.io/crates/gpui-fast-platform/gpui-fast-platform-0.1.13.crate",
+      "checksum": "df86a665111fb86fe149c6d72660777d17bcf2af9133079459faf7bda0b3f756",
+      "source_archive": "https://static.crates.io/crates/gpui-fast-platform/gpui-fast-platform-0.1.14.crate",
       "repository": "https://github.com/longbridge/gpui-fast",
       "source_commit": null,
       "target_roles": {
@@ -7391,10 +7391,10 @@
     },
     {
       "name": "gpui-fast-wgpu",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "license": "Apache-2.0",
-      "checksum": "7a3be892e9d079745739d0e52e397fd43b61d215de4fd1477bb554a9bcf0c7e1",
-      "source_archive": "https://static.crates.io/crates/gpui-fast-wgpu/gpui-fast-wgpu-0.1.13.crate",
+      "checksum": "7cfa13d90b546bec059b6e1c08969b45236d64beb89a96cc6bc54d0df19466ce",
+      "source_archive": "https://static.crates.io/crates/gpui-fast-wgpu/gpui-fast-wgpu-0.1.14.crate",
       "repository": "https://github.com/longbridge/gpui-fast",
       "source_commit": null,
       "target_roles": {
@@ -7415,10 +7415,10 @@
     },
     {
       "name": "gpui-fast-windows",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "license": "Apache-2.0",
-      "checksum": "088654835f1408e1aaa79afcc316530461a14fa1c4e543d47b1881b6ced63f19",
-      "source_archive": "https://static.crates.io/crates/gpui-fast-windows/gpui-fast-windows-0.1.13.crate",
+      "checksum": "a89bfdc3a922a29f83611fc7f01642533d35260a7f86aa9befb14f2b6dcca093",
+      "source_archive": "https://static.crates.io/crates/gpui-fast-windows/gpui-fast-windows-0.1.14.crate",
       "repository": "https://github.com/longbridge/gpui-fast",
       "source_commit": null,
       "target_roles": {
@@ -7437,10 +7437,10 @@
     },
     {
       "name": "gpui-fast",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "license": "Apache-2.0",
-      "checksum": "7ee67914f779fdcfce4c7f59f6ba8fa68f680bd137648b25a801cd5d9cb1b8ab",
-      "source_archive": "https://static.crates.io/crates/gpui-fast/gpui-fast-0.1.13.crate",
+      "checksum": "f8c3a7e25e5a4789656da980b0316857acbdb72347b5d890d7d0c549bb9fee72",
+      "source_archive": "https://static.crates.io/crates/gpui-fast/gpui-fast-0.1.14.crate",
       "repository": "https://github.com/longbridge/gpui-fast",
       "source_commit": null,
       "target_roles": {
@@ -7479,12 +7479,12 @@
     },
     {
       "name": "gpui-kit-assets",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "license": "Apache-2.0",
-      "checksum": "956a9864880e1f230e274a74cea8006e5018b8af383ad7bbd30b6b18254a97a9",
-      "source_archive": "https://static.crates.io/crates/gpui-kit-assets/gpui-kit-assets-0.9.0.crate",
+      "checksum": "cb5abe0bbd8f9226170c8726e529f6574519e297e9ed1bde86d5fd4d3536079a",
+      "source_archive": "https://static.crates.io/crates/gpui-kit-assets/gpui-kit-assets-0.9.1.crate",
       "repository": "https://github.com/longbridge/gpui-kit",
-      "source_commit": "7591a35eced761e3613c01e71ff04c10129dae1a",
+      "source_commit": "39ab849a93b5f15507b969164d49891db8d5b470",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
           "code_candidate"
@@ -7506,16 +7506,16 @@
         "c48dd4821477080b092fcf209b3c45314c0405f0b5830a3f84b02ef02d0a7823",
         "d1b0449e5478c574ba4f686c2656df7fe77d66821a61f8b6ed3378a58ed9a811"
       ],
-      "policy": "The published package declares Apache-2.0 but omits the full code-license text. Retain the exact original repository-root Apache text from its published VCS commit 7591a35eced761e3613c01e71ff04c10129dae1a. Assets retain the complete separate Lucide/Feather ISC/MIT notice; Apache package-code terms do not replace icon terms."
+      "policy": "The published package declares Apache-2.0 but omits the full code-license text. Retain the exact original repository-root Apache text from its published VCS commit 39ab849a93b5f15507b969164d49891db8d5b470. Assets retain the complete separate Lucide/Feather ISC/MIT notice; Apache package-code terms do not replace icon terms."
     },
     {
       "name": "gpui-kit",
-      "version": "0.9.0",
+      "version": "0.9.1",
       "license": "Apache-2.0",
-      "checksum": "2c464934b5cdb85dd3fc511e60d09fb446fba422de159a80038368f52893c14b",
-      "source_archive": "https://static.crates.io/crates/gpui-kit/gpui-kit-0.9.0.crate",
+      "checksum": "aca1dedfea73645b60b5893c9c16de0b1396f2cf4251d19e5f03a295c1b61879",
+      "source_archive": "https://static.crates.io/crates/gpui-kit/gpui-kit-0.9.1.crate",
       "repository": "https://github.com/longbridge/gpui-kit",
-      "source_commit": "7591a35eced761e3613c01e71ff04c10129dae1a",
+      "source_commit": "39ab849a93b5f15507b969164d49891db8d5b470",
       "target_roles": {
         "x86_64-pc-windows-msvc": [
           "code_candidate"
@@ -7543,14 +7543,14 @@
       "notices": [
         "d1b0449e5478c574ba4f686c2656df7fe77d66821a61f8b6ed3378a58ed9a811"
       ],
-      "policy": "The published package declares Apache-2.0 but omits the full code-license text. Retain the exact original repository-root Apache text from its published VCS commit 7591a35eced761e3613c01e71ff04c10129dae1a. Assets retain the complete separate Lucide/Feather ISC/MIT notice; Apache package-code terms do not replace icon terms."
+      "policy": "The published package declares Apache-2.0 but omits the full code-license text. Retain the exact original repository-root Apache text from its published VCS commit 39ab849a93b5f15507b969164d49891db8d5b470. Assets retain the complete separate Lucide/Feather ISC/MIT notice; Apache package-code terms do not replace icon terms."
     },
     {
       "name": "gpui-pre-bench-metrics",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "a2380f9a4c76fbbf035fe0b83e7054216e0dbacb18e2a95bb26c27bda22376e3",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-bench-metrics/gpui-pre-bench-metrics-0.3.11.crate",
+      "checksum": "db6a8ff719fdc3da4f5f497b5d39c5545634424073f94943b003c818fc95e1d5",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-bench-metrics/gpui-pre-bench-metrics-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7575,10 +7575,10 @@
     },
     {
       "name": "gpui-pre-collections",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "06882d54d40681ae3b145af9ef8a4021c2bf9967cc0a9fcf0cc50f003bf3cdf3",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-collections/gpui-pre-collections-0.3.11.crate",
+      "checksum": "cb60ece401b399fd5ec13911915b407b0c6efa1f6c9a9f66201aaac56c7ec39d",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-collections/gpui-pre-collections-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7603,10 +7603,10 @@
     },
     {
       "name": "gpui-pre-derive-refineable",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "3999591b50cfd74f1734baf97fe802cce5f282d60d85b908e3393d534fbd50fb",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-derive-refineable/gpui-pre-derive-refineable-0.3.11.crate",
+      "checksum": "aeb2a3f5e6c9f300f432ae7989a81b262953ccfb3f9385be51cdc3303aef8858",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-derive-refineable/gpui-pre-derive-refineable-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7627,10 +7627,10 @@
     },
     {
       "name": "gpui-pre-http-client",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "a00ff0e68341f52c5903182d7e2e2d7dc247d87b0d9947ce3564e453720347a0",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-http-client/gpui-pre-http-client-0.3.11.crate",
+      "checksum": "55245de7e3b6e219596fd98bb29555d6e3fe44c055d025960affeb11b894c048",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-http-client/gpui-pre-http-client-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7655,10 +7655,10 @@
     },
     {
       "name": "gpui-pre-linux",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "79cac5cbd3485c1e3db8eafd5dc69019188f5cb0a39846946af772efa386f624",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-linux/gpui-pre-linux-0.3.11.crate",
+      "checksum": "54bab418d0b7c027af9495f278619b46887362b3bd6446e246c87c5b0fa167df",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-linux/gpui-pre-linux-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7693,10 +7693,10 @@
     },
     {
       "name": "gpui-pre-macros",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "ee1c52959baa6834db3183e86affe70242ca90b4fc64ed2ae6dd689a799ce78e",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-macros/gpui-pre-macros-0.3.11.crate",
+      "checksum": "1c7f67904eced61ed42ae3320a9b4b388aed893f8547fffe9161ec425ad162eb",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-macros/gpui-pre-macros-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7717,10 +7717,10 @@
     },
     {
       "name": "gpui-pre-platform",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "175f55bd6a80ea3bb0cf44d9ba454a3312381d66e702b3b5e99f73a7ca1738ee",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-platform/gpui-pre-platform-0.3.11.crate",
+      "checksum": "d2b785bdcbd229f762096aebf4f9ae913bdaa9db49794907cabaf516eb55227b",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-platform/gpui-pre-platform-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7759,10 +7759,10 @@
     },
     {
       "name": "gpui-pre-refineable",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "097375d98fecafd6e00ec13c7711709cc6d827ccad385694ce9e2c2f570c02a5",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-refineable/gpui-pre-refineable-0.3.11.crate",
+      "checksum": "4d197569e3b1fd84170f574bb866e95ecbc2625e7ae9443c877150eaf7d53374",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-refineable/gpui-pre-refineable-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7783,10 +7783,10 @@
     },
     {
       "name": "gpui-pre-scheduler",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "93c3c9f76341cdf03801699d68876915b42d5858e80c52a141ebfc350358147b",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-scheduler/gpui-pre-scheduler-0.3.11.crate",
+      "checksum": "b1d3fa97eeb4ea233635b756684affe96db9e29fc2af8cdc269268bd7ff649fc",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-scheduler/gpui-pre-scheduler-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7811,10 +7811,10 @@
     },
     {
       "name": "gpui-pre-shared-string",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "781aaf9a9c19e3367b94100c7b1a17283721766bc890909ce8aa34e8c5b1a99a",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-shared-string/gpui-pre-shared-string-0.3.11.crate",
+      "checksum": "63c2ed1e44195079d4461b83a99845aa9a52ce8fcf1516410816670a03d32d94",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-shared-string/gpui-pre-shared-string-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7835,10 +7835,10 @@
     },
     {
       "name": "gpui-pre-sum-tree",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "e0cb18765472fb2c64b7e6374f9a36f512ce25b1ccb3662fff51788564107eb3",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-sum-tree/gpui-pre-sum-tree-0.3.11.crate",
+      "checksum": "6085e61458366decd21491396b0b90b3adf928f2ec27e170c4d3c9fba455d536",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-sum-tree/gpui-pre-sum-tree-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7859,10 +7859,10 @@
     },
     {
       "name": "gpui-pre-util",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "49036ad9887034f8d6652b65761ee1c1fdbd7d66be33a6088245fae54dc643e3",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-util/gpui-pre-util-0.3.11.crate",
+      "checksum": "52ead57ff96b5a34e71d64758080347066d667e0c4bd4ff71e85f3a50643fa3e",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-util/gpui-pre-util-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7883,10 +7883,10 @@
     },
     {
       "name": "gpui-pre-wgpu",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "211cf352de1a0b0c9bea3f105df5572ce1d2c899389b924a888e5af36b50f93d",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-wgpu/gpui-pre-wgpu-0.3.11.crate",
+      "checksum": "dc76608d385f6d0dcbad44504b1bf669dac3b7d7ffa2885acdb7c1c358caf852",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-wgpu/gpui-pre-wgpu-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7907,10 +7907,10 @@
     },
     {
       "name": "gpui-pre-windows",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "5141a3db59bab761a16ab19529fe4117a86e91922e8fc00af6dfc4829cb1744d",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-windows/gpui-pre-windows-0.3.11.crate",
+      "checksum": "7201762420222d5b5ce5bdf0056996199212a3349bfb2457a3a0238c688681f3",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-windows/gpui-pre-windows-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7929,10 +7929,10 @@
     },
     {
       "name": "gpui-pre-ztracing-macro",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "99b18b06f5026b3d312488eacfdddbe78f82b4bf32bb2d2bc3186e31e552b797",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-ztracing-macro/gpui-pre-ztracing-macro-0.3.11.crate",
+      "checksum": "85701631a9bbecf47e6d19f145e85e57767e7c50f7192d5b1bf65b5ef43cb373",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-ztracing-macro/gpui-pre-ztracing-macro-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7953,10 +7953,10 @@
     },
     {
       "name": "gpui-pre-ztracing",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "7ac9274f4fb36ce6bf128f9b48032196a3120cb858503af33ced6c21366cf2f7",
-      "source_archive": "https://static.crates.io/crates/gpui-pre-ztracing/gpui-pre-ztracing-0.3.11.crate",
+      "checksum": "1043bbe8d711baf03e774b03bae6521155f017450b866dcaa987a07d978d660a",
+      "source_archive": "https://static.crates.io/crates/gpui-pre-ztracing/gpui-pre-ztracing-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -7977,10 +7977,10 @@
     },
     {
       "name": "gpui-pre",
-      "version": "0.3.11",
+      "version": "0.3.12",
       "license": "Apache-2.0",
-      "checksum": "9303c771abf2acff2a96d706f69d9a82088c4770173a07cce88f0002431d887d",
-      "source_archive": "https://static.crates.io/crates/gpui-pre/gpui-pre-0.3.11.crate",
+      "checksum": "29db89613527079737f53752eab27fb65c9a7dd94979256c65a0e590c9fd34d8",
+      "source_archive": "https://static.crates.io/crates/gpui-pre/gpui-pre-0.3.12.crate",
       "repository": "https://github.com/zed-industries/zed",
       "source_commit": null,
       "target_roles": {
@@ -22584,28 +22584,28 @@
     },
     {
       "name": "Microsoft rendering code MIT notice",
-      "scope": "Microsoft Terminal-derived gamma and alpha correction source admitted through Windows and WGPU rendering paths. Source evidence: gpui-fast-windows-0.1.13/src/alpha_correction.hlsl:1-3; gpui-fast-wgpu-0.1.13/src/shaders.wgsl:31-33; gpui-fast-0.1.13/src/platform.rs:1733-1738; gpui-pre-windows-0.3.11/src/alpha_correction.hlsl:1-3; gpui-pre-wgpu-0.3.11/src/shaders.wgsl:31-33; gpui-pre-0.3.11/src/platform.rs:1715-1720.",
+      "scope": "Microsoft Terminal-derived gamma and alpha correction source admitted through Windows and WGPU rendering paths. Source evidence: gpui-fast-windows-0.1.14/src/alpha_correction.hlsl:1-3; gpui-fast-wgpu-0.1.14/src/shaders.wgsl:31-33; gpui-fast-0.1.14/src/platform.rs:1733-1738; gpui-pre-windows-0.3.12/src/alpha_correction.hlsl:1-3; gpui-pre-wgpu-0.3.12/src/shaders.wgsl:31-33; gpui-pre-0.3.12/src/platform.rs:1715-1720.",
       "notices": [
         "5d177f23ecfeb0ea8e050b6a5a16355e1ae9a0b286436ca8f83ed08b3795be6b"
       ]
     },
     {
       "name": "shadcn theme palette MIT notice",
-      "scope": "Admitted shadcn palette/theme data and referenced component styling. Source evidence: gpui-component-0.9.0/src/theme/default-colors.json:3 pins palette commit a46eea77a6680fc40cee9fa1f209e77931068f35; src/theme/default-theme.json:2-6 names shadcn but its upstream main URL supplies no revision; src/theme/color.rs:346-349 embeds the palette; src/styled.rs:16-40,77-98 and src/popover.rs:21-47 reference shadcn styling. Retaining the pinned MIT original does not establish a revision for the unpinned theme reference.",
+      "scope": "Admitted shadcn palette/theme data and referenced component styling. Source evidence: gpui-component-0.9.1/src/theme/default-colors.json:3 pins palette commit a46eea77a6680fc40cee9fa1f209e77931068f35; src/theme/default-theme.json:2-6 names shadcn but its upstream main URL supplies no revision; src/theme/color.rs:346-349 embeds the palette; src/styled.rs:16-40,77-98 and src/popover.rs:21-47 reference shadcn styling. Retaining the pinned MIT original does not establish a revision for the unpinned theme reference.",
       "notices": [
         "1564074e13439397221ffd522e2e504d56561994a23d371aa5e3ad43e4f5423f"
       ]
     },
     {
       "name": "Lucide and Feather-derived SVG assets",
-      "scope": "The entire combined ISC and MIT notice from gpui-kit-assets-0.9.0/LICENSE-LUCIDE applies according to its own per-file scope. Its lucide.json pins catalog 1.43.0; README.md:51-53 also identifies retained GPUI Kit icons whose complete per-file provenance is not established. Package-code Apache terms are retained separately.",
+      "scope": "The entire combined ISC and MIT notice from gpui-kit-assets-0.9.1/LICENSE-LUCIDE applies according to its own per-file scope. Its lucide.json pins catalog 1.43.0; README.md:51-53 also identifies retained GPUI Kit icons whose complete per-file provenance is not established. Package-code Apache terms are retained separately.",
       "notices": [
         "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57"
       ]
     },
     {
       "name": "html5minify-derived HTML cleanup source",
-      "scope": "GPUI Base 0.9.0 src/text/format/html5minify is an explicit fork, used by src/text/format/html.rs:122-130. The immutable comparison source html5minify 0.3.3 at commit 77f8b6e8358cfea23eeca8c83746c35d4e4a40f7 declares MIT and author Martin Gallagher in its manifest, but no original LICENSE/COPYING/NOTICE file was found in the published or complete pinned source inventory. Preserve that declaration and author metadata as metadata, plus the canonical MIT template; template placeholders are not a recovered copyright notice. GPUI does not pin the original fork revision, so the comparison commit is not asserted as the import identity.",
+      "scope": "GPUI Base 0.9.1 src/text/format/html5minify is an explicit fork, used by src/text/format/html.rs:122-130. The immutable comparison source html5minify 0.3.3 at commit 77f8b6e8358cfea23eeca8c83746c35d4e4a40f7 declares MIT and author Martin Gallagher in its manifest, but no original LICENSE/COPYING/NOTICE file was found in the published or complete pinned source inventory. Preserve that declaration and author metadata as metadata, plus the canonical MIT template; template placeholders are not a recovered copyright notice. GPUI does not pin the original fork revision, so the comparison commit is not asserted as the import identity.",
       "notices": [
         "7593e83d624629cc3ed4ad987bdbf0689f9b8e8b39f56ae29f72def96932f4a2",
         "ab1c183dbbb05c77bade0abfe0e700c7f819043352e1fe73b5728f5116f69895",
@@ -22614,7 +22614,7 @@
     },
     {
       "name": "d3-sankey-derived layout source",
-      "scope": "GPUI Base 0.9.0 src/plot/shape/sankey.rs adapts d3-sankey initialization, weighted relaxation and middle-out collision handling. Retain the complete BSD-3-Clause notice naming Copyright 2015, Mike Bostock. Commit bb7233ea0004669878d922e55fe83084ef3cb555 is the immutable recovered comparison/license source, not proof of the unpinned original GPUI import revision.",
+      "scope": "GPUI Base 0.9.1 src/plot/shape/sankey.rs adapts d3-sankey initialization, weighted relaxation and middle-out collision handling. Retain the complete BSD-3-Clause notice naming Copyright 2015, Mike Bostock. Commit bb7233ea0004669878d922e55fe83084ef3cb555 is the immutable recovered comparison/license source, not proof of the unpinned original GPUI import revision.",
       "notices": [
         "2bf785e778d67a4f5266cffcd4f2cc5bb98cde73791666e7efeb8002ba32dfa5",
         "6a9f0d4891f841304e71ee5a41919c938917b41b74fe3a5104f15e770069f54f"
@@ -22622,7 +22622,7 @@
     },
     {
       "name": "Bevy-derived HSLA interpolation source",
-      "scope": "GPUI Component 0.9.0 src/theme/color.rs:207-224 identifies the Bevy source at commit 85eceb022da0326b47ac2b0d9202c9c9f01835bb. Select the original declared Apache-2.0 alternative for the adapted HSLA and shortest-path hue interpolation. Retain the exact complete upstream Apache text; no Bevy copyright owner/year is invented.",
+      "scope": "GPUI Component 0.9.1 src/theme/color.rs:207-224 identifies the Bevy source at commit 85eceb022da0326b47ac2b0d9202c9c9f01835bb. Select the original declared Apache-2.0 alternative for the adapted HSLA and shortest-path hue interpolation. Retain the exact complete upstream Apache text; no Bevy copyright owner/year is invented.",
       "notices": [
         "9881ef70621d4370249685f85db0e9d771feae27c4bd4cef081d54a633b2aad3",
         "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
@@ -22630,7 +22630,7 @@
     },
     {
       "name": "Microsoft Windows property-key source provenance",
-      "scope": "Fast 0.1.13 and Pre 0.3.11 Windows src/destination_list.rs:75-76 explicitly identify a PKEY_Title declaration copied from windows-rs commit 0fc3c2e5a13d4316d242bdeb0a52af611eba8bd4. Retain that source attribution and its exact original Microsoft MIT text. The nearby unpinned Windows-classic-samples RecipePropertyHandler reference identifies API/example provenance; it does not establish substantial translated code or any font/SIL material.",
+      "scope": "Fast 0.1.14 and Pre 0.3.12 Windows src/destination_list.rs:75-76 explicitly identify a PKEY_Title declaration copied from windows-rs commit 0fc3c2e5a13d4316d242bdeb0a52af611eba8bd4. Retain that source attribution and its exact original Microsoft MIT text. The nearby unpinned Windows-classic-samples RecipePropertyHandler reference identifies API/example provenance; it does not establish substantial translated code or any font/SIL material.",
       "notices": [
         "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
         "fd955903eed480117ea81b0d76754f72f6539e064af679e3e984ef97286f3045"
@@ -27418,6 +27418,42 @@
           "url": "https://static.crates.io/crates/gpui-fast/gpui-fast-0.1.13.crate#LICENSE",
           "archive_sha256": "7ee67914f779fdcfce4c7f59f6ba8fa68f680bd137648b25a801cd5d9cb1b8ab",
           "path": "LICENSE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-fast-linux/gpui-fast-linux-0.1.14.crate#LICENSE",
+          "archive_sha256": "0409042721bd50ed8c538e13cb13f6d92f5adeade2e2a284a41d32c704c2eef1",
+          "path": "LICENSE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-fast-macros/gpui-fast-macros-0.1.14.crate#LICENSE",
+          "archive_sha256": "269fc24ab55f85d5fb90ce812b3e6adcf5ad0bdccc79a08aa9ddd88a3a477494",
+          "path": "LICENSE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-fast-platform/gpui-fast-platform-0.1.14.crate#LICENSE",
+          "archive_sha256": "df86a665111fb86fe149c6d72660777d17bcf2af9133079459faf7bda0b3f756",
+          "path": "LICENSE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-fast-wgpu/gpui-fast-wgpu-0.1.14.crate#LICENSE",
+          "archive_sha256": "7cfa13d90b546bec059b6e1c08969b45236d64beb89a96cc6bc54d0df19466ce",
+          "path": "LICENSE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-fast-windows/gpui-fast-windows-0.1.14.crate#LICENSE",
+          "archive_sha256": "a89bfdc3a922a29f83611fc7f01642533d35260a7f86aa9befb14f2b6dcca093",
+          "path": "LICENSE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-fast/gpui-fast-0.1.14.crate#LICENSE",
+          "archive_sha256": "f8c3a7e25e5a4789656da980b0316857acbdb72347b5d890d7d0c549bb9fee72",
+          "path": "LICENSE"
         }
       ],
       "base64": "Q29weXJpZ2h0IDIwMjIgLSAyMDI1IFplZCBJbmR1c3RyaWVzLCBJbmMuCkNvcHlyaWdodCAyMDI2IExvbmdicmlkZ2UuCgoKQXBhY2hlIExpY2Vuc2UKICAgICAgICAgICAgICAgICAgICAgICAgICAgVmVyc2lvbiAyLjAsIEphbnVhcnkgMjAwNAogICAgICAgICAgICAgICAgICAgICAgICBodHRwOi8vd3d3LmFwYWNoZS5vcmcvbGljZW5zZXMvCgoKICAgVEVSTVMgQU5EIENPTkRJVElPTlMgRk9SIFVTRSwgUkVQUk9EVUNUSU9OLCBBTkQgRElTVFJJQlVUSU9OCgoKICAgMS4gRGVmaW5pdGlvbnMuCgoKICAgICAgIkxpY2Vuc2UiIHNoYWxsIG1lYW4gdGhlIHRlcm1zIGFuZCBjb25kaXRpb25zIGZvciB1c2UsIHJlcHJvZHVjdGlvbiwKICAgICAgYW5kIGRpc3RyaWJ1dGlvbiBhcyBkZWZpbmVkIGJ5IFNlY3Rpb25zIDEgdGhyb3VnaCA5IG9mIHRoaXMgZG9jdW1lbnQuCgoKICAgICAgIkxpY2Vuc29yIiBzaGFsbCBtZWFuIHRoZSBjb3B5cmlnaHQgb3duZXIgb3IgZW50aXR5IGF1dGhvcml6ZWQgYnkKICAgICAgdGhlIGNvcHlyaWdodCBvd25lciB0aGF0IGlzIGdyYW50aW5nIHRoZSBMaWNlbnNlLgoKCiAgICAgICJMZWdhbCBFbnRpdHkiIHNoYWxsIG1lYW4gdGhlIHVuaW9uIG9mIHRoZSBhY3RpbmcgZW50aXR5IGFuZCBhbGwKICAgICAgb3RoZXIgZW50aXRpZXMgdGhhdCBjb250cm9sLCBhcmUgY29udHJvbGxlZCBieSwgb3IgYXJlIHVuZGVyIGNvbW1vbgogICAgICBjb250cm9sIHdpdGggdGhhdCBlbnRpdHkuIEZvciB0aGUgcHVycG9zZXMgb2YgdGhpcyBkZWZpbml0aW9uLAogICAgICAiY29udHJvbCIgbWVhbnMgKGkpIHRoZSBwb3dlciwgZGlyZWN0IG9yIGluZGlyZWN0LCB0byBjYXVzZSB0aGUKICAgICAgZGlyZWN0aW9uIG9yIG1hbmFnZW1lbnQgb2Ygc3VjaCBlbnRpdHksIHdoZXRoZXIgYnkgY29udHJhY3Qgb3IKICAgICAgb3RoZXJ3aXNlLCBvciAoaWkpIG93bmVyc2hpcCBvZiBmaWZ0eSBwZXJjZW50ICg1MCUpIG9yIG1vcmUgb2YgdGhlCiAgICAgIG91dHN0YW5kaW5nIHNoYXJlcywgb3IgKGlpaSkgYmVuZWZpY2lhbCBvd25lcnNoaXAgb2Ygc3VjaCBlbnRpdHkuCgoKICAgICAgIllvdSIgKG9yICJZb3VyIikgc2hhbGwgbWVhbiBhbiBpbmRpdmlkdWFsIG9yIExlZ2FsIEVudGl0eQogICAgICBleGVyY2lzaW5nIHBlcm1pc3Npb25zIGdyYW50ZWQgYnkgdGhpcyBMaWNlbnNlLgoKCiAgICAgICJTb3VyY2UiIGZvcm0gc2hhbGwgbWVhbiB0aGUgcHJlZmVycmVkIGZvcm0gZm9yIG1ha2luZyBtb2RpZmljYXRpb25zLAogICAgICBpbmNsdWRpbmcgYnV0IG5vdCBsaW1pdGVkIHRvIHNvZnR3YXJlIHNvdXJjZSBjb2RlLCBkb2N1bWVudGF0aW9uCiAgICAgIHNvdXJjZSwgYW5kIGNvbmZpZ3VyYXRpb24gZmlsZXMuCgoKICAgICAgIk9iamVjdCIgZm9ybSBzaGFsbCBtZWFuIGFueSBmb3JtIHJlc3VsdGluZyBmcm9tIG1lY2hhbmljYWwKICAgICAgdHJhbnNmb3JtYXRpb24gb3IgdHJhbnNsYXRpb24gb2YgYSBTb3VyY2UgZm9ybSwgaW5jbHVkaW5nIGJ1dAogICAgICBub3QgbGltaXRlZCB0byBjb21waWxlZCBvYmplY3QgY29kZSwgZ2VuZXJhdGVkIGRvY3VtZW50YXRpb24sCiAgICAgIGFuZCBjb252ZXJzaW9ucyB0byBvdGhlciBtZWRpYSB0eXBlcy4KCgogICAgICAiV29yayIgc2hhbGwgbWVhbiB0aGUgd29yayBvZiBhdXRob3JzaGlwLCB3aGV0aGVyIGluIFNvdXJjZSBvcgogICAgICBPYmplY3QgZm9ybSwgbWFkZSBhdmFpbGFibGUgdW5kZXIgdGhlIExpY2Vuc2UsIGFzIGluZGljYXRlZCBieSBhCiAgICAgIGNvcHlyaWdodCBub3RpY2UgdGhhdCBpcyBpbmNsdWRlZCBpbiBvciBhdHRhY2hlZCB0byB0aGUgd29yawogICAgICAoYW4gZXhhbXBsZSBpcyBwcm92aWRlZCBpbiB0aGUgQXBwZW5kaXggYmVsb3cpLgoKCiAgICAgICJEZXJpdmF0aXZlIFdvcmtzIiBzaGFsbCBtZWFuIGFueSB3b3JrLCB3aGV0aGVyIGluIFNvdXJjZSBvciBPYmplY3QKICAgICAgZm9ybSwgdGhhdCBpcyBiYXNlZCBvbiAob3IgZGVyaXZlZCBmcm9tKSB0aGUgV29yayBhbmQgZm9yIHdoaWNoIHRoZQogICAgICBlZGl0b3JpYWwgcmV2aXNpb25zLCBhbm5vdGF0aW9ucywgZWxhYm9yYXRpb25zLCBvciBvdGhlciBtb2RpZmljYXRpb25zCiAgICAgIHJlcHJlc2VudCwgYXMgYSB3aG9sZSwgYW4gb3JpZ2luYWwgd29yayBvZiBhdXRob3JzaGlwLiBGb3IgdGhlIHB1cnBvc2VzCiAgICAgIG9mIHRoaXMgTGljZW5zZSwgRGVyaXZhdGl2ZSBXb3JrcyBzaGFsbCBub3QgaW5jbHVkZSB3b3JrcyB0aGF0IHJlbWFpbgogICAgICBzZXBhcmFibGUgZnJvbSwgb3IgbWVyZWx5IGxpbmsgKG9yIGJpbmQgYnkgbmFtZSkgdG8gdGhlIGludGVyZmFjZXMgb2YsCiAgICAgIHRoZSBXb3JrIGFuZCBEZXJpdmF0aXZlIFdvcmtzIHRoZXJlb2YuCgoKICAgICAgIkNvbnRyaWJ1dGlvbiIgc2hhbGwgbWVhbiBhbnkgd29yayBvZiBhdXRob3JzaGlwLCBpbmNsdWRpbmcKICAgICAgdGhlIG9yaWdpbmFsIHZlcnNpb24gb2YgdGhlIFdvcmsgYW5kIGFueSBtb2RpZmljYXRpb25zIG9yIGFkZGl0aW9ucwogICAgICB0byB0aGF0IFdvcmsgb3IgRGVyaXZhdGl2ZSBXb3JrcyB0aGVyZW9mLCB0aGF0IGlzIGludGVudGlvbmFsbHkKICAgICAgc3VibWl0dGVkIHRvIExpY2Vuc29yIGZvciBpbmNsdXNpb24gaW4gdGhlIFdvcmsgYnkgdGhlIGNvcHlyaWdodCBvd25lcgogICAgICBvciBieSBhbiBpbmRpdmlkdWFsIG9yIExlZ2FsIEVudGl0eSBhdXRob3JpemVkIHRvIHN1Ym1pdCBvbiBiZWhhbGYgb2YKICAgICAgdGhlIGNvcHlyaWdodCBvd25lci4gRm9yIHRoZSBwdXJwb3NlcyBvZiB0aGlzIGRlZmluaXRpb24sICJzdWJtaXR0ZWQiCiAgICAgIG1lYW5zIGFueSBmb3JtIG9mIGVsZWN0cm9uaWMsIHZlcmJhbCwgb3Igd3JpdHRlbiBjb21tdW5pY2F0aW9uIHNlbnQKICAgICAgdG8gdGhlIExpY2Vuc29yIG9yIGl0cyByZXByZXNlbnRhdGl2ZXMsIGluY2x1ZGluZyBidXQgbm90IGxpbWl0ZWQgdG8KICAgICAgY29tbXVuaWNhdGlvbiBvbiBlbGVjdHJvbmljIG1haWxpbmcgbGlzdHMsIHNvdXJjZSBjb2RlIGNvbnRyb2wgc3lzdGVtcywKICAgICAgYW5kIGlzc3VlIHRyYWNraW5nIHN5c3RlbXMgdGhhdCBhcmUgbWFuYWdlZCBieSwgb3Igb24gYmVoYWxmIG9mLCB0aGUKICAgICAgTGljZW5zb3IgZm9yIHRoZSBwdXJwb3NlIG9mIGRpc2N1c3NpbmcgYW5kIGltcHJvdmluZyB0aGUgV29yaywgYnV0CiAgICAgIGV4Y2x1ZGluZyBjb21tdW5pY2F0aW9uIHRoYXQgaXMgY29uc3BpY3VvdXNseSBtYXJrZWQgb3Igb3RoZXJ3aXNlCiAgICAgIGRlc2lnbmF0ZWQgaW4gd3JpdGluZyBieSB0aGUgY29weXJpZ2h0IG93bmVyIGFzICJOb3QgYSBDb250cmlidXRpb24uIgoKCiAgICAgICJDb250cmlidXRvciIgc2hhbGwgbWVhbiBMaWNlbnNvciBhbmQgYW55IGluZGl2aWR1YWwgb3IgTGVnYWwgRW50aXR5CiAgICAgIG9uIGJlaGFsZiBvZiB3aG9tIGEgQ29udHJpYnV0aW9uIGhhcyBiZWVuIHJlY2VpdmVkIGJ5IExpY2Vuc29yIGFuZAogICAgICBzdWJzZXF1ZW50bHkgaW5jb3Jwb3JhdGVkIHdpdGhpbiB0aGUgV29yay4KCgogICAyLiBHcmFudCBvZiBDb3B5cmlnaHQgTGljZW5zZS4gU3ViamVjdCB0byB0aGUgdGVybXMgYW5kIGNvbmRpdGlvbnMgb2YKICAgICAgdGhpcyBMaWNlbnNlLCBlYWNoIENvbnRyaWJ1dG9yIGhlcmVieSBncmFudHMgdG8gWW91IGEgcGVycGV0dWFsLAogICAgICB3b3JsZHdpZGUsIG5vbi1leGNsdXNpdmUsIG5vLWNoYXJnZSwgcm95YWx0eS1mcmVlLCBpcnJldm9jYWJsZQogICAgICBjb3B5cmlnaHQgbGljZW5zZSB0byByZXByb2R1Y2UsIHByZXBhcmUgRGVyaXZhdGl2ZSBXb3JrcyBvZiwKICAgICAgcHVibGljbHkgZGlzcGxheSwgcHVibGljbHkgcGVyZm9ybSwgc3VibGljZW5zZSwgYW5kIGRpc3RyaWJ1dGUgdGhlCiAgICAgIFdvcmsgYW5kIHN1Y2ggRGVyaXZhdGl2ZSBXb3JrcyBpbiBTb3VyY2Ugb3IgT2JqZWN0IGZvcm0uCgoKICAgMy4gR3JhbnQgb2YgUGF0ZW50IExpY2Vuc2UuIFN1YmplY3QgdG8gdGhlIHRlcm1zIGFuZCBjb25kaXRpb25zIG9mCiAgICAgIHRoaXMgTGljZW5zZSwgZWFjaCBDb250cmlidXRvciBoZXJlYnkgZ3JhbnRzIHRvIFlvdSBhIHBlcnBldHVhbCwKICAgICAgd29ybGR3aWRlLCBub24tZXhjbHVzaXZlLCBuby1jaGFyZ2UsIHJveWFsdHktZnJlZSwgaXJyZXZvY2FibGUKICAgICAgKGV4Y2VwdCBhcyBzdGF0ZWQgaW4gdGhpcyBzZWN0aW9uKSBwYXRlbnQgbGljZW5zZSB0byBtYWtlLCBoYXZlIG1hZGUsCiAgICAgIHVzZSwgb2ZmZXIgdG8gc2VsbCwgc2VsbCwgaW1wb3J0LCBhbmQgb3RoZXJ3aXNlIHRyYW5zZmVyIHRoZSBXb3JrLAogICAgICB3aGVyZSBzdWNoIGxpY2Vuc2UgYXBwbGllcyBvbmx5IHRvIHRob3NlIHBhdGVudCBjbGFpbXMgbGljZW5zYWJsZQogICAgICBieSBzdWNoIENvbnRyaWJ1dG9yIHRoYXQgYXJlIG5lY2Vzc2FyaWx5IGluZnJpbmdlZCBieSB0aGVpcgogICAgICBDb250cmlidXRpb24ocykgYWxvbmUgb3IgYnkgY29tYmluYXRpb24gb2YgdGhlaXIgQ29udHJpYnV0aW9uKHMpCiAgICAgIHdpdGggdGhlIFdvcmsgdG8gd2hpY2ggc3VjaCBDb250cmlidXRpb24ocykgd2FzIHN1Ym1pdHRlZC4gSWYgWW91CiAgICAgIGluc3RpdHV0ZSBwYXRlbnQgbGl0aWdhdGlvbiBhZ2FpbnN0IGFueSBlbnRpdHkgKGluY2x1ZGluZyBhCiAgICAgIGNyb3NzLWNsYWltIG9yIGNvdW50ZXJjbGFpbSBpbiBhIGxhd3N1aXQpIGFsbGVnaW5nIHRoYXQgdGhlIFdvcmsKICAgICAgb3IgYSBDb250cmlidXRpb24gaW5jb3Jwb3JhdGVkIHdpdGhpbiB0aGUgV29yayBjb25zdGl0dXRlcyBkaXJlY3QKICAgICAgb3IgY29udHJpYnV0b3J5IHBhdGVudCBpbmZyaW5nZW1lbnQsIHRoZW4gYW55IHBhdGVudCBsaWNlbnNlcwogICAgICBncmFudGVkIHRvIFlvdSB1bmRlciB0aGlzIExpY2Vuc2UgZm9yIHRoYXQgV29yayBzaGFsbCB0ZXJtaW5hdGUKICAgICAgYXMgb2YgdGhlIGRhdGUgc3VjaCBsaXRpZ2F0aW9uIGlzIGZpbGVkLgoKCiAgIDQuIFJlZGlzdHJpYnV0aW9uLiBZb3UgbWF5IHJlcHJvZHVjZSBhbmQgZGlzdHJpYnV0ZSBjb3BpZXMgb2YgdGhlCiAgICAgIFdvcmsgb3IgRGVyaXZhdGl2ZSBXb3JrcyB0aGVyZW9mIGluIGFueSBtZWRpdW0sIHdpdGggb3Igd2l0aG91dAogICAgICBtb2RpZmljYXRpb25zLCBhbmQgaW4gU291cmNlIG9yIE9iamVjdCBmb3JtLCBwcm92aWRlZCB0aGF0IFlvdQogICAgICBtZWV0IHRoZSBmb2xsb3dpbmcgY29uZGl0aW9uczoKCgogICAgICAoYSkgWW91IG11c3QgZ2l2ZSBhbnkgb3RoZXIgcmVjaXBpZW50cyBvZiB0aGUgV29yayBvcgogICAgICAgICAgRGVyaXZhdGl2ZSBXb3JrcyBhIGNvcHkgb2YgdGhpcyBMaWNlbnNlOyBhbmQKCgogICAgICAoYikgWW91IG11c3QgY2F1c2UgYW55IG1vZGlmaWVkIGZpbGVzIHRvIGNhcnJ5IHByb21pbmVudCBub3RpY2VzCiAgICAgICAgICBzdGF0aW5nIHRoYXQgWW91IGNoYW5nZWQgdGhlIGZpbGVzOyBhbmQKCgogICAgICAoYykgWW91IG11c3QgcmV0YWluLCBpbiB0aGUgU291cmNlIGZvcm0gb2YgYW55IERlcml2YXRpdmUgV29ya3MKICAgICAgICAgIHRoYXQgWW91IGRpc3RyaWJ1dGUsIGFsbCBjb3B5cmlnaHQsIHBhdGVudCwgdHJhZGVtYXJrLCBhbmQKICAgICAgICAgIGF0dHJpYnV0aW9uIG5vdGljZXMgZnJvbSB0aGUgU291cmNlIGZvcm0gb2YgdGhlIFdvcmssCiAgICAgICAgICBleGNsdWRpbmcgdGhvc2Ugbm90aWNlcyB0aGF0IGRvIG5vdCBwZXJ0YWluIHRvIGFueSBwYXJ0IG9mCiAgICAgICAgICB0aGUgRGVyaXZhdGl2ZSBXb3JrczsgYW5kCgoKICAgICAgKGQpIElmIHRoZSBXb3JrIGluY2x1ZGVzIGEgIk5PVElDRSIgdGV4dCBmaWxlIGFzIHBhcnQgb2YgaXRzCiAgICAgICAgICBkaXN0cmlidXRpb24sIHRoZW4gYW55IERlcml2YXRpdmUgV29ya3MgdGhhdCBZb3UgZGlzdHJpYnV0ZSBtdXN0CiAgICAgICAgICBpbmNsdWRlIGEgcmVhZGFibGUgY29weSBvZiB0aGUgYXR0cmlidXRpb24gbm90aWNlcyBjb250YWluZWQKICAgICAgICAgIHdpdGhpbiBzdWNoIE5PVElDRSBmaWxlLCBleGNsdWRpbmcgdGhvc2Ugbm90aWNlcyB0aGF0IGRvIG5vdAogICAgICAgICAgcGVydGFpbiB0byBhbnkgcGFydCBvZiB0aGUgRGVyaXZhdGl2ZSBXb3JrcywgaW4gYXQgbGVhc3Qgb25lCiAgICAgICAgICBvZiB0aGUgZm9sbG93aW5nIHBsYWNlczogd2l0aGluIGEgTk9USUNFIHRleHQgZmlsZSBkaXN0cmlidXRlZAogICAgICAgICAgYXMgcGFydCBvZiB0aGUgRGVyaXZhdGl2ZSBXb3Jrczsgd2l0aGluIHRoZSBTb3VyY2UgZm9ybSBvcgogICAgICAgICAgZG9jdW1lbnRhdGlvbiwgaWYgcHJvdmlkZWQgYWxvbmcgd2l0aCB0aGUgRGVyaXZhdGl2ZSBXb3Jrczsgb3IsCiAgICAgICAgICB3aXRoaW4gYSBkaXNwbGF5IGdlbmVyYXRlZCBieSB0aGUgRGVyaXZhdGl2ZSBXb3JrcywgaWYgYW5kCiAgICAgICAgICB3aGVyZXZlciBzdWNoIHRoaXJkLXBhcnR5IG5vdGljZXMgbm9ybWFsbHkgYXBwZWFyLiBUaGUgY29udGVudHMKICAgICAgICAgIG9mIHRoZSBOT1RJQ0UgZmlsZSBhcmUgZm9yIGluZm9ybWF0aW9uYWwgcHVycG9zZXMgb25seSBhbmQKICAgICAgICAgIGRvIG5vdCBtb2RpZnkgdGhlIExpY2Vuc2UuIFlvdSBtYXkgYWRkIFlvdXIgb3duIGF0dHJpYnV0aW9uCiAgICAgICAgICBub3RpY2VzIHdpdGhpbiBEZXJpdmF0aXZlIFdvcmtzIHRoYXQgWW91IGRpc3RyaWJ1dGUsIGFsb25nc2lkZQogICAgICAgICAgb3IgYXMgYW4gYWRkZW5kdW0gdG8gdGhlIE5PVElDRSB0ZXh0IGZyb20gdGhlIFdvcmssIHByb3ZpZGVkCiAgICAgICAgICB0aGF0IHN1Y2ggYWRkaXRpb25hbCBhdHRyaWJ1dGlvbiBub3RpY2VzIGNhbm5vdCBiZSBjb25zdHJ1ZWQKICAgICAgICAgIGFzIG1vZGlmeWluZyB0aGUgTGljZW5zZS4KCgogICAgICBZb3UgbWF5IGFkZCBZb3VyIG93biBjb3B5cmlnaHQgc3RhdGVtZW50IHRvIFlvdXIgbW9kaWZpY2F0aW9ucyBhbmQKICAgICAgbWF5IHByb3ZpZGUgYWRkaXRpb25hbCBvciBkaWZmZXJlbnQgbGljZW5zZSB0ZXJtcyBhbmQgY29uZGl0aW9ucwogICAgICBmb3IgdXNlLCByZXByb2R1Y3Rpb24sIG9yIGRpc3RyaWJ1dGlvbiBvZiBZb3VyIG1vZGlmaWNhdGlvbnMsIG9yCiAgICAgIGZvciBhbnkgc3VjaCBEZXJpdmF0aXZlIFdvcmtzIGFzIGEgd2hvbGUsIHByb3ZpZGVkIFlvdXIgdXNlLAogICAgICByZXByb2R1Y3Rpb24sIGFuZCBkaXN0cmlidXRpb24gb2YgdGhlIFdvcmsgb3RoZXJ3aXNlIGNvbXBsaWVzIHdpdGgKICAgICAgdGhlIGNvbmRpdGlvbnMgc3RhdGVkIGluIHRoaXMgTGljZW5zZS4KCgogICA1LiBTdWJtaXNzaW9uIG9mIENvbnRyaWJ1dGlvbnMuIFVubGVzcyBZb3UgZXhwbGljaXRseSBzdGF0ZSBvdGhlcndpc2UsCiAgICAgIGFueSBDb250cmlidXRpb24gaW50ZW50aW9uYWxseSBzdWJtaXR0ZWQgZm9yIGluY2x1c2lvbiBpbiB0aGUgV29yawogICAgICBieSBZb3UgdG8gdGhlIExpY2Vuc29yIHNoYWxsIGJlIHVuZGVyIHRoZSB0ZXJtcyBhbmQgY29uZGl0aW9ucyBvZgogICAgICB0aGlzIExpY2Vuc2UsIHdpdGhvdXQgYW55IGFkZGl0aW9uYWwgdGVybXMgb3IgY29uZGl0aW9ucy4KICAgICAgTm90d2l0aHN0YW5kaW5nIHRoZSBhYm92ZSwgbm90aGluZyBoZXJlaW4gc2hhbGwgc3VwZXJzZWRlIG9yIG1vZGlmeQogICAgICB0aGUgdGVybXMgb2YgYW55IHNlcGFyYXRlIGxpY2Vuc2UgYWdyZWVtZW50IHlvdSBtYXkgaGF2ZSBleGVjdXRlZAogICAgICB3aXRoIExpY2Vuc29yIHJlZ2FyZGluZyBzdWNoIENvbnRyaWJ1dGlvbnMuCgoKICAgNi4gVHJhZGVtYXJrcy4gVGhpcyBMaWNlbnNlIGRvZXMgbm90IGdyYW50IHBlcm1pc3Npb24gdG8gdXNlIHRoZSB0cmFkZQogICAgICBuYW1lcywgdHJhZGVtYXJrcywgc2VydmljZSBtYXJrcywgb3IgcHJvZHVjdCBuYW1lcyBvZiB0aGUgTGljZW5zb3IsCiAgICAgIGV4Y2VwdCBhcyByZXF1aXJlZCBmb3IgcmVhc29uYWJsZSBhbmQgY3VzdG9tYXJ5IHVzZSBpbiBkZXNjcmliaW5nIHRoZQogICAgICBvcmlnaW4gb2YgdGhlIFdvcmsgYW5kIHJlcHJvZHVjaW5nIHRoZSBjb250ZW50IG9mIHRoZSBOT1RJQ0UgZmlsZS4KCgogICA3LiBEaXNjbGFpbWVyIG9mIFdhcnJhbnR5LiBVbmxlc3MgcmVxdWlyZWQgYnkgYXBwbGljYWJsZSBsYXcgb3IKICAgICAgYWdyZWVkIHRvIGluIHdyaXRpbmcsIExpY2Vuc29yIHByb3ZpZGVzIHRoZSBXb3JrIChhbmQgZWFjaAogICAgICBDb250cmlidXRvciBwcm92aWRlcyBpdHMgQ29udHJpYnV0aW9ucykgb24gYW4gIkFTIElTIiBCQVNJUywKICAgICAgV0lUSE9VVCBXQVJSQU5USUVTIE9SIENPTkRJVElPTlMgT0YgQU5ZIEtJTkQsIGVpdGhlciBleHByZXNzIG9yCiAgICAgIGltcGxpZWQsIGluY2x1ZGluZywgd2l0aG91dCBsaW1pdGF0aW9uLCBhbnkgd2FycmFudGllcyBvciBjb25kaXRpb25zCiAgICAgIG9mIFRJVExFLCBOT04tSU5GUklOR0VNRU5ULCBNRVJDSEFOVEFCSUxJVFksIG9yIEZJVE5FU1MgRk9SIEEKICAgICAgUEFSVElDVUxBUiBQVVJQT1NFLiBZb3UgYXJlIHNvbGVseSByZXNwb25zaWJsZSBmb3IgZGV0ZXJtaW5pbmcgdGhlCiAgICAgIGFwcHJvcHJpYXRlbmVzcyBvZiB1c2luZyBvciByZWRpc3RyaWJ1dGluZyB0aGUgV29yayBhbmQgYXNzdW1lIGFueQogICAgICByaXNrcyBhc3NvY2lhdGVkIHdpdGggWW91ciBleGVyY2lzZSBvZiBwZXJtaXNzaW9ucyB1bmRlciB0aGlzIExpY2Vuc2UuCgoKICAgOC4gTGltaXRhdGlvbiBvZiBMaWFiaWxpdHkuIEluIG5vIGV2ZW50IGFuZCB1bmRlciBubyBsZWdhbCB0aGVvcnksCiAgICAgIHdoZXRoZXIgaW4gdG9ydCAoaW5jbHVkaW5nIG5lZ2xpZ2VuY2UpLCBjb250cmFjdCwgb3Igb3RoZXJ3aXNlLAogICAgICB1bmxlc3MgcmVxdWlyZWQgYnkgYXBwbGljYWJsZSBsYXcgKHN1Y2ggYXMgZGVsaWJlcmF0ZSBhbmQgZ3Jvc3NseQogICAgICBuZWdsaWdlbnQgYWN0cykgb3IgYWdyZWVkIHRvIGluIHdyaXRpbmcsIHNoYWxsIGFueSBDb250cmlidXRvciBiZQogICAgICBsaWFibGUgdG8gWW91IGZvciBkYW1hZ2VzLCBpbmNsdWRpbmcgYW55IGRpcmVjdCwgaW5kaXJlY3QsIHNwZWNpYWwsCiAgICAgIGluY2lkZW50YWwsIG9yIGNvbnNlcXVlbnRpYWwgZGFtYWdlcyBvZiBhbnkgY2hhcmFjdGVyIGFyaXNpbmcgYXMgYQogICAgICByZXN1bHQgb2YgdGhpcyBMaWNlbnNlIG9yIG91dCBvZiB0aGUgdXNlIG9yIGluYWJpbGl0eSB0byB1c2UgdGhlCiAgICAgIFdvcmsgKGluY2x1ZGluZyBidXQgbm90IGxpbWl0ZWQgdG8gZGFtYWdlcyBmb3IgbG9zcyBvZiBnb29kd2lsbCwKICAgICAgd29yayBzdG9wcGFnZSwgY29tcHV0ZXIgZmFpbHVyZSBvciBtYWxmdW5jdGlvbiwgb3IgYW55IGFuZCBhbGwKICAgICAgb3RoZXIgY29tbWVyY2lhbCBkYW1hZ2VzIG9yIGxvc3NlcyksIGV2ZW4gaWYgc3VjaCBDb250cmlidXRvcgogICAgICBoYXMgYmVlbiBhZHZpc2VkIG9mIHRoZSBwb3NzaWJpbGl0eSBvZiBzdWNoIGRhbWFnZXMuCgoKICAgOS4gQWNjZXB0aW5nIFdhcnJhbnR5IG9yIEFkZGl0aW9uYWwgTGlhYmlsaXR5LiBXaGlsZSByZWRpc3RyaWJ1dGluZwogICAgICB0aGUgV29yayBvciBEZXJpdmF0aXZlIFdvcmtzIHRoZXJlb2YsIFlvdSBtYXkgY2hvb3NlIHRvIG9mZmVyLAogICAgICBhbmQgY2hhcmdlIGEgZmVlIGZvciwgYWNjZXB0YW5jZSBvZiBzdXBwb3J0LCB3YXJyYW50eSwgaW5kZW1uaXR5LAogICAgICBvciBvdGhlciBsaWFiaWxpdHkgb2JsaWdhdGlvbnMgYW5kL29yIHJpZ2h0cyBjb25zaXN0ZW50IHdpdGggdGhpcwogICAgICBMaWNlbnNlLiBIb3dldmVyLCBpbiBhY2NlcHRpbmcgc3VjaCBvYmxpZ2F0aW9ucywgWW91IG1heSBhY3Qgb25seQogICAgICBvbiBZb3VyIG93biBiZWhhbGYgYW5kIG9uIFlvdXIgc29sZSByZXNwb25zaWJpbGl0eSwgbm90IG9uIGJlaGFsZgogICAgICBvZiBhbnkgb3RoZXIgQ29udHJpYnV0b3IsIGFuZCBvbmx5IGlmIFlvdSBhZ3JlZSB0byBpbmRlbW5pZnksCiAgICAgIGRlZmVuZCwgYW5kIGhvbGQgZWFjaCBDb250cmlidXRvciBoYXJtbGVzcyBmb3IgYW55IGxpYWJpbGl0eQogICAgICBpbmN1cnJlZCBieSwgb3IgY2xhaW1zIGFzc2VydGVkIGFnYWluc3QsIHN1Y2ggQ29udHJpYnV0b3IgYnkgcmVhc29uCiAgICAgIG9mIHlvdXIgYWNjZXB0aW5nIGFueSBzdWNoIHdhcnJhbnR5IG9yIGFkZGl0aW9uYWwgbGlhYmlsaXR5LgoKCiAgIEVORCBPRiBURVJNUyBBTkQgQ09ORElUSU9OUwo="
@@ -28154,6 +28190,17 @@
           "kind": "published_crate",
           "url": "https://static.crates.io/crates/gpui-base/gpui-base-0.9.0.crate#src/plot/shape/sankey.rs",
           "archive_sha256": "cff6377e30f0c857681662e7edc7286bf30f5606033390401b0706d7bd930833",
+          "path": "src/plot/shape/sankey.rs",
+          "lines": [
+            1,
+            1
+          ],
+          "file_sha256": "a25ecd363d5c5ace86ed97977616634f4753f99e7d9ba1403704f63a1c3c9cf9"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-base/gpui-base-0.9.1.crate#src/plot/shape/sankey.rs",
+          "archive_sha256": "f3e9ae5237737cfd110d0ff513fcd9c20f97d98ebabd0a73164068177f0aca4f",
           "path": "src/plot/shape/sankey.rs",
           "lines": [
             1,
@@ -28955,6 +29002,108 @@
           "url": "https://static.crates.io/crates/gpui-pre/gpui-pre-0.3.11.crate#LICENSE-APACHE",
           "archive_sha256": "9303c771abf2acff2a96d706f69d9a82088c4770173a07cce88f0002431d887d",
           "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-bench-metrics/gpui-pre-bench-metrics-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "db6a8ff719fdc3da4f5f497b5d39c5545634424073f94943b003c818fc95e1d5",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-collections/gpui-pre-collections-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "cb60ece401b399fd5ec13911915b407b0c6efa1f6c9a9f66201aaac56c7ec39d",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-derive-refineable/gpui-pre-derive-refineable-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "aeb2a3f5e6c9f300f432ae7989a81b262953ccfb3f9385be51cdc3303aef8858",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-http-client/gpui-pre-http-client-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "55245de7e3b6e219596fd98bb29555d6e3fe44c055d025960affeb11b894c048",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-linux/gpui-pre-linux-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "54bab418d0b7c027af9495f278619b46887362b3bd6446e246c87c5b0fa167df",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-macros/gpui-pre-macros-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "1c7f67904eced61ed42ae3320a9b4b388aed893f8547fffe9161ec425ad162eb",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-platform/gpui-pre-platform-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "d2b785bdcbd229f762096aebf4f9ae913bdaa9db49794907cabaf516eb55227b",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-refineable/gpui-pre-refineable-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "4d197569e3b1fd84170f574bb866e95ecbc2625e7ae9443c877150eaf7d53374",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-scheduler/gpui-pre-scheduler-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "b1d3fa97eeb4ea233635b756684affe96db9e29fc2af8cdc269268bd7ff649fc",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-shared-string/gpui-pre-shared-string-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "63c2ed1e44195079d4461b83a99845aa9a52ce8fcf1516410816670a03d32d94",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-sum-tree/gpui-pre-sum-tree-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "6085e61458366decd21491396b0b90b3adf928f2ec27e170c4d3c9fba455d536",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-util/gpui-pre-util-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "52ead57ff96b5a34e71d64758080347066d667e0c4bd4ff71e85f3a50643fa3e",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-wgpu/gpui-pre-wgpu-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "dc76608d385f6d0dcbad44504b1bf669dac3b7d7ffa2885acdb7c1c358caf852",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-windows/gpui-pre-windows-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "7201762420222d5b5ce5bdf0056996199212a3349bfb2457a3a0238c688681f3",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-ztracing-macro/gpui-pre-ztracing-macro-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "85701631a9bbecf47e6d19f145e85e57767e7c50f7192d5b1bf65b5ef43cb373",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-ztracing/gpui-pre-ztracing-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "1043bbe8d711baf03e774b03bae6521155f017450b866dcaa987a07d978d660a",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre/gpui-pre-0.3.12.crate#LICENSE-APACHE",
+          "archive_sha256": "29db89613527079737f53752eab27fb65c9a7dd94979256c65a0e590c9fd34d8",
+          "path": "LICENSE-APACHE"
         }
       ],
       "base64": "Q29weXJpZ2h0IDIwMjIgLSAyMDI1IFplZCBJbmR1c3RyaWVzLCBJbmMuCgoKICAgTGljZW5zZWQgdW5kZXIgdGhlIEFwYWNoZSBMaWNlbnNlLCBWZXJzaW9uIDIuMCAodGhlICJMaWNlbnNlIik7CiAgIHlvdSBtYXkgbm90IHVzZSB0aGlzIGZpbGUgZXhjZXB0IGluIGNvbXBsaWFuY2Ugd2l0aCB0aGUgTGljZW5zZS4KICAgWW91IG1heSBvYnRhaW4gYSBjb3B5IG9mIHRoZSBMaWNlbnNlIGF0CgoKICAgICAgIGh0dHA6Ly93d3cuYXBhY2hlLm9yZy9saWNlbnNlcy9MSUNFTlNFLTIuMAoKCiAgIFVubGVzcyByZXF1aXJlZCBieSBhcHBsaWNhYmxlIGxhdyBvciBhZ3JlZWQgdG8gaW4gd3JpdGluZywgc29mdHdhcmUKICAgZGlzdHJpYnV0ZWQgdW5kZXIgdGhlIExpY2Vuc2UgaXMgZGlzdHJpYnV0ZWQgb24gYW4gIkFTIElTIiBCQVNJUywKICAgV0lUSE9VVCBXQVJSQU5USUVTIE9SIENPTkRJVElPTlMgT0YgQU5ZIEtJTkQsIGVpdGhlciBleHByZXNzIG9yIGltcGxpZWQuCiAgIFNlZSB0aGUgTGljZW5zZSBmb3IgdGhlIHNwZWNpZmljIGxhbmd1YWdlIGdvdmVybmluZyBwZXJtaXNzaW9ucyBhbmQKICAgbGltaXRhdGlvbnMgdW5kZXIgdGhlIExpY2Vuc2UuCgoKCgpBcGFjaGUgTGljZW5zZQogICAgICAgICAgICAgICAgICAgICAgICAgICBWZXJzaW9uIDIuMCwgSmFudWFyeSAyMDA0CiAgICAgICAgICAgICAgICAgICAgICAgIGh0dHA6Ly93d3cuYXBhY2hlLm9yZy9saWNlbnNlcy8KCgogICBURVJNUyBBTkQgQ09ORElUSU9OUyBGT1IgVVNFLCBSRVBST0RVQ1RJT04sIEFORCBESVNUUklCVVRJT04KCgogICAxLiBEZWZpbml0aW9ucy4KCgogICAgICAiTGljZW5zZSIgc2hhbGwgbWVhbiB0aGUgdGVybXMgYW5kIGNvbmRpdGlvbnMgZm9yIHVzZSwgcmVwcm9kdWN0aW9uLAogICAgICBhbmQgZGlzdHJpYnV0aW9uIGFzIGRlZmluZWQgYnkgU2VjdGlvbnMgMSB0aHJvdWdoIDkgb2YgdGhpcyBkb2N1bWVudC4KCgogICAgICAiTGljZW5zb3IiIHNoYWxsIG1lYW4gdGhlIGNvcHlyaWdodCBvd25lciBvciBlbnRpdHkgYXV0aG9yaXplZCBieQogICAgICB0aGUgY29weXJpZ2h0IG93bmVyIHRoYXQgaXMgZ3JhbnRpbmcgdGhlIExpY2Vuc2UuCgoKICAgICAgIkxlZ2FsIEVudGl0eSIgc2hhbGwgbWVhbiB0aGUgdW5pb24gb2YgdGhlIGFjdGluZyBlbnRpdHkgYW5kIGFsbAogICAgICBvdGhlciBlbnRpdGllcyB0aGF0IGNvbnRyb2wsIGFyZSBjb250cm9sbGVkIGJ5LCBvciBhcmUgdW5kZXIgY29tbW9uCiAgICAgIGNvbnRyb2wgd2l0aCB0aGF0IGVudGl0eS4gRm9yIHRoZSBwdXJwb3NlcyBvZiB0aGlzIGRlZmluaXRpb24sCiAgICAgICJjb250cm9sIiBtZWFucyAoaSkgdGhlIHBvd2VyLCBkaXJlY3Qgb3IgaW5kaXJlY3QsIHRvIGNhdXNlIHRoZQogICAgICBkaXJlY3Rpb24gb3IgbWFuYWdlbWVudCBvZiBzdWNoIGVudGl0eSwgd2hldGhlciBieSBjb250cmFjdCBvcgogICAgICBvdGhlcndpc2UsIG9yIChpaSkgb3duZXJzaGlwIG9mIGZpZnR5IHBlcmNlbnQgKDUwJSkgb3IgbW9yZSBvZiB0aGUKICAgICAgb3V0c3RhbmRpbmcgc2hhcmVzLCBvciAoaWlpKSBiZW5lZmljaWFsIG93bmVyc2hpcCBvZiBzdWNoIGVudGl0eS4KCgogICAgICAiWW91IiAob3IgIllvdXIiKSBzaGFsbCBtZWFuIGFuIGluZGl2aWR1YWwgb3IgTGVnYWwgRW50aXR5CiAgICAgIGV4ZXJjaXNpbmcgcGVybWlzc2lvbnMgZ3JhbnRlZCBieSB0aGlzIExpY2Vuc2UuCgoKICAgICAgIlNvdXJjZSIgZm9ybSBzaGFsbCBtZWFuIHRoZSBwcmVmZXJyZWQgZm9ybSBmb3IgbWFraW5nIG1vZGlmaWNhdGlvbnMsCiAgICAgIGluY2x1ZGluZyBidXQgbm90IGxpbWl0ZWQgdG8gc29mdHdhcmUgc291cmNlIGNvZGUsIGRvY3VtZW50YXRpb24KICAgICAgc291cmNlLCBhbmQgY29uZmlndXJhdGlvbiBmaWxlcy4KCgogICAgICAiT2JqZWN0IiBmb3JtIHNoYWxsIG1lYW4gYW55IGZvcm0gcmVzdWx0aW5nIGZyb20gbWVjaGFuaWNhbAogICAgICB0cmFuc2Zvcm1hdGlvbiBvciB0cmFuc2xhdGlvbiBvZiBhIFNvdXJjZSBmb3JtLCBpbmNsdWRpbmcgYnV0CiAgICAgIG5vdCBsaW1pdGVkIHRvIGNvbXBpbGVkIG9iamVjdCBjb2RlLCBnZW5lcmF0ZWQgZG9jdW1lbnRhdGlvbiwKICAgICAgYW5kIGNvbnZlcnNpb25zIHRvIG90aGVyIG1lZGlhIHR5cGVzLgoKCiAgICAgICJXb3JrIiBzaGFsbCBtZWFuIHRoZSB3b3JrIG9mIGF1dGhvcnNoaXAsIHdoZXRoZXIgaW4gU291cmNlIG9yCiAgICAgIE9iamVjdCBmb3JtLCBtYWRlIGF2YWlsYWJsZSB1bmRlciB0aGUgTGljZW5zZSwgYXMgaW5kaWNhdGVkIGJ5IGEKICAgICAgY29weXJpZ2h0IG5vdGljZSB0aGF0IGlzIGluY2x1ZGVkIGluIG9yIGF0dGFjaGVkIHRvIHRoZSB3b3JrCiAgICAgIChhbiBleGFtcGxlIGlzIHByb3ZpZGVkIGluIHRoZSBBcHBlbmRpeCBiZWxvdykuCgoKICAgICAgIkRlcml2YXRpdmUgV29ya3MiIHNoYWxsIG1lYW4gYW55IHdvcmssIHdoZXRoZXIgaW4gU291cmNlIG9yIE9iamVjdAogICAgICBmb3JtLCB0aGF0IGlzIGJhc2VkIG9uIChvciBkZXJpdmVkIGZyb20pIHRoZSBXb3JrIGFuZCBmb3Igd2hpY2ggdGhlCiAgICAgIGVkaXRvcmlhbCByZXZpc2lvbnMsIGFubm90YXRpb25zLCBlbGFib3JhdGlvbnMsIG9yIG90aGVyIG1vZGlmaWNhdGlvbnMKICAgICAgcmVwcmVzZW50LCBhcyBhIHdob2xlLCBhbiBvcmlnaW5hbCB3b3JrIG9mIGF1dGhvcnNoaXAuIEZvciB0aGUgcHVycG9zZXMKICAgICAgb2YgdGhpcyBMaWNlbnNlLCBEZXJpdmF0aXZlIFdvcmtzIHNoYWxsIG5vdCBpbmNsdWRlIHdvcmtzIHRoYXQgcmVtYWluCiAgICAgIHNlcGFyYWJsZSBmcm9tLCBvciBtZXJlbHkgbGluayAob3IgYmluZCBieSBuYW1lKSB0byB0aGUgaW50ZXJmYWNlcyBvZiwKICAgICAgdGhlIFdvcmsgYW5kIERlcml2YXRpdmUgV29ya3MgdGhlcmVvZi4KCgogICAgICAiQ29udHJpYnV0aW9uIiBzaGFsbCBtZWFuIGFueSB3b3JrIG9mIGF1dGhvcnNoaXAsIGluY2x1ZGluZwogICAgICB0aGUgb3JpZ2luYWwgdmVyc2lvbiBvZiB0aGUgV29yayBhbmQgYW55IG1vZGlmaWNhdGlvbnMgb3IgYWRkaXRpb25zCiAgICAgIHRvIHRoYXQgV29yayBvciBEZXJpdmF0aXZlIFdvcmtzIHRoZXJlb2YsIHRoYXQgaXMgaW50ZW50aW9uYWxseQogICAgICBzdWJtaXR0ZWQgdG8gTGljZW5zb3IgZm9yIGluY2x1c2lvbiBpbiB0aGUgV29yayBieSB0aGUgY29weXJpZ2h0IG93bmVyCiAgICAgIG9yIGJ5IGFuIGluZGl2aWR1YWwgb3IgTGVnYWwgRW50aXR5IGF1dGhvcml6ZWQgdG8gc3VibWl0IG9uIGJlaGFsZiBvZgogICAgICB0aGUgY29weXJpZ2h0IG93bmVyLiBGb3IgdGhlIHB1cnBvc2VzIG9mIHRoaXMgZGVmaW5pdGlvbiwgInN1Ym1pdHRlZCIKICAgICAgbWVhbnMgYW55IGZvcm0gb2YgZWxlY3Ryb25pYywgdmVyYmFsLCBvciB3cml0dGVuIGNvbW11bmljYXRpb24gc2VudAogICAgICB0byB0aGUgTGljZW5zb3Igb3IgaXRzIHJlcHJlc2VudGF0aXZlcywgaW5jbHVkaW5nIGJ1dCBub3QgbGltaXRlZCB0bwogICAgICBjb21tdW5pY2F0aW9uIG9uIGVsZWN0cm9uaWMgbWFpbGluZyBsaXN0cywgc291cmNlIGNvZGUgY29udHJvbCBzeXN0ZW1zLAogICAgICBhbmQgaXNzdWUgdHJhY2tpbmcgc3lzdGVtcyB0aGF0IGFyZSBtYW5hZ2VkIGJ5LCBvciBvbiBiZWhhbGYgb2YsIHRoZQogICAgICBMaWNlbnNvciBmb3IgdGhlIHB1cnBvc2Ugb2YgZGlzY3Vzc2luZyBhbmQgaW1wcm92aW5nIHRoZSBXb3JrLCBidXQKICAgICAgZXhjbHVkaW5nIGNvbW11bmljYXRpb24gdGhhdCBpcyBjb25zcGljdW91c2x5IG1hcmtlZCBvciBvdGhlcndpc2UKICAgICAgZGVzaWduYXRlZCBpbiB3cml0aW5nIGJ5IHRoZSBjb3B5cmlnaHQgb3duZXIgYXMgIk5vdCBhIENvbnRyaWJ1dGlvbi4iCgoKICAgICAgIkNvbnRyaWJ1dG9yIiBzaGFsbCBtZWFuIExpY2Vuc29yIGFuZCBhbnkgaW5kaXZpZHVhbCBvciBMZWdhbCBFbnRpdHkKICAgICAgb24gYmVoYWxmIG9mIHdob20gYSBDb250cmlidXRpb24gaGFzIGJlZW4gcmVjZWl2ZWQgYnkgTGljZW5zb3IgYW5kCiAgICAgIHN1YnNlcXVlbnRseSBpbmNvcnBvcmF0ZWQgd2l0aGluIHRoZSBXb3JrLgoKCiAgIDIuIEdyYW50IG9mIENvcHlyaWdodCBMaWNlbnNlLiBTdWJqZWN0IHRvIHRoZSB0ZXJtcyBhbmQgY29uZGl0aW9ucyBvZgogICAgICB0aGlzIExpY2Vuc2UsIGVhY2ggQ29udHJpYnV0b3IgaGVyZWJ5IGdyYW50cyB0byBZb3UgYSBwZXJwZXR1YWwsCiAgICAgIHdvcmxkd2lkZSwgbm9uLWV4Y2x1c2l2ZSwgbm8tY2hhcmdlLCByb3lhbHR5LWZyZWUsIGlycmV2b2NhYmxlCiAgICAgIGNvcHlyaWdodCBsaWNlbnNlIHRvIHJlcHJvZHVjZSwgcHJlcGFyZSBEZXJpdmF0aXZlIFdvcmtzIG9mLAogICAgICBwdWJsaWNseSBkaXNwbGF5LCBwdWJsaWNseSBwZXJmb3JtLCBzdWJsaWNlbnNlLCBhbmQgZGlzdHJpYnV0ZSB0aGUKICAgICAgV29yayBhbmQgc3VjaCBEZXJpdmF0aXZlIFdvcmtzIGluIFNvdXJjZSBvciBPYmplY3QgZm9ybS4KCgogICAzLiBHcmFudCBvZiBQYXRlbnQgTGljZW5zZS4gU3ViamVjdCB0byB0aGUgdGVybXMgYW5kIGNvbmRpdGlvbnMgb2YKICAgICAgdGhpcyBMaWNlbnNlLCBlYWNoIENvbnRyaWJ1dG9yIGhlcmVieSBncmFudHMgdG8gWW91IGEgcGVycGV0dWFsLAogICAgICB3b3JsZHdpZGUsIG5vbi1leGNsdXNpdmUsIG5vLWNoYXJnZSwgcm95YWx0eS1mcmVlLCBpcnJldm9jYWJsZQogICAgICAoZXhjZXB0IGFzIHN0YXRlZCBpbiB0aGlzIHNlY3Rpb24pIHBhdGVudCBsaWNlbnNlIHRvIG1ha2UsIGhhdmUgbWFkZSwKICAgICAgdXNlLCBvZmZlciB0byBzZWxsLCBzZWxsLCBpbXBvcnQsIGFuZCBvdGhlcndpc2UgdHJhbnNmZXIgdGhlIFdvcmssCiAgICAgIHdoZXJlIHN1Y2ggbGljZW5zZSBhcHBsaWVzIG9ubHkgdG8gdGhvc2UgcGF0ZW50IGNsYWltcyBsaWNlbnNhYmxlCiAgICAgIGJ5IHN1Y2ggQ29udHJpYnV0b3IgdGhhdCBhcmUgbmVjZXNzYXJpbHkgaW5mcmluZ2VkIGJ5IHRoZWlyCiAgICAgIENvbnRyaWJ1dGlvbihzKSBhbG9uZSBvciBieSBjb21iaW5hdGlvbiBvZiB0aGVpciBDb250cmlidXRpb24ocykKICAgICAgd2l0aCB0aGUgV29yayB0byB3aGljaCBzdWNoIENvbnRyaWJ1dGlvbihzKSB3YXMgc3VibWl0dGVkLiBJZiBZb3UKICAgICAgaW5zdGl0dXRlIHBhdGVudCBsaXRpZ2F0aW9uIGFnYWluc3QgYW55IGVudGl0eSAoaW5jbHVkaW5nIGEKICAgICAgY3Jvc3MtY2xhaW0gb3IgY291bnRlcmNsYWltIGluIGEgbGF3c3VpdCkgYWxsZWdpbmcgdGhhdCB0aGUgV29yawogICAgICBvciBhIENvbnRyaWJ1dGlvbiBpbmNvcnBvcmF0ZWQgd2l0aGluIHRoZSBXb3JrIGNvbnN0aXR1dGVzIGRpcmVjdAogICAgICBvciBjb250cmlidXRvcnkgcGF0ZW50IGluZnJpbmdlbWVudCwgdGhlbiBhbnkgcGF0ZW50IGxpY2Vuc2VzCiAgICAgIGdyYW50ZWQgdG8gWW91IHVuZGVyIHRoaXMgTGljZW5zZSBmb3IgdGhhdCBXb3JrIHNoYWxsIHRlcm1pbmF0ZQogICAgICBhcyBvZiB0aGUgZGF0ZSBzdWNoIGxpdGlnYXRpb24gaXMgZmlsZWQuCgoKICAgNC4gUmVkaXN0cmlidXRpb24uIFlvdSBtYXkgcmVwcm9kdWNlIGFuZCBkaXN0cmlidXRlIGNvcGllcyBvZiB0aGUKICAgICAgV29yayBvciBEZXJpdmF0aXZlIFdvcmtzIHRoZXJlb2YgaW4gYW55IG1lZGl1bSwgd2l0aCBvciB3aXRob3V0CiAgICAgIG1vZGlmaWNhdGlvbnMsIGFuZCBpbiBTb3VyY2Ugb3IgT2JqZWN0IGZvcm0sIHByb3ZpZGVkIHRoYXQgWW91CiAgICAgIG1lZXQgdGhlIGZvbGxvd2luZyBjb25kaXRpb25zOgoKCiAgICAgIChhKSBZb3UgbXVzdCBnaXZlIGFueSBvdGhlciByZWNpcGllbnRzIG9mIHRoZSBXb3JrIG9yCiAgICAgICAgICBEZXJpdmF0aXZlIFdvcmtzIGEgY29weSBvZiB0aGlzIExpY2Vuc2U7IGFuZAoKCiAgICAgIChiKSBZb3UgbXVzdCBjYXVzZSBhbnkgbW9kaWZpZWQgZmlsZXMgdG8gY2FycnkgcHJvbWluZW50IG5vdGljZXMKICAgICAgICAgIHN0YXRpbmcgdGhhdCBZb3UgY2hhbmdlZCB0aGUgZmlsZXM7IGFuZAoKCiAgICAgIChjKSBZb3UgbXVzdCByZXRhaW4sIGluIHRoZSBTb3VyY2UgZm9ybSBvZiBhbnkgRGVyaXZhdGl2ZSBXb3JrcwogICAgICAgICAgdGhhdCBZb3UgZGlzdHJpYnV0ZSwgYWxsIGNvcHlyaWdodCwgcGF0ZW50LCB0cmFkZW1hcmssIGFuZAogICAgICAgICAgYXR0cmlidXRpb24gbm90aWNlcyBmcm9tIHRoZSBTb3VyY2UgZm9ybSBvZiB0aGUgV29yaywKICAgICAgICAgIGV4Y2x1ZGluZyB0aG9zZSBub3RpY2VzIHRoYXQgZG8gbm90IHBlcnRhaW4gdG8gYW55IHBhcnQgb2YKICAgICAgICAgIHRoZSBEZXJpdmF0aXZlIFdvcmtzOyBhbmQKCgogICAgICAoZCkgSWYgdGhlIFdvcmsgaW5jbHVkZXMgYSAiTk9USUNFIiB0ZXh0IGZpbGUgYXMgcGFydCBvZiBpdHMKICAgICAgICAgIGRpc3RyaWJ1dGlvbiwgdGhlbiBhbnkgRGVyaXZhdGl2ZSBXb3JrcyB0aGF0IFlvdSBkaXN0cmlidXRlIG11c3QKICAgICAgICAgIGluY2x1ZGUgYSByZWFkYWJsZSBjb3B5IG9mIHRoZSBhdHRyaWJ1dGlvbiBub3RpY2VzIGNvbnRhaW5lZAogICAgICAgICAgd2l0aGluIHN1Y2ggTk9USUNFIGZpbGUsIGV4Y2x1ZGluZyB0aG9zZSBub3RpY2VzIHRoYXQgZG8gbm90CiAgICAgICAgICBwZXJ0YWluIHRvIGFueSBwYXJ0IG9mIHRoZSBEZXJpdmF0aXZlIFdvcmtzLCBpbiBhdCBsZWFzdCBvbmUKICAgICAgICAgIG9mIHRoZSBmb2xsb3dpbmcgcGxhY2VzOiB3aXRoaW4gYSBOT1RJQ0UgdGV4dCBmaWxlIGRpc3RyaWJ1dGVkCiAgICAgICAgICBhcyBwYXJ0IG9mIHRoZSBEZXJpdmF0aXZlIFdvcmtzOyB3aXRoaW4gdGhlIFNvdXJjZSBmb3JtIG9yCiAgICAgICAgICBkb2N1bWVudGF0aW9uLCBpZiBwcm92aWRlZCBhbG9uZyB3aXRoIHRoZSBEZXJpdmF0aXZlIFdvcmtzOyBvciwKICAgICAgICAgIHdpdGhpbiBhIGRpc3BsYXkgZ2VuZXJhdGVkIGJ5IHRoZSBEZXJpdmF0aXZlIFdvcmtzLCBpZiBhbmQKICAgICAgICAgIHdoZXJldmVyIHN1Y2ggdGhpcmQtcGFydHkgbm90aWNlcyBub3JtYWxseSBhcHBlYXIuIFRoZSBjb250ZW50cwogICAgICAgICAgb2YgdGhlIE5PVElDRSBmaWxlIGFyZSBmb3IgaW5mb3JtYXRpb25hbCBwdXJwb3NlcyBvbmx5IGFuZAogICAgICAgICAgZG8gbm90IG1vZGlmeSB0aGUgTGljZW5zZS4gWW91IG1heSBhZGQgWW91ciBvd24gYXR0cmlidXRpb24KICAgICAgICAgIG5vdGljZXMgd2l0aGluIERlcml2YXRpdmUgV29ya3MgdGhhdCBZb3UgZGlzdHJpYnV0ZSwgYWxvbmdzaWRlCiAgICAgICAgICBvciBhcyBhbiBhZGRlbmR1bSB0byB0aGUgTk9USUNFIHRleHQgZnJvbSB0aGUgV29yaywgcHJvdmlkZWQKICAgICAgICAgIHRoYXQgc3VjaCBhZGRpdGlvbmFsIGF0dHJpYnV0aW9uIG5vdGljZXMgY2Fubm90IGJlIGNvbnN0cnVlZAogICAgICAgICAgYXMgbW9kaWZ5aW5nIHRoZSBMaWNlbnNlLgoKCiAgICAgIFlvdSBtYXkgYWRkIFlvdXIgb3duIGNvcHlyaWdodCBzdGF0ZW1lbnQgdG8gWW91ciBtb2RpZmljYXRpb25zIGFuZAogICAgICBtYXkgcHJvdmlkZSBhZGRpdGlvbmFsIG9yIGRpZmZlcmVudCBsaWNlbnNlIHRlcm1zIGFuZCBjb25kaXRpb25zCiAgICAgIGZvciB1c2UsIHJlcHJvZHVjdGlvbiwgb3IgZGlzdHJpYnV0aW9uIG9mIFlvdXIgbW9kaWZpY2F0aW9ucywgb3IKICAgICAgZm9yIGFueSBzdWNoIERlcml2YXRpdmUgV29ya3MgYXMgYSB3aG9sZSwgcHJvdmlkZWQgWW91ciB1c2UsCiAgICAgIHJlcHJvZHVjdGlvbiwgYW5kIGRpc3RyaWJ1dGlvbiBvZiB0aGUgV29yayBvdGhlcndpc2UgY29tcGxpZXMgd2l0aAogICAgICB0aGUgY29uZGl0aW9ucyBzdGF0ZWQgaW4gdGhpcyBMaWNlbnNlLgoKCiAgIDUuIFN1Ym1pc3Npb24gb2YgQ29udHJpYnV0aW9ucy4gVW5sZXNzIFlvdSBleHBsaWNpdGx5IHN0YXRlIG90aGVyd2lzZSwKICAgICAgYW55IENvbnRyaWJ1dGlvbiBpbnRlbnRpb25hbGx5IHN1Ym1pdHRlZCBmb3IgaW5jbHVzaW9uIGluIHRoZSBXb3JrCiAgICAgIGJ5IFlvdSB0byB0aGUgTGljZW5zb3Igc2hhbGwgYmUgdW5kZXIgdGhlIHRlcm1zIGFuZCBjb25kaXRpb25zIG9mCiAgICAgIHRoaXMgTGljZW5zZSwgd2l0aG91dCBhbnkgYWRkaXRpb25hbCB0ZXJtcyBvciBjb25kaXRpb25zLgogICAgICBOb3R3aXRoc3RhbmRpbmcgdGhlIGFib3ZlLCBub3RoaW5nIGhlcmVpbiBzaGFsbCBzdXBlcnNlZGUgb3IgbW9kaWZ5CiAgICAgIHRoZSB0ZXJtcyBvZiBhbnkgc2VwYXJhdGUgbGljZW5zZSBhZ3JlZW1lbnQgeW91IG1heSBoYXZlIGV4ZWN1dGVkCiAgICAgIHdpdGggTGljZW5zb3IgcmVnYXJkaW5nIHN1Y2ggQ29udHJpYnV0aW9ucy4KCgogICA2LiBUcmFkZW1hcmtzLiBUaGlzIExpY2Vuc2UgZG9lcyBub3QgZ3JhbnQgcGVybWlzc2lvbiB0byB1c2UgdGhlIHRyYWRlCiAgICAgIG5hbWVzLCB0cmFkZW1hcmtzLCBzZXJ2aWNlIG1hcmtzLCBvciBwcm9kdWN0IG5hbWVzIG9mIHRoZSBMaWNlbnNvciwKICAgICAgZXhjZXB0IGFzIHJlcXVpcmVkIGZvciByZWFzb25hYmxlIGFuZCBjdXN0b21hcnkgdXNlIGluIGRlc2NyaWJpbmcgdGhlCiAgICAgIG9yaWdpbiBvZiB0aGUgV29yayBhbmQgcmVwcm9kdWNpbmcgdGhlIGNvbnRlbnQgb2YgdGhlIE5PVElDRSBmaWxlLgoKCiAgIDcuIERpc2NsYWltZXIgb2YgV2FycmFudHkuIFVubGVzcyByZXF1aXJlZCBieSBhcHBsaWNhYmxlIGxhdyBvcgogICAgICBhZ3JlZWQgdG8gaW4gd3JpdGluZywgTGljZW5zb3IgcHJvdmlkZXMgdGhlIFdvcmsgKGFuZCBlYWNoCiAgICAgIENvbnRyaWJ1dG9yIHByb3ZpZGVzIGl0cyBDb250cmlidXRpb25zKSBvbiBhbiAiQVMgSVMiIEJBU0lTLAogICAgICBXSVRIT1VUIFdBUlJBTlRJRVMgT1IgQ09ORElUSU9OUyBPRiBBTlkgS0lORCwgZWl0aGVyIGV4cHJlc3Mgb3IKICAgICAgaW1wbGllZCwgaW5jbHVkaW5nLCB3aXRob3V0IGxpbWl0YXRpb24sIGFueSB3YXJyYW50aWVzIG9yIGNvbmRpdGlvbnMKICAgICAgb2YgVElUTEUsIE5PTi1JTkZSSU5HRU1FTlQsIE1FUkNIQU5UQUJJTElUWSwgb3IgRklUTkVTUyBGT1IgQQogICAgICBQQVJUSUNVTEFSIFBVUlBPU0UuIFlvdSBhcmUgc29sZWx5IHJlc3BvbnNpYmxlIGZvciBkZXRlcm1pbmluZyB0aGUKICAgICAgYXBwcm9wcmlhdGVuZXNzIG9mIHVzaW5nIG9yIHJlZGlzdHJpYnV0aW5nIHRoZSBXb3JrIGFuZCBhc3N1bWUgYW55CiAgICAgIHJpc2tzIGFzc29jaWF0ZWQgd2l0aCBZb3VyIGV4ZXJjaXNlIG9mIHBlcm1pc3Npb25zIHVuZGVyIHRoaXMgTGljZW5zZS4KCgogICA4LiBMaW1pdGF0aW9uIG9mIExpYWJpbGl0eS4gSW4gbm8gZXZlbnQgYW5kIHVuZGVyIG5vIGxlZ2FsIHRoZW9yeSwKICAgICAgd2hldGhlciBpbiB0b3J0IChpbmNsdWRpbmcgbmVnbGlnZW5jZSksIGNvbnRyYWN0LCBvciBvdGhlcndpc2UsCiAgICAgIHVubGVzcyByZXF1aXJlZCBieSBhcHBsaWNhYmxlIGxhdyAoc3VjaCBhcyBkZWxpYmVyYXRlIGFuZCBncm9zc2x5CiAgICAgIG5lZ2xpZ2VudCBhY3RzKSBvciBhZ3JlZWQgdG8gaW4gd3JpdGluZywgc2hhbGwgYW55IENvbnRyaWJ1dG9yIGJlCiAgICAgIGxpYWJsZSB0byBZb3UgZm9yIGRhbWFnZXMsIGluY2x1ZGluZyBhbnkgZGlyZWN0LCBpbmRpcmVjdCwgc3BlY2lhbCwKICAgICAgaW5jaWRlbnRhbCwgb3IgY29uc2VxdWVudGlhbCBkYW1hZ2VzIG9mIGFueSBjaGFyYWN0ZXIgYXJpc2luZyBhcyBhCiAgICAgIHJlc3VsdCBvZiB0aGlzIExpY2Vuc2Ugb3Igb3V0IG9mIHRoZSB1c2Ugb3IgaW5hYmlsaXR5IHRvIHVzZSB0aGUKICAgICAgV29yayAoaW5jbHVkaW5nIGJ1dCBub3QgbGltaXRlZCB0byBkYW1hZ2VzIGZvciBsb3NzIG9mIGdvb2R3aWxsLAogICAgICB3b3JrIHN0b3BwYWdlLCBjb21wdXRlciBmYWlsdXJlIG9yIG1hbGZ1bmN0aW9uLCBvciBhbnkgYW5kIGFsbAogICAgICBvdGhlciBjb21tZXJjaWFsIGRhbWFnZXMgb3IgbG9zc2VzKSwgZXZlbiBpZiBzdWNoIENvbnRyaWJ1dG9yCiAgICAgIGhhcyBiZWVuIGFkdmlzZWQgb2YgdGhlIHBvc3NpYmlsaXR5IG9mIHN1Y2ggZGFtYWdlcy4KCgogICA5LiBBY2NlcHRpbmcgV2FycmFudHkgb3IgQWRkaXRpb25hbCBMaWFiaWxpdHkuIFdoaWxlIHJlZGlzdHJpYnV0aW5nCiAgICAgIHRoZSBXb3JrIG9yIERlcml2YXRpdmUgV29ya3MgdGhlcmVvZiwgWW91IG1heSBjaG9vc2UgdG8gb2ZmZXIsCiAgICAgIGFuZCBjaGFyZ2UgYSBmZWUgZm9yLCBhY2NlcHRhbmNlIG9mIHN1cHBvcnQsIHdhcnJhbnR5LCBpbmRlbW5pdHksCiAgICAgIG9yIG90aGVyIGxpYWJpbGl0eSBvYmxpZ2F0aW9ucyBhbmQvb3IgcmlnaHRzIGNvbnNpc3RlbnQgd2l0aCB0aGlzCiAgICAgIExpY2Vuc2UuIEhvd2V2ZXIsIGluIGFjY2VwdGluZyBzdWNoIG9ibGlnYXRpb25zLCBZb3UgbWF5IGFjdCBvbmx5CiAgICAgIG9uIFlvdXIgb3duIGJlaGFsZiBhbmQgb24gWW91ciBzb2xlIHJlc3BvbnNpYmlsaXR5LCBub3Qgb24gYmVoYWxmCiAgICAgIG9mIGFueSBvdGhlciBDb250cmlidXRvciwgYW5kIG9ubHkgaWYgWW91IGFncmVlIHRvIGluZGVtbmlmeSwKICAgICAgZGVmZW5kLCBhbmQgaG9sZCBlYWNoIENvbnRyaWJ1dG9yIGhhcm1sZXNzIGZvciBhbnkgbGlhYmlsaXR5CiAgICAgIGluY3VycmVkIGJ5LCBvciBjbGFpbXMgYXNzZXJ0ZWQgYWdhaW5zdCwgc3VjaCBDb250cmlidXRvciBieSByZWFzb24KICAgICAgb2YgeW91ciBhY2NlcHRpbmcgYW55IHN1Y2ggd2FycmFudHkgb3IgYWRkaXRpb25hbCBsaWFiaWxpdHkuCgoKICAgRU5EIE9GIFRFUk1TIEFORCBDT05ESVRJT05TCg=="
@@ -29008,6 +29157,17 @@
           "kind": "published_crate",
           "url": "https://static.crates.io/crates/gpui-base/gpui-base-0.9.0.crate#src/text/format/html5minify/mod.rs",
           "archive_sha256": "cff6377e30f0c857681662e7edc7286bf30f5606033390401b0706d7bd930833",
+          "path": "src/text/format/html5minify/mod.rs",
+          "lines": [
+            1,
+            4
+          ],
+          "file_sha256": "139ae3bdc3c5a1d35f2c7439183b1f2aafc5514ced0e1a2f89917098cdc2d714"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-base/gpui-base-0.9.1.crate#src/text/format/html5minify/mod.rs",
+          "archive_sha256": "f3e9ae5237737cfd110d0ff513fcd9c20f97d98ebabd0a73164068177f0aca4f",
           "path": "src/text/format/html5minify/mod.rs",
           "lines": [
             1,
@@ -30529,6 +30689,17 @@
           "kind": "published_crate",
           "url": "https://static.crates.io/crates/gpui-component/gpui-component-0.9.0.crate#src/theme/color.rs",
           "archive_sha256": "45bbfdba0efa392190f2fd446ec311325302eb047d5ce45dc1bcf189cb18f5eb",
+          "path": "src/theme/color.rs",
+          "lines": [
+            207,
+            208
+          ],
+          "file_sha256": "d3c81fb0fdca3fce797c312addc5afd9767d5985dc56bbf73afecdd0019c4e01"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-component/gpui-component-0.9.1.crate#src/theme/color.rs",
+          "archive_sha256": "e155c4914bd809d966660610d596f7b57c5cd38979ca2c132215057a91f23f03",
           "path": "src/theme/color.rs",
           "lines": [
             207,
@@ -32844,6 +33015,12 @@
           "url": "https://static.crates.io/crates/gpui-kit-assets/gpui-kit-assets-0.9.0.crate#LICENSE-LUCIDE",
           "archive_sha256": "956a9864880e1f230e274a74cea8006e5018b8af383ad7bbd30b6b18254a97a9",
           "path": "LICENSE-LUCIDE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-kit-assets/gpui-kit-assets-0.9.1.crate#LICENSE-LUCIDE",
+          "archive_sha256": "cb5abe0bbd8f9226170c8726e529f6574519e297e9ed1bde86d5fd4d3536079a",
+          "path": "LICENSE-LUCIDE"
         }
       ],
       "base64": "SVNDIExpY2Vuc2UKCkNvcHlyaWdodCAoYykgMjAyNiBMdWNpZGUgSWNvbnMgYW5kIENvbnRyaWJ1dG9ycwoKUGVybWlzc2lvbiB0byB1c2UsIGNvcHksIG1vZGlmeSwgYW5kL29yIGRpc3RyaWJ1dGUgdGhpcyBzb2Z0d2FyZSBmb3IgYW55CnB1cnBvc2Ugd2l0aCBvciB3aXRob3V0IGZlZSBpcyBoZXJlYnkgZ3JhbnRlZCwgcHJvdmlkZWQgdGhhdCB0aGUgYWJvdmUKY29weXJpZ2h0IG5vdGljZSBhbmQgdGhpcyBwZXJtaXNzaW9uIG5vdGljZSBhcHBlYXIgaW4gYWxsIGNvcGllcy4KClRIRSBTT0ZUV0FSRSBJUyBQUk9WSURFRCAiQVMgSVMiIEFORCBUSEUgQVVUSE9SIERJU0NMQUlNUyBBTEwgV0FSUkFOVElFUwpXSVRIIFJFR0FSRCBUTyBUSElTIFNPRlRXQVJFIElOQ0xVRElORyBBTEwgSU1QTElFRCBXQVJSQU5USUVTIE9GCk1FUkNIQU5UQUJJTElUWSBBTkQgRklUTkVTUy4gSU4gTk8gRVZFTlQgU0hBTEwgVEhFIEFVVEhPUiBCRSBMSUFCTEUgRk9SCkFOWSBTUEVDSUFMLCBESVJFQ1QsIElORElSRUNULCBPUiBDT05TRVFVRU5USUFMIERBTUFHRVMgT1IgQU5ZIERBTUFHRVMKV0hBVFNPRVZFUiBSRVNVTFRJTkcgRlJPTSBMT1NTIE9GIFVTRSwgREFUQSBPUiBQUk9GSVRTLCBXSEVUSEVSIElOIEFOCkFDVElPTiBPRiBDT05UUkFDVCwgTkVHTElHRU5DRSBPUiBPVEhFUiBUT1JUSU9VUyBBQ1RJT04sIEFSSVNJTkcgT1VUIE9GCk9SIElOIENPTk5FQ1RJT04gV0lUSCBUSEUgVVNFIE9SIFBFUkZPUk1BTkNFIE9GIFRISVMgU09GVFdBUkUuCgotLS0KClRoZSBmb2xsb3dpbmcgTHVjaWRlIGljb25zIGFyZSBkZXJpdmVkIGZyb20gdGhlIEZlYXRoZXIgcHJvamVjdDoKCmFpcnBsYXksIGFsZXJ0LWNpcmNsZSwgYWxlcnQtb2N0YWdvbiwgYWxlcnQtdHJpYW5nbGUsIGFwZXJ0dXJlLCBhcnJvdy1kb3duLWNpcmNsZSwgYXJyb3ctZG93bi1sZWZ0LCBhcnJvdy1kb3duLXJpZ2h0LCBhcnJvdy1kb3duLCBhcnJvdy1sZWZ0LWNpcmNsZSwgYXJyb3ctbGVmdCwgYXJyb3ctcmlnaHQtY2lyY2xlLCBhcnJvdy1yaWdodCwgYXJyb3ctdXAtY2lyY2xlLCBhcnJvdy11cC1sZWZ0LCBhcnJvdy11cC1yaWdodCwgYXJyb3ctdXAsIGF0LXNpZ24sIGNhbGVuZGFyLCBjYXN0LCBjaGVjaywgY2hldnJvbi1kb3duLCBjaGV2cm9uLWxlZnQsIGNoZXZyb24tcmlnaHQsIGNoZXZyb24tdXAsIGNoZXZyb25zLWRvd24sIGNoZXZyb25zLWxlZnQsIGNoZXZyb25zLXJpZ2h0LCBjaGV2cm9ucy11cCwgY2lyY2xlLCBjbGlwYm9hcmQsIGNsb2NrLCBjb2RlLCBjb2x1bW5zLCBjb21tYW5kLCBjb21wYXNzLCBjb3JuZXItZG93bi1sZWZ0LCBjb3JuZXItZG93bi1yaWdodCwgY29ybmVyLWxlZnQtZG93biwgY29ybmVyLWxlZnQtdXAsIGNvcm5lci1yaWdodC1kb3duLCBjb3JuZXItcmlnaHQtdXAsIGNvcm5lci11cC1sZWZ0LCBjb3JuZXItdXAtcmlnaHQsIGNyb3NzaGFpciwgZGF0YWJhc2UsIGRpdmlkZS1jaXJjbGUsIGRpdmlkZS1zcXVhcmUsIGRvbGxhci1zaWduLCBkb3dubG9hZCwgZXh0ZXJuYWwtbGluaywgZmVhdGhlciwgZnJvd24sIGhhc2gsIGhlYWRwaG9uZXMsIGhlbHAtY2lyY2xlLCBpbmZvLCBpdGFsaWMsIGtleSwgbGF5b3V0LCBsaWZlLWJ1b3ksIGxpbmstMiwgbGluaywgbG9hZGVyLCBsb2NrLCBsb2ctaW4sIGxvZy1vdXQsIG1heGltaXplLCBtZWgsIG1pbmltaXplLCBtaW5pbWl6ZS0yLCBtaW51cy1jaXJjbGUsIG1pbnVzLXNxdWFyZSwgbWludXMsIG1vbml0b3IsIG1vb24sIG1vcmUtaG9yaXpvbnRhbCwgbW9yZS12ZXJ0aWNhbCwgbW92ZSwgbXVzaWMsIG5hdmlnYXRpb24tMiwgbmF2aWdhdGlvbiwgb2N0YWdvbiwgcGF1c2UtY2lyY2xlLCBwZXJjZW50LCBwbHVzLWNpcmNsZSwgcGx1cy1zcXVhcmUsIHBsdXMsIHBvd2VyLCByYWRpbywgcnNzLCBzZWFyY2gsIHNlcnZlciwgc2hhcmUsIHNob3BwaW5nLWJhZywgc2lkZWJhciwgc21hcnRwaG9uZSwgc21pbGUsIHNxdWFyZSwgdGFibGUtMiwgdGFibGV0LCB0YXJnZXQsIHRlcm1pbmFsLCB0cmFzaC0yLCB0cmFzaCwgdHJpYW5nbGUsIHR2LCB0eXBlLCB1cGxvYWQsIHgtY2lyY2xlLCB4LW9jdGFnb24sIHgtc3F1YXJlLCB4LCB6b29tLWluLCB6b29tLW91dAoKVGhlIE1JVCBMaWNlbnNlIChNSVQpIChmb3IgdGhlIGljb25zIGxpc3RlZCBhYm92ZSkKCkNvcHlyaWdodCAoYykgMjAxMy1wcmVzZW50IENvbGUgQmVtaXMKClBlcm1pc3Npb24gaXMgaGVyZWJ5IGdyYW50ZWQsIGZyZWUgb2YgY2hhcmdlLCB0byBhbnkgcGVyc29uIG9idGFpbmluZyBhIGNvcHkKb2YgdGhpcyBzb2Z0d2FyZSBhbmQgYXNzb2NpYXRlZCBkb2N1bWVudGF0aW9uIGZpbGVzICh0aGUgIlNvZnR3YXJlIiksIHRvIGRlYWwKaW4gdGhlIFNvZnR3YXJlIHdpdGhvdXQgcmVzdHJpY3Rpb24sIGluY2x1ZGluZyB3aXRob3V0IGxpbWl0YXRpb24gdGhlIHJpZ2h0cwp0byB1c2UsIGNvcHksIG1vZGlmeSwgbWVyZ2UsIHB1Ymxpc2gsIGRpc3RyaWJ1dGUsIHN1YmxpY2Vuc2UsIGFuZC9vciBzZWxsCmNvcGllcyBvZiB0aGUgU29mdHdhcmUsIGFuZCB0byBwZXJtaXQgcGVyc29ucyB0byB3aG9tIHRoZSBTb2Z0d2FyZSBpcwpmdXJuaXNoZWQgdG8gZG8gc28sIHN1YmplY3QgdG8gdGhlIGZvbGxvd2luZyBjb25kaXRpb25zOgoKVGhlIGFib3ZlIGNvcHlyaWdodCBub3RpY2UgYW5kIHRoaXMgcGVybWlzc2lvbiBub3RpY2Ugc2hhbGwgYmUgaW5jbHVkZWQgaW4gYWxsCmNvcGllcyBvciBzdWJzdGFudGlhbCBwb3J0aW9ucyBvZiB0aGUgU29mdHdhcmUuCgpUSEUgU09GVFdBUkUgSVMgUFJPVklERUQgIkFTIElTIiwgV0lUSE9VVCBXQVJSQU5UWSBPRiBBTlkgS0lORCwgRVhQUkVTUyBPUgpJTVBMSUVELCBJTkNMVURJTkcgQlVUIE5PVCBMSU1JVEVEIFRPIFRIRSBXQVJSQU5USUVTIE9GIE1FUkNIQU5UQUJJTElUWSwKRklUTkVTUyBGT1IgQSBQQVJUSUNVTEFSIFBVUlBPU0UgQU5EIE5PTklORlJJTkdFTUVOVC4gSU4gTk8gRVZFTlQgU0hBTEwgVEhFCkFVVEhPUlMgT1IgQ09QWVJJR0hUIEhPTERFUlMgQkUgTElBQkxFIEZPUiBBTlkgQ0xBSU0sIERBTUFHRVMgT1IgT1RIRVIKTElBQklMSVRZLCBXSEVUSEVSIElOIEFOIEFDVElPTiBPRiBDT05UUkFDVCwgVE9SVCBPUiBPVEhFUldJU0UsIEFSSVNJTkcgRlJPTSwKT1VUIE9GIE9SIElOIENPTk5FQ1RJT04gV0lUSCBUSEUgU09GVFdBUkUgT1IgVEhFIFVTRSBPUiBPVEhFUiBERUFMSU5HUyBJTiBUSEUKU09GVFdBUkUuCg=="
@@ -33725,6 +33902,12 @@
           "kind": "published_crate",
           "url": "https://static.crates.io/crates/gpui-kit-assets/gpui-kit-assets-0.9.0.crate#assets/icons/copyright.svg",
           "archive_sha256": "956a9864880e1f230e274a74cea8006e5018b8af383ad7bbd30b6b18254a97a9",
+          "path": "assets/icons/copyright.svg"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-kit-assets/gpui-kit-assets-0.9.1.crate#assets/icons/copyright.svg",
+          "archive_sha256": "cb5abe0bbd8f9226170c8726e529f6574519e297e9ed1bde86d5fd4d3536079a",
           "path": "assets/icons/copyright.svg"
         }
       ],
@@ -34612,6 +34795,31 @@
         {
           "kind": "pinned_upstream",
           "url": "https://raw.githubusercontent.com/longbridge/gpui-kit/7591a35eced761e3613c01e71ff04c10129dae1a/LICENSE-APACHE",
+          "path": "LICENSE-APACHE",
+          "git_blob_sha1": "1e9e81e7dc6d9c0a7490c9c5debd67697284ee25",
+          "git_blob_verified": true
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-base/gpui-base-0.9.1.crate#LICENSE-APACHE",
+          "archive_sha256": "f3e9ae5237737cfd110d0ff513fcd9c20f97d98ebabd0a73164068177f0aca4f",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-component-macros/gpui-component-macros-0.9.1.crate#LICENSE-APACHE",
+          "archive_sha256": "9676a5d12c59ce295b5c82cc18365ad8b96cb683682e2e74668a56fb92544300",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-component/gpui-component-0.9.1.crate#LICENSE-APACHE",
+          "archive_sha256": "e155c4914bd809d966660610d596f7b57c5cd38979ca2c132215057a91f23f03",
+          "path": "LICENSE-APACHE"
+        },
+        {
+          "kind": "pinned_upstream",
+          "url": "https://raw.githubusercontent.com/longbridge/gpui-kit/39ab849a93b5f15507b969164d49891db8d5b470/LICENSE-APACHE",
           "path": "LICENSE-APACHE",
           "git_blob_sha1": "1e9e81e7dc6d9c0a7490c9c5debd67697284ee25",
           "git_blob_verified": true
@@ -36585,6 +36793,28 @@
             76
           ],
           "file_sha256": "2f9bfdb5e7fdfdb2f72e4e150683677538b38dc4087390e916df765fab46a6e4"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-fast-windows/gpui-fast-windows-0.1.14.crate#src/destination_list.rs",
+          "archive_sha256": "a89bfdc3a922a29f83611fc7f01642533d35260a7f86aa9befb14f2b6dcca093",
+          "path": "src/destination_list.rs",
+          "lines": [
+            75,
+            76
+          ],
+          "file_sha256": "2f9bfdb5e7fdfdb2f72e4e150683677538b38dc4087390e916df765fab46a6e4"
+        },
+        {
+          "kind": "published_crate",
+          "url": "https://static.crates.io/crates/gpui-pre-windows/gpui-pre-windows-0.3.12.crate#src/destination_list.rs",
+          "archive_sha256": "7201762420222d5b5ce5bdf0056996199212a3349bfb2457a3a0238c688681f3",
+          "path": "src/destination_list.rs",
+          "lines": [
+            75,
+            76
+          ],
+          "file_sha256": "2f9bfdb5e7fdfdb2f72e4e150683677538b38dc4087390e916df765fab46a6e4"
         }
       ],
       "base64": "Ly8gQ29waWVkIGZyb206Ci8vIGh0dHBzOi8vZ2l0aHViLmNvbS9taWNyb3NvZnQvd2luZG93cy1ycy9ibG9iLzBmYzNjMmU1YTEzZDQzMTZkMjQyYmRlYjBhNTJhZjYxMWViYThiZDQvY3JhdGVzL2xpYnMvd2luZG93cy9zcmMvV2luZG93cy9XaW4zMi9TdG9yYWdlL0VuaGFuY2VkU3RvcmFnZS9tb2QucnMjTDE4ODEK"
@@ -36735,7 +36965,7 @@
     "self_cell 1.3.0 is handled under its declared Apache-2.0 alternative and unescaper 0.1.10 under its declared MIT alternative. Their full installed alternative texts remain reproduced as evidence. The mixed btleplug notice and conjunctive encoding_rs and Unicode notices are not reduced to a blanket MIT selection.",
     "aws-lc-rs 1.18.2 and aws-lc-sys 0.46.0 retain their conjunctive and per-component license terms. The checksum-verified published sys archive omits the nested s2n-bignum LICENSE/NOTICE and jitterentropy LICENSE/LICENSE.bsd referenced by its root notice; exact copies were recovered through the published aws-lc-rs commit 9df497501436596d4da77109217806b3af7f56cb and its aws-lc-sys/aws-lc gitlink fa9bc8d6f7cfb2cf849b247fb06bbbfc41ecc9d6, with Git blob hashes verified. Published jitterentropy source-header notices preserve additional author and year attribution. AWS-LC explicitly elects jitterentropy's BSD alternative, not GPL.",
     "webpki-root-certs 1.0.11 adds the full DER Mozilla/CCADB root certificate dataset to the application normal dependency graph. Its checksum-verified published LICENSE is reproduced in full under CDLA-Permissive-2.0; section 2.1 requires the agreement text with shared data. Existing package archives, license bytes, material notices and their source-availability instructions remain unchanged by this direct dependency admission.",
-    "Current GPUI Kit 0.9.0, Fast 0.1.13 and pre 0.3.11 package records retain exact locked archive checksums and original notice bytes. Kit code-license omissions are recovered from its published commit 7591a35eced761e3613c01e71ff04c10129dae1a. Fast/pre archives do not publish VCS commits, so those commit fields remain null rather than being inferred from release tags. Microsoft rendering, shadcn palette/theme and complete Lucide/Feather originals remain separately scoped.",
+    "Current GPUI Kit 0.9.1, Fast 0.1.14 and pre 0.3.12 package records retain exact locked archive checksums and original notice bytes. Kit code-license omissions are recovered from its published commit 39ab849a93b5f15507b969164d49891db8d5b470. Fast/pre archives do not publish VCS commits, so those commit fields remain null rather than being inferred from release tags. Microsoft rendering, shadcn palette/theme and complete Lucide/Feather originals remain separately scoped.",
     "The frozen metadata graph overincludes the optional benchmark stack: gpui-fast and gpui-pre declare bench_metrics and criterion optional; captured features contain test-support and weak bench_metrics?/test-support references, but no bench-support. Thus criterion, Plotters and their descendants are retained as conservative metadata candidates, not asserted active production/runtime dependencies. Plotters source-copy attributions and CC BY-SA 4.0 terms are preserved only for the identified candidate source/documentation portions; no application-wide ShareAlike claim or completed legal-clearance determination is made.",
     "The four added ICU4X locale-fallback/segmenter/data 2.4.0 archives retain the complete exact Unicode License V3 text, including ICU4C/ICU4J and 1995-2016 IBM-and-others attribution. The captured segmenter features enable only compiled_data, not auto/lstm; ndarray-derived LSTM code is outside that enabled feature scope. Likewise Kotlin highlighting is disabled. These paths are not admitted as new production material merely because their source files exist in a crate archive.",
     "New candidate source notices preserve named Clap and memoffset headers and original vec-map, Rand and Rust attribution/terms. Linux 6.9.2 UAPI-derived perf bindings retain GPLv2 WITH the complete Linux-syscall-note, not an assertion that normal userspace syscalls impose the GPL on the application. anes/perf root texts and Plotters actual root MIT text are recovered from their published VCS commits. TinyTemplate credits rustdoc without an original revision; no historical source commit is invented.",
