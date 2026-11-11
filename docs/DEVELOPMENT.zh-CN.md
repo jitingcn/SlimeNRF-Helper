@@ -260,9 +260,9 @@ Cargo 逐项跟踪生成器、冻结输入及仓库来源文件。生成文档�
 
 辅助脚本使用[共用原子发布器](../scripts/publish-file.ps1)。已有输出内容相同时保留，不同内容须在 `package.ps1` 明确传入 `-Force`。发布器在目标卷暂存，再移动或替换目标，不原地覆盖字节，因此保留输入及指向旧输出的其他硬链接。发布路径中的符号链接和 reparse point 会被拒绝。文件锁允许读取但拒绝写入，输入锁还拒绝删除。无法取得所需锁时，发布失败且不替换输出。这些检查不保证能抵御所有恶意文件系统竞态。
 
-仅官方 tag 的 Windows 打包任务通过 `package.ps1 -OfficialPrereleaseTag` 写入应用自更新资格。普通本地、分支、PR、debug 和自定义资源构建只允许检查版本。[构建标记校验](../crates/app/build_support/official_release.rs)核对包版本、目标、profile、仓库、tag 及 GitHub 事件；这是分发策略，不是密码学签名。普通开发命令不要设置此标记。
+仅官方 tag 的 Windows 打包任务通过 `package.ps1 -OfficialReleaseTag` 写入应用自更新资格。普通本地、分支、PR、debug 和自定义资源构建只允许检查版本。[构建标记校验](../crates/app/build_support/official_release.rs)核对包版本、目标、profile、仓库、tag 及 GitHub 事件；这是分发策略，不是密码学签名。普通开发命令不要设置此标记。
 
-更新器读取分页的 GitHub Releases API，而非 `/latest`，因为当前发布工作流生成预发布版本。Windows 产物必须保持上述精确的版本／架构／固件变体命名，并提供 GitHub 的 SHA-256 摘要；不会回退到历史 `-upx.exe` 名称或另一固件变体。仅检查版本的构建选择发布元数据，不要求存在 Windows 产物，并打开对应发布页。修改产物命名或发布频道时须同时审查更新器。用户流程和恢复限制见[应用更新](USER_GUIDE.zh-CN.md#app-updates)。
+更新器读取分页的 GitHub Releases API，而非 `/latest`，以比较符合条件的稳定版本和可选的预发布版本。Windows 产物必须保持上述精确的版本／架构／固件变体命名，并提供 GitHub 的 SHA-256 摘要；不会回退到历史 `-upx.exe` 名称或另一固件变体。仅检查版本的构建选择发布元数据，不要求存在 Windows 产物，并打开对应发布页。修改产物命名或发布频道时须同时审查更新器。用户流程和恢复限制见[应用更新](USER_GUIDE.zh-CN.md#app-updates)。
 
 <a id="linux"></a>
 ## Linux
@@ -346,19 +346,19 @@ SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架�
 
 ## CI 与发布门槛
 
-[Native no-firmware CI](../.github/workflows/ci.yml)在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括预发布准备测试），并检查公开边界和冻结的版权输入。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。Windows 还运行工具测试以覆盖原生 hook；两者打包前都运行维护的质量入口。
+[Native no-firmware CI](../.github/workflows/ci.yml)在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括发布准备测试），并检查公开边界和冻结的版权输入。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。Windows 还运行工具测试以覆盖原生 hook；两者打包前都运行维护的质量入口。
 
-源码和预发布作业使用相同的显式 Rust 缓存 key，沿用已有源码作业的前缀，不再分别追加作业 ID。编译器、环境和依赖哈希仍然启用。GitHub 的缓存作用域限制仍然生效：标签构建可以恢复默认分支的缓存，但相同 key 不会让其他标签的缓存全局可见。Windows 与 Linux 应用构建继续使用独立的缓存 key。
+源码和发布作业使用相同的显式 Rust 缓存 key，沿用已有源码作业的前缀，不再分别追加作业 ID。编译器、环境和依赖哈希仍然启用。GitHub 的缓存作用域限制仍然生效：标签构建可以恢复默认分支的缓存，但相同 key 不会让其他标签的缓存全局可见。Windows 与 Linux 应用构建继续使用独立的缓存 key。
 
 Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage。两个文件均不含固件，文件名包含 Cargo 版本，并作为 Actions artifact 保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。
 
-推送 `v<版本号>` 标签后，还会在三个前置作业全部成功后运行预发布作业。标签必须匹配主应用的 Cargo 版本和英文 `CHANGELOG.md` 中带日期的版本条目。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
+推送 `v<版本号>` 标签后，还会在三个前置作业全部成功后运行发布作业。标签必须匹配主应用的稳定 Cargo 版本和英文 `CHANGELOG.md` 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
 
-发布作业下载本次运行的准确产物，不重新编译。它检查远程标签对应的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，禁止覆盖附件。最后一步核对两个附件的完整名称和大小集合，再公开预发布版本，不将其标记为 latest。上传或验证失败可能留下草稿。重试前先人工检查该草稿。工作流不会覆盖或删除它。
+发布作业下载本次运行的准确产物，不重新编译。它检查远程标签对应的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，禁止覆盖附件。最后一步核对两个附件的完整名称和大小集合，再公开稳定版本；latest 由 GitHub 按 legacy 创建日期及 SemVer 策略选择。上传或验证失败可能留下草稿。重试前先人工检查该草稿。工作流不会覆盖或删除它。
 
-仓库权限保持只读，仅预发布作业拥有 `contents: write`。发布使用工作流令牌，不需要额外 secret。工作流不推送提交或标签。
+仓库权限保持只读，仅发布作业拥有 `contents: write`。发布使用工作流令牌，不需要额外 secret。工作流不推送提交或标签。
 
-### 发布预发布版本
+### 发布正式版本
 
 1. 更新 workspace 版本、锁文件、冻结版权输入的哈希和两份更改日志。使用 UTC 发布日期。
 2. 运行本次发布变更所需的质量与打包检查。
@@ -373,7 +373,7 @@ Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage
 	git push --atomic origin main v0.3.2
 ```
 
-等待标签对应的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 核对预发布说明和两个下载文件。不要移动已发布的标签或替换附件。
+等待标签对应的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 核对发布说明和两个下载文件。不要移动已发布的标签或替换附件。
 
 CI 成功只证明配置的检查与产物上传已完成。本地构建、WSLg 渲染、原生 GUI、USB 权限和真实设备更新是不同证据；目标发行版、macOS、签名、性能及物理硬件仍须独立验收。应用自有材料的 MIT OR Apache-2.0 许可不能替代[上文](#license-notices)所述第三方材料、源码提供、固件和产物的独立审查，不由打包成功解决。
 

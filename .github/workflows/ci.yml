@@ -118,10 +118,10 @@ jobs:
 
       - name: Package compressed Release executable
         env:
-          OFFICIAL_PRERELEASE_TAG: ${{ github.repository == 'jitingcn/SlimeNRF-Helper' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !github.event.deleted && github.ref_name || '' }}
+          OFFICIAL_RELEASE_TAG: ${{ github.repository == 'jitingcn/SlimeNRF-Helper' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !github.event.deleted && github.ref_name || '' }}
         run: |
-          if ($env:OFFICIAL_PRERELEASE_TAG) {
-            powershell -NoProfile -ExecutionPolicy Bypass -File ./package.ps1 -NoFirmware -OfficialPrereleaseTag $env:OFFICIAL_PRERELEASE_TAG
+          if ($env:OFFICIAL_RELEASE_TAG) {
+            powershell -NoProfile -ExecutionPolicy Bypass -File ./package.ps1 -NoFirmware -OfficialReleaseTag $env:OFFICIAL_RELEASE_TAG
           } else {
             powershell -NoProfile -ExecutionPolicy Bypass -File ./package.ps1 -NoFirmware
           }
@@ -235,8 +235,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  prerelease:
-    name: Publish tagged prerelease
+  release:
+    name: Publish tagged release
     needs: [source, windows, linux]
     if: >-
       github.event_name == 'push' &&
@@ -247,7 +247,7 @@ jobs:
     permissions:
       contents: write
     concurrency:
-      group: prerelease-${{ github.ref }}
+      group: release-${{ github.ref }}
       cancel-in-progress: false
     defaults:
       run:
@@ -271,7 +271,7 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: '. -> target'
-          # Match the source job instead of adding a separate prerelease job key.
+          # Match the source job instead of adding a separate release job key.
           shared-key: ubuntu-24.04-x64-tools-source
           cache-bin: false
 
@@ -280,11 +280,11 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
-          version="$(cargo run --quiet --locked -p slimenrf-tools -- prepare-prerelease \
+          version="$(cargo run --quiet --locked -p slimenrf-tools -- prepare-release \
             --tag "$RELEASE_TAG" \
             --repository "$GITHUB_REPOSITORY" \
             --commit "$GITHUB_SHA" \
-            --notes-output "$RUNNER_TEMP/prerelease-notes.md")"
+            --notes-output "$RUNNER_TEMP/release-notes.md")"
           printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
 
       # Named downloads use this run's artifact service, including v7 archive:false files.
@@ -293,13 +293,13 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: slimenrf-helper-${{ steps.release.outputs.version }}-windows-x64-no-firmware.exe
-          path: ${{ runner.temp }}/prerelease-assets
+          path: ${{ runner.temp }}/release-assets
 
       - name: Download exact Linux AppImage
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: slimenrf-helper-${{ steps.release.outputs.version }}-linux-x64-no-firmware.AppImage
-          path: ${{ runner.temp }}/prerelease-assets
+          path: ${{ runner.temp }}/release-assets
 
       - name: Validate release inputs and refuse existing releases
         env:
@@ -310,11 +310,11 @@ jobs:
           set -euo pipefail
           [[ "$RELEASE_TAG" == "v$VERSION" && "$GITHUB_REF" == "refs/tags/$RELEASE_TAG" ]]
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
-          notes="$RUNNER_TEMP/prerelease-notes.md"
+          notes="$RUNNER_TEMP/release-notes.md"
           [[ -f "$notes" && ! -L "$notes" && -s "$notes" ]]
           assets=(
-            "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware.exe"
-            "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-linux-x64-no-firmware.AppImage"
+            "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware.exe"
+            "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-linux-x64-no-firmware.AppImage"
           )
           for asset in "${assets[@]}"; do
             if [[ ! -f "$asset" || -L "$asset" || ! -s "$asset" ]]; then
@@ -337,25 +337,24 @@ jobs:
             exit 1
           fi
 
-      - name: Create draft prerelease and upload assets
+      - name: Create draft release and upload assets
         id: upload_release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           target_commitish: ${{ github.sha }}
           name: SlimeNRF Helper ${{ env.RELEASE_TAG }}
-          body_path: ${{ runner.temp }}/prerelease-notes.md
-          # Upstream otherwise publishes prerelease:true before uploading assets.
+          body_path: ${{ runner.temp }}/release-notes.md
           draft: true
-          prerelease: true
+          prerelease: false
           make_latest: 'false'
           overwrite_files: false
           fail_on_unmatched_files: true
           files: |
-            ${{ runner.temp }}/prerelease-assets/slimenrf-helper-${{ steps.release.outputs.version }}-windows-x64-no-firmware.exe
-            ${{ runner.temp }}/prerelease-assets/slimenrf-helper-${{ steps.release.outputs.version }}-linux-x64-no-firmware.AppImage
+            ${{ runner.temp }}/release-assets/slimenrf-helper-${{ steps.release.outputs.version }}-windows-x64-no-firmware.exe
+            ${{ runner.temp }}/release-assets/slimenrf-helper-${{ steps.release.outputs.version }}-linux-x64-no-firmware.AppImage
 
-      - name: Verify uploaded draft and publish the prerelease
+      - name: Verify uploaded draft and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -365,8 +364,8 @@ jobs:
           set -euo pipefail
           [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
           assets=(
-            "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware.exe"
-            "$RUNNER_TEMP/prerelease-assets/slimenrf-helper-${VERSION}-linux-x64-no-firmware.AppImage"
+            "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware.exe"
+            "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-linux-x64-no-firmware.AppImage"
           )
           expected_assets='[]'
           for asset in "${assets[@]}"; do
@@ -378,7 +377,7 @@ jobs:
           release="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID")"
           jq -e --arg tag "$RELEASE_TAG" --arg commit "$GITHUB_SHA" \
             --argjson expected "$expected_assets" '
-            .draft == true and .prerelease == true and
+            .draft == true and .prerelease == false and
             .tag_name == $tag and .target_commitish == $commit and
             ((.assets | map({name, size}) | sort_by(.name)) ==
               ($expected | sort_by(.name))) and
@@ -390,4 +389,4 @@ jobs:
             exit 1
           fi
           gh api --method PATCH "repos/$GH_REPO/releases/$RELEASE_ID" \
-            -F draft=false -f make_latest=false
+            -F draft=false -f make_latest=legacy

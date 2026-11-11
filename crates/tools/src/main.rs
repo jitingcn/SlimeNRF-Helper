@@ -1,9 +1,9 @@
 use std::{env, ffi::OsString, process::ExitCode};
 
-use slimenrf_tools::{notices, packaging, prerelease, public, reference_oracle};
+use slimenrf_tools::{notices, packaging, public, reference_oracle, release};
 
 const USAGE: &str = "Usage: slimenrf-tools <command> [arguments]\n\
-Commands: notices, check-public, prepare-prerelease, reference-oracle, package-artifact, appimage-check, flatpak-check";
+Commands: notices, check-public, prepare-release, reference-oracle, package-artifact, appimage-check, flatpak-check";
 
 fn main() -> ExitCode {
     let mut arguments = env::args_os().skip(1);
@@ -27,7 +27,7 @@ fn main() -> ExitCode {
             };
         }
         Some("notices") => notices::run(&args),
-        Some("prepare-prerelease") => prerelease::run(&args),
+        Some("prepare-release") => release::run(&args),
         Some("reference-oracle") => reference_oracle::run(&args),
         Some("package-artifact") => packaging::run(&args),
         Some("appimage-check") => packaging::check_appimage_tools(&args),

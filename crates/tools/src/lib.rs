@@ -7,11 +7,11 @@ pub mod notices;
 #[cfg(feature = "cli")]
 pub mod packaging;
 #[cfg(feature = "cli")]
-pub mod prerelease;
-#[cfg(feature = "cli")]
 pub mod public;
 #[cfg(feature = "cli")]
 pub mod reference_oracle;
+#[cfg(feature = "cli")]
+pub mod release;
 
 #[cfg(all(test, feature = "cli"))]
 mod hook_tests;

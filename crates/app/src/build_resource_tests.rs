@@ -314,7 +314,7 @@ fn official_release_marker_requires_the_tagged_packaging_context() {
 fn windows_packager_requires_an_explicit_release_tag() {
     for (tag, expected) in [
         (None, "<unset>|custom.yaml"),
-        (Some("v0.1.1"), "prerelease:v0.1.1|custom.yaml"),
+        (Some("v0.1.1"), "release:v0.1.1|custom.yaml"),
     ] {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
@@ -367,7 +367,7 @@ $global:LASTEXITCODE = 0
             .env("SLIMENRF_OFFICIAL_RELEASE", "prerelease:v9.9.9")
             .env("SLIMENRF_CONFIG_PATH", "custom.yaml");
         if let Some(tag) = tag {
-            command.args(["-OfficialPrereleaseTag", tag]);
+            command.args(["-OfficialReleaseTag", tag]);
         }
         let output = command.output().unwrap();
         assert!(output.status.success(), "tag={tag:?}: {output:?}");

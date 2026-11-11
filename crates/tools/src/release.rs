@@ -234,6 +234,13 @@ fn release_metadata(
     commit: &str,
 ) -> Result<ReleaseMetadata, String> {
     let version = application_version(root)?;
+    if version
+        .split_once('+')
+        .map_or(version.as_str(), |(core, _)| core)
+        .contains('-')
+    {
+        return Err("Stable releases cannot use a SemVer prerelease version".into());
+    }
     if tag != format!("v{version}") {
         return Err(format!("Tag must be exactly v{version}, not {tag:?}"));
     }
@@ -329,7 +336,7 @@ fn execute(args: &[OsString]) -> Result<String, String> {
     Ok(metadata.version)
 }
 
-/// Extract commit-pinned prerelease notes and print the application version.
+/// Extract commit-pinned release notes and print the application version.
 ///
 /// # Errors
 /// Returns an error if arguments, release metadata, or exclusive output creation fail.
@@ -338,12 +345,11 @@ pub fn run(args: &[OsString]) -> Result<(), String> {
         argument.as_os_str() == OsStr::new("--help") || argument.as_os_str() == OsStr::new("-h")
     }) {
         println!(
-            "Usage: slimenrf-tools prepare-prerelease --tag TAG --repository OWNER/REPO --commit SHA --notes-output ABSOLUTE_PATH"
+            "Usage: slimenrf-tools prepare-release --tag TAG --repository OWNER/REPO --commit SHA --notes-output ABSOLUTE_PATH"
         );
         return Ok(());
     }
-    let version =
-        execute(args).map_err(|error| format!("Prerelease preparation failed: {error}"))?;
+    let version = execute(args).map_err(|error| format!("Release preparation failed: {error}"))?;
     println!("{version}");
     Ok(())
 }
@@ -484,26 +490,39 @@ mod tests {
         let fixture = Fixture::new();
         fixture.put(
             "crates/app/Cargo.toml",
-            &APP.replace(
-                "version.workspace = true",
-                "version = \"2.0.0-rc.1+build.7\"",
-            ),
+            &APP.replace("version.workspace = true", "version = \"2.0.0+build-rc.7\""),
         );
         fixture.put(
             "CHANGELOG.md",
-            &fixture.changelog.replace("1.2.3", "2.0.0-rc.1+build.7"),
+            &fixture.changelog.replace("1.2.3", "2.0.0+build-rc.7"),
         );
         assert_eq!(
             fixture
-                .invoke(&[("--tag", Some(OsStr::new("v2.0.0-rc.1+build.7")))])
+                .invoke(&[("--tag", Some(OsStr::new("v2.0.0+build-rc.7")))])
                 .expect("prepare literal release"),
-            "2.0.0-rc.1+build.7"
+            "2.0.0+build-rc.7"
         );
         assert!(
             fs::read_to_string(&fixture.output)
                 .expect("read notes")
                 .contains(BODY)
         );
+    }
+
+    #[test]
+    fn prerelease_versions_cannot_be_published_as_stable() {
+        let fixture = Fixture::new();
+        for version in ["1.2.3-rc.1", "1.2.3-rc.1+build.7"] {
+            fixture.put(
+                "crates/app/Cargo.toml",
+                &APP.replace(
+                    "version.workspace = true",
+                    &format!("version = \"{version}\""),
+                ),
+            );
+            fixture.put("CHANGELOG.md", &fixture.changelog.replace("1.2.3", version));
+            fixture.refused(&[("--tag", Some(OsStr::new(&format!("v{version}"))))]);
+        }
     }
 
     #[test]

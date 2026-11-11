@@ -1,10 +1,10 @@
 param(
     [switch]$Force,
     [switch]$NoFirmware,
-    [string]$OfficialPrereleaseTag
+    [string]$OfficialReleaseTag
 )
 
-$hasOfficialPrereleaseTag = $PSBoundParameters.ContainsKey('OfficialPrereleaseTag')
+$hasOfficialReleaseTag = $PSBoundParameters.ContainsKey('OfficialReleaseTag')
 $originalErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = 'Stop'
 $originalEnvironment = [Environment]::GetEnvironmentVariables('Process')
@@ -14,11 +14,11 @@ try {
     $upxScript = Join-Path $PSScriptRoot 'scripts\package-upx.ps1'
     # A release marker is an explicit packaging input, never an inherited default.
     [Environment]::SetEnvironmentVariable('SLIMENRF_OFFICIAL_RELEASE', $null, 'Process')
-    if ($hasOfficialPrereleaseTag) {
-        if ([string]::IsNullOrWhiteSpace($OfficialPrereleaseTag)) {
-            throw 'OfficialPrereleaseTag must be a nonempty release tag.'
+    if ($hasOfficialReleaseTag) {
+        if ([string]::IsNullOrWhiteSpace($OfficialReleaseTag)) {
+            throw 'OfficialReleaseTag must be a nonempty release tag.'
         }
-        $env:SLIMENRF_OFFICIAL_RELEASE = "prerelease:$OfficialPrereleaseTag"
+        $env:SLIMENRF_OFFICIAL_RELEASE = "release:$OfficialReleaseTag"
     }
     Initialize-SlimeNRFBuildEnvironment
     Invoke-SlimeNRFCargo -Action build -NoFirmware:$NoFirmware

@@ -260,9 +260,9 @@ Compression can add startup overhead or antivirus false positives. Compression c
 
 The helper uses the [shared atomic publisher](../scripts/publish-file.ps1). An identical existing output is kept. Different content requires explicit `-Force` on `package.ps1`. The publisher stages on the destination volume, then moves or replaces the destination instead of overwriting its bytes. This preserves the input and other hardlinks to the old output. It refuses symlinks and reparse points in publication paths. File locks allow readers but deny writers, and input locks also deny deletion. If a required lock cannot be acquired, publication fails without replacing the output. These checks do not promise safety against every hostile filesystem race.
 
-Application self-update eligibility is stamped only by the tagged official Windows packaging job, which passes `-OfficialPrereleaseTag` to `package.ps1`. Ordinary local, branch, pull-request, debug, and custom-resource builds remain check-only. The [build marker validation](../crates/app/build_support/official_release.rs) checks the package version, target, profile, repository, tag, and GitHub event; it is a distribution policy, not a cryptographic signature. Do not set the marker in ordinary development commands.
+Application self-update eligibility is stamped only by the tagged official Windows packaging job, which passes `-OfficialReleaseTag` to `package.ps1`. Ordinary local, branch, pull-request, debug, and custom-resource builds remain check-only. The [build marker validation](../crates/app/build_support/official_release.rs) checks the package version, target, profile, repository, tag, and GitHub event; it is a distribution policy, not a cryptographic signature. Do not set the marker in ordinary development commands.
 
-The updater reads the paginated GitHub Releases API rather than `/latest`, because the current publication workflow produces prereleases. Published Windows assets must retain the exact version/architecture/firmware-variant naming above and expose GitHub's SHA-256 digest. It does not fall back to historical `-upx.exe` names or another firmware variant. Check-only builds select release metadata without requiring a Windows asset and open the corresponding release page. Changing release naming or channel publication requires corresponding updater review. See [Application updates](USER_GUIDE.md#app-updates) for the user flow and recovery limits.
+The updater reads the paginated GitHub Releases API rather than `/latest` so it can compare eligible stable and optional prerelease versions. Published Windows assets must retain the exact version/architecture/firmware-variant naming above and expose GitHub's SHA-256 digest. It does not fall back to historical `-upx.exe` names or another firmware variant. Check-only builds select release metadata without requiring a Windows asset and open the corresponding release page. Changing release naming or channel publication requires corresponding updater review. See [Application updates](USER_GUIDE.md#app-updates) for the user flow and recovery limits.
 
 <a id="linux"></a>
 ## Linux
@@ -346,19 +346,19 @@ The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatp
 
 ## CI and release acceptance
 
-[Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including prerelease preparation tests, and checks publication boundaries and frozen notice inputs. After it passes, the `windows-2022` and `ubuntu-22.04` x64 jobs run independently. Windows also runs the tools tests for native hook coverage; both run the maintained quality entry points before packaging.
+[Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including release preparation tests, and checks publication boundaries and frozen notice inputs. After it passes, the `windows-2022` and `ubuntu-22.04` x64 jobs run independently. Windows also runs the tools tests for native hook coverage; both run the maintained quality entry points before packaging.
 
-The source and prerelease jobs share an explicit Rust cache key, preserving the existing source-job prefix instead of adding separate job IDs. Compiler, environment, and dependency hashes remain enabled. GitHub's cache scope rules still apply; tag builds can restore the default branch's cache, but matching keys do not make caches from other tags globally accessible. Windows and Linux application builds retain separate cache keys.
+The source and release jobs share an explicit Rust cache key, preserving the existing source-job prefix instead of adding separate job IDs. Compiler, environment, and dependency hashes remain enabled. GitHub's cache scope rules still apply; tag builds can restore the default branch's cache, but matching keys do not make caches from other tags globally accessible. Windows and Linux application builds retain separate cache keys.
 
 Windows uploads one UPX-compressed executable under the normal filename. Linux uploads an AppImage. Both omit firmware, use the Cargo version in their filenames, and remain available as Actions artifacts for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets.
 
-A `v<version>` tag push also runs the prerelease job after all three prerequisite jobs succeed. The tag must match the application's Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md). Release notes use that entry and link to the Chinese changelog at the same commit.
+A `v<version>` tag push also runs the release job after all three prerequisite jobs succeed. The tag must match the application's stable Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md); SemVer prerelease versions are rejected. Release notes use that entry and link to the Chinese changelog at the same commit.
 
-The publisher downloads the exact artifacts from that run without rebuilding them. It checks the remote tag's commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files with overwrites disabled. The final step verifies the exact set of both uploaded names and sizes before publishing a prerelease that is not marked latest. A failed upload or verification can leave a draft. Review that draft manually before retrying. The workflow does not overwrite or delete it.
+The publisher downloads the exact artifacts from that run without rebuilding them. It checks the remote tag's commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files with overwrites disabled. The final step verifies the exact set of both uploaded names and sizes before publishing a stable release; GitHub selects latest using its legacy creation-date and SemVer policy. A failed upload or verification can leave a draft. Review that draft manually before retrying. The workflow does not overwrite or delete it.
 
-Repository permissions remain read-only except for `contents: write` on the prerelease job. Publication uses the workflow token and needs no additional secret. The workflow never pushes commits or tags.
+Repository permissions remain read-only except for `contents: write` on the release job. Publication uses the workflow token and needs no additional secret. The workflow never pushes commits or tags.
 
-### Publish a prerelease
+### Publish a release
 
 1. Update the workspace version, lockfile, frozen notice input hashes, and both changelogs. Use the UTC publication date.
 2. Run the quality and packaging checks for the release changes.
@@ -373,7 +373,7 @@ For version `0.3.2`, the final commands are:
 	git push --atomic origin main v0.3.2
 ```
 
-Wait for the tag's workflow to finish. Check the prerelease notes and both downloads on [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Do not move a published tag or replace its assets.
+Wait for the tag's workflow to finish. Check the release notes and both downloads on [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Do not move a published tag or replace its assets.
 
 Successful CI confirms only the configured checks and uploaded artifacts. Local builds, WSLg rendering, native GUI behavior, USB permissions, and real device updates are separate evidence. Target distributions, macOS, signing, performance, and physical hardware still require independent acceptance. The application-owned MIT OR Apache-2.0 license does not replace the separate third-party, source-availability, firmware, and artifact reviews described [above](#license-notices). Successful packaging does not resolve them.
 

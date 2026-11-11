@@ -9,9 +9,12 @@
 
 ## [未发布]
 
+## [0.4.6] - 2026-11-11
+
 ### 变更
 
 - GUI 框架升级至 GPUI Kit 0.9.1、GPUI Fast 0.1.14 与 gpui-pre 支持 crate 0.3.12，纳入上游保留视图渲染、文本输入与选择、滚动、无障碍及原生窗口修复。
+- 标签触发的 CI 构建现在发布稳定版 GitHub Release，不再发布预发布版本。
 
 ## [0.4.5] - 2026-11-03
 
@@ -164,7 +167,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.5...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.2...v0.4.3
