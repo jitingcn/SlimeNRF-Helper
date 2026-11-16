@@ -984,6 +984,7 @@ fn unknown_local_bootloader_review_requires_fresh_single_use_acknowledgment(
         ImageCategory::Bootloader,
         vec![volume.clone()],
         image.clone(),
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .expect("a compatible unknown local bootloader can enter explicit review");
     let initial_action = action.clone();
@@ -1077,4 +1078,388 @@ fn unknown_local_bootloader_review_requires_fresh_single_use_acknowledgment(
         }
     })
     .expect("exercise confirmation and revocation without starting device work");
+}
+
+struct FirmwareStartHarness {
+    workbench: gpui_kit::Entity<crate::application::Workbench>,
+}
+
+impl gpui_kit::Render for FirmwareStartHarness {
+    fn render(
+        &mut self,
+        _: &mut gpui_kit::Window,
+        cx: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
+        self.workbench
+            .update(cx, |this, cx| this.flash_review_controls(cx))
+    }
+}
+
+#[gpui_kit::test]
+fn matched_minimal_start_is_intentional_and_standard_still_opens_review(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use super::planning::{uf2_catalog, uf2_test_image, uf2_volume};
+    use crate::application::{FeaturePage, flash::ImageDestination};
+    use crate::features::firmware::{
+        board_catalog::{EsbOtaKind, FirmwareHint, FlashTarget},
+        executor::CompatibilityApproval,
+    };
+    use gpui_kit::{
+        AppContext as _, Bounds, InputEvent as _, MouseButton, MouseDownEvent, MouseMoveEvent,
+        MouseUpEvent, WindowBounds, WindowOptions, px, size, test::TestWindowExt as _,
+    };
+
+    let _ui_session = crate::test_support::UiTestSession::new(cx);
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let mut catalog = uf2_catalog();
+    catalog
+        .board_targets
+        .get_mut("known")
+        .unwrap()
+        .targets
+        .push(FlashTarget {
+            name: Some("known".into()),
+            esb_ota_kind: Some(EsbOtaKind::Tracker),
+            ..FlashTarget::default()
+        });
+    let (_directory, volume) = uf2_volume("known");
+    let mut image = uf2_test_image(false);
+    image.name = "known.uf2".into();
+    image.hints = vec![FirmwareHint {
+        board_target: "known".into(),
+        kind: Some(EsbOtaKind::Tracker),
+        variant: "Standard".into(),
+        mcuboot: false,
+        bootloader: false,
+    }]
+    .into();
+    let (window, harness) = cx.update(|cx| {
+        gpui_kit::open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    Default::default(),
+                    size(px(800.), px(600.)),
+                ))),
+                ..Default::default()
+            },
+            cx,
+            move |window, cx| {
+                let workbench = cx.new(|cx| {
+                    let mut this = crate::application::test_support::offline_workbench(
+                        window,
+                        cx,
+                        crate::sessions::SessionManager::new(),
+                        executor,
+                    );
+                    this.active_page = FeaturePage::Uf2;
+                    this.flash.catalog = Some(catalog);
+                    this.flash.selected_volumes.insert(volume.identity.clone());
+                    this.flash.apply_volumes(vec![volume]);
+                    this.flash
+                        .choose_image(&ImageDestination::Global, image)
+                        .unwrap();
+                    this
+                });
+                cx.new(|_| FirmwareStartHarness { workbench })
+            },
+        )
+        .expect("open synthetic firmware start controls")
+    });
+    let workbench = harness.read_with(cx, |harness, _| harness.workbench.clone());
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            window.find("flash-review").label(),
+            Some(crate::i18n::tr("firmware.action.review").as_str())
+        );
+        window.click("flash-review", cx);
+        workbench.update(cx, |this, cx| {
+            assert!(this.flash.review.is_some());
+            assert!(this.flash.pending.is_none());
+            this.flash.review = None;
+            this.preferences.minimal_firmware_confirmation = true;
+            this.flash.set_confirmation_policy(true);
+            Arc::make_mut(&mut this.flash.image.as_mut().unwrap().hints)[0].board_target =
+                "other".into();
+            cx.notify();
+        });
+        window.render_frame(cx);
+        assert_eq!(
+            window.find("flash-review").label(),
+            Some(crate::i18n::tr("firmware.action.review").as_str())
+        );
+        let position = window.find("flash-review").bounds().center();
+        let modifiers = window.modifiers();
+        window.dispatch_event(
+            MouseMoveEvent {
+                position,
+                pressed_button: None,
+                modifiers,
+            }
+            .to_platform_input(),
+            cx,
+        );
+        window.render_frame(cx);
+        workbench.update(cx, |this, _| {
+            // Model a completed image replacement after the Review frame, before
+            // input dispatch, without painting a new Start label.
+            Arc::make_mut(&mut this.flash.image.as_mut().unwrap().hints)[0].board_target =
+                "known".into();
+        });
+        window.dispatch_event(
+            MouseDownEvent {
+                button: MouseButton::Left,
+                position,
+                modifiers,
+                click_count: 1,
+                first_mouse: false,
+            }
+            .to_platform_input(),
+            cx,
+        );
+        window.dispatch_event(
+            MouseUpEvent {
+                button: MouseButton::Left,
+                position,
+                modifiers,
+                click_count: 1,
+            }
+            .to_platform_input(),
+            cx,
+        );
+        workbench.update(cx, |this, cx| {
+            assert!(
+                this.flash.review.is_some(),
+                "an old Review label must not start the replacement"
+            );
+            assert!(this.flash.pending.is_none());
+            this.flash.review = None;
+            cx.notify();
+        });
+        window.render_frame(cx);
+        assert_eq!(
+            window.find("flash-review").label(),
+            Some(crate::i18n::tr("firmware.action.start_update").as_str())
+        );
+        let position = window.find("flash-review").bounds().center();
+        window.dispatch_event(
+            MouseMoveEvent {
+                position,
+                pressed_button: None,
+                modifiers,
+            }
+            .to_platform_input(),
+            cx,
+        );
+        window.render_frame(cx);
+        workbench.update(cx, |this, _| {
+            this.flash.image.as_mut().unwrap().name = "replacement.uf2".into();
+        });
+        window.dispatch_event(
+            MouseDownEvent {
+                button: MouseButton::Left,
+                position,
+                modifiers,
+                click_count: 1,
+                first_mouse: false,
+            }
+            .to_platform_input(),
+            cx,
+        );
+        window.dispatch_event(
+            MouseUpEvent {
+                button: MouseButton::Left,
+                position,
+                modifiers,
+                click_count: 1,
+            }
+            .to_platform_input(),
+            cx,
+        );
+        workbench.update(cx, |this, cx| {
+            assert!(
+                this.flash.review.is_some(),
+                "an old Start label must not admit another image"
+            );
+            assert!(this.flash.pending.is_none());
+            this.flash.review = None;
+            cx.notify();
+        });
+        window.render_frame(cx);
+        window.click("flash-review", cx);
+        workbench.update(cx, |this, _| {
+            let Some(Action::Uf2(_, image, _)) = this.flash.pending.as_ref() else {
+                panic!("matched intentional start must reserve the frozen UF2 request");
+            };
+            assert_eq!(image.approval, Some(CompatibilityApproval::Matched));
+            assert!(
+                this.flash.job.is_none(),
+                "the fixture never pumps or writes hardware"
+            );
+            this.flash.pending = None;
+        });
+    })
+    .expect("exercise standard review and matched minimal start without device IO");
+}
+
+#[gpui_kit::test]
+fn mismatched_review_requires_one_shot_risk_consent_and_revokes_unaccepted_changes(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use super::planning::{uf2_catalog, uf2_test_image, uf2_volume};
+    use crate::application::flash::{
+        Compatibility, ConfirmationPolicy, ImageCategory, ImageDestination,
+        planning::{action_compatibility, plan_uf2_action},
+    };
+    use crate::features::firmware::{
+        board_catalog::{EsbOtaKind, FirmwareHint},
+        executor::{CompatibilityApproval, ExecutionRequest, UpdateRequest},
+    };
+    use gpui_kit::{
+        AppContext as _, Bounds, WindowBounds, WindowOptions, px, size, test::TestWindowExt as _,
+    };
+
+    let _ui_session = crate::test_support::UiTestSession::new(cx);
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let catalog = uf2_catalog();
+    let (_directory, volume) = uf2_volume("known");
+    let mut image = uf2_test_image(false);
+    image.name = "wrong.uf2".into();
+    image.hints = vec![FirmwareHint {
+        board_target: "other".into(),
+        kind: Some(EsbOtaKind::Tracker),
+        variant: "Standard".into(),
+        mcuboot: false,
+        bootloader: false,
+    }]
+    .into();
+    let action = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Application,
+        vec![volume.clone()],
+        image.clone(),
+        ConfirmationPolicy::Minimal,
+    )
+    .expect("a metadata conflict can be reviewed after hard validation");
+    assert_eq!(
+        action_compatibility(&action, Some(&catalog)),
+        Compatibility::Mismatch
+    );
+    let initial = action.clone();
+    let selected_image = image.clone();
+    let selected_volume = volume.clone();
+    let (window, harness) = cx.update(|cx| {
+        gpui_kit::open_window(
+            WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    Default::default(),
+                    size(px(1000.), px(900.)),
+                ))),
+                ..Default::default()
+            },
+            cx,
+            move |window, cx| {
+                let workbench = cx.new(|cx| {
+                    let mut this = crate::application::test_support::offline_workbench(
+                        window,
+                        cx,
+                        crate::sessions::SessionManager::new(),
+                        executor,
+                    );
+                    this.preferences.minimal_firmware_confirmation = true;
+                    this.flash.set_confirmation_policy(true);
+                    this.flash.catalog = Some(catalog);
+                    this.flash.apply_volumes(vec![selected_volume]);
+                    this.flash
+                        .choose_image(&ImageDestination::Global, selected_image)
+                        .unwrap();
+                    this.review_flash(initial);
+                    this
+                });
+                cx.new(|_| BootloaderReviewHarness { workbench })
+            },
+        )
+        .expect("open synthetic mismatch review")
+    });
+    let workbench = harness.read_with(cx, |harness, _| harness.workbench.clone());
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("firmware-compatibility-warning").is_some());
+        assert!(
+            window.try_find("firmware-ack").is_none(),
+            "do not assert a known mismatch matches"
+        );
+        assert_eq!(window.find("firmware-risk-ack").checked(), Some(false));
+        assert_eq!(window.find("firmware-confirm").disabled(), Some(true));
+        workbench.update(cx, |this, _| {
+            assert!(this.flash.take_confirmed_action().is_none())
+        });
+        window.click("firmware-risk-ack", cx);
+        assert_ne!(window.find("firmware-confirm").disabled(), Some(true));
+        workbench.update(cx, |this, cx| {
+            let admitted = this.flash.take_confirmed_action().unwrap();
+            let frozen = admitted.clone();
+            this.flash.pending = Some(admitted);
+            this.flash.set_confirmation_policy(false);
+            assert!(
+                this.flash.pending.is_some(),
+                "a setting change must not revoke an admitted request"
+            );
+            this.flash.pending = None;
+            let ExecutionRequest::Blocking(UpdateRequest::Uf2(volumes, file, _)) =
+                frozen.into_request()
+            else {
+                panic!("expected frozen UF2 execution request");
+            };
+            assert_eq!(volumes[0].identity, volume.identity);
+            assert!(Arc::ptr_eq(&file.bytes, &image.bytes));
+            assert_eq!(file.approval, Some(CompatibilityApproval::RiskAccepted));
+            this.preferences.minimal_firmware_confirmation = true;
+            this.flash.set_confirmation_policy(true);
+            cx.notify();
+        });
+        for change in ["image", "target", "back", "policy"] {
+            workbench.update(cx, |this, cx| {
+                this.flash.apply_volumes(vec![volume.clone()]);
+                this.review_flash(action.clone());
+                cx.notify();
+            });
+            window.render_frame(cx);
+            assert_eq!(window.find("firmware-risk-ack").checked(), Some(false));
+            window.click("firmware-risk-ack", cx);
+            if change == "back" {
+                window.click("firmware-dismiss", cx);
+            } else {
+                workbench.update(cx, |this, cx| {
+                    match change {
+                        "image" => {
+                            let mut replacement = image.clone();
+                            replacement.name = "replacement.uf2".into();
+                            this.flash
+                                .choose_image(&ImageDestination::Global, replacement)
+                                .unwrap();
+                        }
+                        "target" => this.flash.apply_volumes(Vec::new()),
+                        "policy" => this.flash.set_confirmation_policy(false),
+                        _ => unreachable!(),
+                    }
+                    cx.notify();
+                });
+            }
+            workbench.update(cx, |this, cx| {
+                assert!(
+                    this.flash.review.is_none(),
+                    "changing {change} revokes the draft"
+                );
+                assert!(this.flash.take_confirmed_action().is_none());
+                assert!(this.flash.job.is_none());
+                this.flash.set_confirmation_policy(true);
+                cx.notify();
+            });
+        }
+    })
+    .expect("exercise compatibility risk review without hardware IO");
 }

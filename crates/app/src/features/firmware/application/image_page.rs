@@ -190,8 +190,25 @@ impl Workbench {
                     .child(error),
             );
         }
+        if self.preferences.minimal_firmware_confirmation {
+            let compatibility = self.preview_compatibility(image);
+            if compatibility != Compatibility::Matched {
+                details = details.child(
+                    div()
+                        .id("firmware-image-compatibility-warning")
+                        .text_sm()
+                        .text_color(cx.theme().warning)
+                        .whitespace_normal()
+                        .child(tr(if compatibility == Compatibility::Mismatch {
+                            "firmware.compatibility.mismatch"
+                        } else {
+                            "firmware.compatibility.unknown"
+                        })),
+                );
+            }
+        }
         let hints = &image.hints;
-        if hints.is_empty() && image.local {
+        if hints.is_empty() && image.local && !self.preferences.minimal_firmware_confirmation {
             details = details.child(
                 div()
                     .text_sm()
@@ -479,6 +496,7 @@ impl Workbench {
         }
         if self.flash.destination(mode).as_ref() == Some(&self.flash.images_destination)
             && (self.flash.images.len() > 1
+                || (!self.flash.images.is_empty() && self.flash.displayed_image(mode).is_none())
                 || self
                     .flash
                     .images

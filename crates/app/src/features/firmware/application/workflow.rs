@@ -83,7 +83,8 @@ impl FlashState {
                 .assignments
                 .get(&ota_assignment_key(target))
                 .ok_or_else(|| tr("firmware.error.assign_every_group"))?;
-            validate_ota_image(image, target)?;
+            validate_ota_image(image, target, self.confirmation_policy)?;
+            planning::validate_ota_catalog_mcu(image, target, self.catalog.as_ref())?;
         }
         Ok(())
     }
@@ -463,6 +464,17 @@ impl Workbench {
             OtaStep::Devices => self.flash.ota_selection_ready(),
             _ => self.flash.ota_images_ready(),
         };
+        let rendered_action = if self.flash.ota_step == OtaStep::Mapping
+            && self.preferences.minimal_firmware_confirmation
+        {
+            self.selected_flash_action().ok().filter(|action| {
+                planning::action_compatibility(action, self.flash.catalog.as_ref())
+                    == Compatibility::Matched
+            })
+        } else {
+            None
+        };
+        let immediate = rendered_action.is_some();
         div()
             .id("ota-step-next-floating")
             .absolute()
@@ -483,12 +495,16 @@ impl Workbench {
                     .icon(IconName::ArrowRight)
                     .primary()
                     .when(!cx.theme().is_dark(), |button| button.outline())
-                    .label(tr("firmware.workflow.next"))
+                    .label(tr(if immediate {
+                        "firmware.action.start_update"
+                    } else {
+                        "firmware.workflow.next"
+                    }))
                     .disabled(self.flash.busy() || ready.is_err())
                     .when_some(ready.as_ref().err(), |button, error| {
                         button.tooltip(error.clone())
                     })
-                    .on_click(cx.listener(|this, _, _, cx| {
+                    .on_click(cx.listener(move |this, _, _, cx| {
                         if this.flash.busy()
                             || this.flash_mode() != Mode::Esb
                             || !this.flash.ota_shows_next()
@@ -497,8 +513,24 @@ impl Workbench {
                         }
                         let result = if this.flash.ota_step == OtaStep::Mapping {
                             this.selected_flash_action().map(|action| {
-                                this.review_flash(action);
-                                this.flash.ota_step = OtaStep::Confirm;
+                                if immediate
+                                    && this.preferences.minimal_firmware_confirmation
+                                    && rendered_action
+                                        .as_ref()
+                                        .is_some_and(|shown| shown.same_update(&action))
+                                    && planning::action_compatibility(
+                                        &action,
+                                        this.flash.catalog.as_ref(),
+                                    ) == Compatibility::Matched
+                                {
+                                    this.start_firmware_action(
+                                        action,
+                                        firmware_update::CompatibilityApproval::Matched,
+                                    );
+                                } else {
+                                    this.review_flash(action);
+                                    this.flash.ota_step = OtaStep::Confirm;
+                                }
                             })
                         } else {
                             this.flash.ota_advance()
@@ -540,6 +572,13 @@ impl Workbench {
             );
         for ((receiver, assignment), targets) in groups {
             let first = targets[0];
+            let compatibility = self.flash.assignments.get(&assignment).map(|image| {
+                targets
+                    .iter()
+                    .map(|target| planning::ota_compatibility(image, target))
+                    .max()
+                    .unwrap_or(Compatibility::Unknown)
+            });
             let mut group = flash_panel(cx).child(
                 div()
                     .text_sm()
@@ -618,6 +657,22 @@ impl Workbench {
                     &format!("mapping-{receiver}-{assignment}"),
                     cx,
                 ));
+                if self.preferences.minimal_firmware_confirmation
+                    && let Some(compatibility) = compatibility
+                    && compatibility != Compatibility::Matched
+                {
+                    chosen = chosen.child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().warning)
+                            .whitespace_normal()
+                            .child(tr(if compatibility == Compatibility::Mismatch {
+                                "firmware.compatibility.mismatch"
+                            } else {
+                                "firmware.compatibility.unknown"
+                            })),
+                    );
+                }
             }
             group = group.child(
                 div()

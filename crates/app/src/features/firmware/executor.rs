@@ -19,14 +19,31 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CompatibilityApproval {
+    Standard,
+    Matched,
+    RiskAccepted,
+}
+
 pub(crate) struct FileImage {
     pub name: String,
     pub bytes: Arc<[u8]>,
+    pub approval: Option<CompatibilityApproval>,
 }
 
 pub(crate) struct EsbGroup {
     pub targets: Vec<esb_ota::Target>,
     pub image: Option<Arc<firmware::FirmwareImage>>,
+    pub file: FileImage,
+}
+
+impl FileImage {
+    fn require_approval(&self) -> Result<(), String> {
+        self.approval
+            .map(|_| ())
+            .ok_or_else(|| format!("Firmware {} has not been confirmed", self.name))
+    }
 }
 
 pub(crate) enum UpdateRequest {
@@ -103,6 +120,7 @@ pub(crate) fn execute(
     let mut results = Vec::new();
     match request {
         UpdateRequest::Uf2(volumes, image, purpose) => {
+            image.require_approval()?;
             let destination = uf2_destination_name(&image.name);
             for volume in volumes {
                 let result = uf2::write(
@@ -131,6 +149,7 @@ pub(crate) fn execute(
             ));
         }
         UpdateRequest::OpenDfu(port, image, options) => {
+            image.require_approval()?;
             revalidate_serial(&port)?;
             let result = opendfu::flash_with_options(
                 &port,
@@ -190,6 +209,7 @@ pub(crate) fn execute(
             progress(initial);
             let mut plans = Vec::new();
             for group in &groups {
+                group.file.require_approval()?;
                 match group.image.as_deref() {
                     Some(image) => plans.push(esb_ota::FlashGroup {
                         targets: &group.targets,
@@ -314,6 +334,7 @@ async fn execute_ble_with(
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<UpdateCompletion, String> {
+    image.require_approval()?;
     let mut results = Vec::with_capacity(devices.len());
     if devices.is_empty() {
         return Ok(UpdateCompletion::Results(results));

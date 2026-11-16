@@ -95,6 +95,9 @@ app:
       hint: "显示固件版本详情、引导程序信息、SHA-256 校验值和旧版蓝牙更新。"
       locked_hint: "请等待蓝牙操作或文件选择结束后再关闭高级功能。"
       title: "高级功能"
+    firmware_confirmation:
+      title: "最小固件确认"
+      hint: "开启后，已匹配的固件无需再次确认即可开始；开发板不匹配或未知时需确认风险。仍会检查固件内容、MCU 和设备。关闭时保留标准检查和确认。"
     appearance:
       dark: "深色"
       hint: "直接选择工作区的浅色或深色外观。"
@@ -845,6 +848,7 @@ firmware:
     enter_holyiot_dfu: "进入 Holyiot DFU"
     exit_dfu: "退出 DFU"
     review: "复核更新"
+    start_update: "开始更新"
   assignment:
     empty: "未选择固件"
     select_devices: "请先选择设备，再为它们选择固件"
@@ -857,6 +861,10 @@ firmware:
     application: "主程序"
     bootloader: "引导程序"
     title: "固件类别"
+  compatibility:
+    unknown: "无法确认固件与所有所选设备兼容。继续前请核对固件和硬件。"
+    mismatch: "固件的开发板、设备角色或硬件配置与至少一个所选设备不匹配，安装后设备可能无法使用。"
+    acknowledge: "我了解此固件用于所选设备的兼容性风险"
   confirmation:
     acknowledge: "我确认此镜像适用于所列的每个目标，并接受更新风险"
     bootloader_risk: "更新引导程序会替换设备的恢复程序。请使用与板型完全匹配的镜像，且不要断电。"

@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- Optional minimal firmware confirmation: matching firmware can start without a redundant final confirmation. Unknown or conflicting filename-derived board, role or profile hints require explicit compatibility-risk confirmation; image validity, MCU/address limits, device identity and exclusive ownership remain enforced. The setting is off by default.
+
 ### Changed
 
 - Update the GUI framework to GPUI Kit 0.10.0 and GPUI Fast 0.1.16, retaining gpui-pre 0.3.12. This incorporates upstream grapheme-aware input, IME positioning, text-selection, keyboard navigation, accessibility, tooltip and native-window fixes.

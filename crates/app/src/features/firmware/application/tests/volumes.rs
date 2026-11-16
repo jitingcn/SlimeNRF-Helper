@@ -56,3 +56,36 @@ fn replacing_a_volume_at_the_same_mount_cannot_reuse_a_review() {
     assert!(state.review.is_none());
     assert!(state.selected_live_volumes().is_empty());
 }
+
+#[test]
+fn automatic_copy_never_selects_a_new_or_replaced_volume() {
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    for directory in [&first, &second] {
+        std::fs::write(
+            directory.path().join("INFO_UF2.TXT"),
+            "Board-ID: nRF52840-test\n",
+        )
+        .unwrap();
+    }
+    let old = crate::features::firmware::uf2::inspect_volume(first.path(), "INFO_UF2.TXT").unwrap();
+    let added =
+        crate::features::firmware::uf2::inspect_volume(second.path(), "INFO_UF2.TXT").unwrap();
+    let mut state = FlashState {
+        volumes: vec![old.clone()],
+        selected_volumes: [old.identity.clone()].into(),
+        auto: true,
+        auto_seen: [format!("{}:digest", old.identity)].into(),
+        ..FlashState::default()
+    };
+    state.apply_volumes(vec![old.clone(), added.clone()]);
+    assert_eq!(state.selected_volumes.len(), 1);
+    assert!(state.selected_volumes.contains(&old.identity));
+    assert!(!state.selected_volumes.contains(&added.identity));
+    state.apply_volumes(vec![added]);
+    state.apply_volumes(vec![old]);
+    assert!(
+        state.selected_volumes.is_empty(),
+        "a reconnect requires a new selection"
+    );
+}

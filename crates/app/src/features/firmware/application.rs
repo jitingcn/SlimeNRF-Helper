@@ -69,8 +69,8 @@ mod workflow;
 use auto_query::available_query_groups;
 use auto_query::{query_failure, query_tracker_eligible};
 use images::{
-    configured_opendfu_options, firmware_filter_matches, firmware_page_matches, image_category,
-    load_image, make_image, uf2_preset_matches,
+    configured_opendfu_options, firmware_filter_matches, firmware_page_matches, load_image,
+    make_image, uf2_preset_matches,
 };
 use planning::{ota_role, ota_supported, ota_update_guidance, target_label, validate_ota_image};
 #[cfg(test)]
@@ -108,6 +108,10 @@ pub(super) struct Image {
     local: bool,
     parsed: Option<Arc<firmware::FirmwareImage>>,
     hints: Arc<[board_catalog::FirmwareHint]>,
+    acquisition_policy: source::BootloaderNamePolicy,
+    uf2_family: Option<u32>,
+    uf2_application_error: Option<String>,
+    approval: Option<firmware_update::CompatibilityApproval>,
     validation_error: Option<String>,
 }
 
@@ -125,6 +129,30 @@ enum ImageCategory {
     #[default]
     Application,
     Bootloader,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum ConfirmationPolicy {
+    #[default]
+    Standard,
+    Minimal,
+}
+
+impl ConfirmationPolicy {
+    fn from_preference(minimal: bool) -> Self {
+        if minimal {
+            Self::Minimal
+        } else {
+            Self::Standard
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Compatibility {
+    Matched,
+    Unknown,
+    Mismatch,
 }
 
 // Successful FW_INFO is reused for 30 seconds on ESB page reentry only.
@@ -179,6 +207,7 @@ pub(super) struct RemoteRequest {
     destination: ImageDestination,
     category: ImageCategory,
     channel: source::SourceChannel,
+    name_policy: source::BootloaderNamePolicy,
     generation: u64,
     version: Option<u64>,
 }
@@ -355,6 +384,10 @@ pub(super) struct FlashState {
     refresh_after_job: bool,
     pending: Option<Action>,
     review: Option<Action>,
+    confirmation_policy: ConfirmationPolicy,
+    review_policy: ConfirmationPolicy,
+    review_compatibility: Compatibility,
+    risk_acknowledged: bool,
     leases: Vec<Lease>,
     operation_pins: OperationPins,
     mode: Mode,
@@ -431,6 +464,10 @@ impl Default for FlashState {
             refresh_after_job: false,
             pending: None,
             review: None,
+            confirmation_policy: ConfirmationPolicy::Standard,
+            review_policy: ConfirmationPolicy::Standard,
+            review_compatibility: Compatibility::Unknown,
+            risk_acknowledged: false,
             leases: Vec::new(),
             operation_pins: OperationPins::default(),
             mode: Mode::Uf2,
@@ -569,6 +606,105 @@ impl Action {
             Self::Ble(..) => Mode::Ble,
         }
     }
+
+    fn approve(&mut self, approval: firmware_update::CompatibilityApproval) {
+        match self {
+            Self::Uf2(_, image, _) | Self::OpenDfu(_, image, _) | Self::Ble(_, image) => {
+                image.approval = Some(approval);
+            }
+            Self::EsbGroups(groups) => {
+                for group in groups {
+                    group.image.approval = Some(approval);
+                }
+            }
+            Self::Reboot(_) | Self::Enter(_) | Self::QueryGroups(_) => {}
+        }
+    }
+
+    fn is_firmware_update(&self) -> bool {
+        matches!(
+            self,
+            Self::Uf2(..) | Self::OpenDfu(..) | Self::EsbGroups(..) | Self::Ble(..)
+        )
+    }
+
+    fn same_update(&self, other: &Self) -> bool {
+        fn same_image(left: &Image, right: &Image) -> bool {
+            Arc::ptr_eq(&left.bytes, &right.bytes)
+                && Arc::ptr_eq(&left.hints, &right.hints)
+                && (match (&left.parsed, &right.parsed) {
+                    (Some(left), Some(right)) => Arc::ptr_eq(left, right),
+                    (None, None) => true,
+                    _ => false,
+                })
+                && left.name == right.name
+                && left.digest == right.digest
+                && left.provenance == right.provenance
+                && left.resource == right.resource
+                && left.local == right.local
+                && left.acquisition_policy == right.acquisition_policy
+                && left.uf2_family == right.uf2_family
+                && left.uf2_application_error == right.uf2_application_error
+                && left.approval == right.approval
+                && left.validation_error == right.validation_error
+        }
+
+        match (self, other) {
+            (
+                Self::Uf2(left, left_image, left_purpose),
+                Self::Uf2(right, right_image, right_purpose),
+            ) => {
+                left_purpose == right_purpose
+                    && same_image(left_image, right_image)
+                    && left.len() == right.len()
+                    && left.iter().zip(right).all(|(left, right)| {
+                        left.identity == right.identity
+                            && left.mount == right.mount
+                            && left.label == right.label
+                            && left.board_id == right.board_id
+                    })
+            }
+            (
+                Self::OpenDfu(left, left_image, left_options),
+                Self::OpenDfu(right, right_image, right_options),
+            ) => {
+                same_image(left_image, right_image)
+                    && left.port_name == right.port_name
+                    && left.kind == right.kind
+                    && left.serial_number == right.serial_number
+                    && left.vid == right.vid
+                    && left.pid == right.pid
+                    && left.usb_interface == right.usb_interface
+                    && left.product == right.product
+                    && left.manufacturer == right.manufacturer
+                    && left_options.hw_version == right_options.hw_version
+                    && left_options.app_version == right_options.app_version
+                    && left_options.sd_req == right_options.sd_req
+                    && left_options.app_base == right_options.app_base
+            }
+            (Self::EsbGroups(left), Self::EsbGroups(right)) => {
+                left.len() == right.len()
+                    && left.iter().zip(right).all(|(left, right)| {
+                        same_image(&left.image, &right.image)
+                            && left.targets.len() == right.targets.len()
+                            && left
+                                .targets
+                                .iter()
+                                .zip(&right.targets)
+                                .all(|(left, right)| {
+                                    left.id == right.id
+                                        && left.address == right.address
+                                        && left.info == right.info
+                                        && left.receiver.key == right.receiver.key
+                                        && left.receiver.path == right.receiver.path
+                                        && left.receiver.serial_number
+                                            == right.receiver.serial_number
+                                })
+                    })
+            }
+            _ => false,
+        }
+    }
 }
 
 impl ActivityKind {
@@ -582,6 +718,25 @@ impl ActivityKind {
 }
 
 impl FlashState {
+    pub(in crate::application) fn from_confirmation_preference(minimal: bool) -> Self {
+        let mut state = Self::default();
+        state.set_confirmation_policy(minimal);
+        state
+    }
+
+    pub(in crate::application) fn set_confirmation_policy(&mut self, minimal: bool) {
+        let policy = ConfirmationPolicy::from_preference(minimal);
+        if self.confirmation_policy != policy {
+            self.confirmation_policy = policy;
+            self.review = None;
+            self.acknowledged = false;
+            self.risk_acknowledged = false;
+            self.auto_requested = false;
+            self.matched_only = policy == ConfirmationPolicy::Standard;
+            self.clear_remote();
+        }
+    }
+
     fn set_error(&mut self, mode: Mode, error: String) {
         self.error_origin = mode;
         self.error = Some(error);

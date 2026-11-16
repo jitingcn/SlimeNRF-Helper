@@ -5,7 +5,9 @@ use serde::Deserialize;
 
 use super::download::parse_digest;
 use super::http::{Fetch, checked_url, json};
-use super::{Artifact, MAX_DOWNLOAD, Progress, SourceChannel, Version, cancelled};
+use super::{
+    Artifact, BootloaderNamePolicy, MAX_DOWNLOAD, Progress, SourceChannel, Version, cancelled,
+};
 use crate::features::firmware::remote_config::RemoteConfig;
 
 const MAX_PAGES: usize = 20;
@@ -81,15 +83,25 @@ pub(super) fn is_image(name: &str) -> bool {
         .any(|ext| lower.ends_with(ext))
 }
 
-/// Only self-update UF2 assets are eligible for bootloader acquisition.
-/// Full HEX images and DFU packages belong to other installation workflows.
+/// Recognizes canonical updater names; it does not establish device compatibility.
 pub(crate) fn is_bootloader_update(name: &str) -> bool {
     crate::features::firmware::board_catalog::bootloader_board(name).is_some()
 }
 
-fn release_asset(channel: SourceChannel, name: &str) -> bool {
+pub(super) fn bootloader_candidate(name: &str, policy: BootloaderNamePolicy) -> bool {
+    is_bootloader_update(name)
+        || (policy == BootloaderNamePolicy::AllowUnclassified
+            && crate::features::firmware::board_catalog::valid_filename(name)
+            && name.len() <= 1024
+            && !name.chars().any(char::is_control)
+            && name
+                .rsplit_once('.')
+                .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("uf2")))
+}
+
+fn release_asset(channel: SourceChannel, name: &str, policy: BootloaderNamePolicy) -> bool {
     if channel == SourceChannel::BootloaderRelease {
-        is_bootloader_update(name)
+        bootloader_candidate(name, policy)
     } else {
         is_image(name)
     }
@@ -114,6 +126,7 @@ pub(super) async fn list_versions_with(
     config: &RemoteConfig,
     fetch: &impl Fetch,
     channel: SourceChannel,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Vec<Version>, String> {
@@ -136,7 +149,7 @@ pub(super) async fn list_versions_with(
                     || !release
                         .assets
                         .iter()
-                        .any(|asset| release_asset(channel, &asset.name))
+                        .any(|asset| release_asset(channel, &asset.name, name_policy))
                 {
                     continue;
                 }
@@ -212,11 +225,13 @@ pub(super) async fn latest_with(
     config: &RemoteConfig,
     fetch: &impl Fetch,
     channel: SourceChannel,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Version, String> {
-    for version in list_versions_with(config, fetch, channel, cancel, progress).await? {
-        if list_artifacts_with(config, fetch, &version, cancel, progress)
+    for version in list_versions_with(config, fetch, channel, name_policy, cancel, progress).await?
+    {
+        if list_artifacts_with(config, fetch, &version, name_policy, cancel, progress)
             .await?
             .iter()
             .any(|artifact| artifact.size <= MAX_DOWNLOAD as u64)
@@ -231,6 +246,7 @@ pub(super) async fn list_artifacts_with(
     config: &RemoteConfig,
     fetch: &impl Fetch,
     version: &Version,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Vec<Artifact>, String> {
@@ -251,7 +267,7 @@ pub(super) async fn list_artifacts_with(
             .await?;
             let count = assets.len();
             for asset in assets {
-                if !release_asset(version.channel, &asset.name) {
+                if !release_asset(version.channel, &asset.name, name_policy) {
                     continue;
                 }
                 checked_url(&asset.browser_download_url)?;

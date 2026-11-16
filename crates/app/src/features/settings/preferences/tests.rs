@@ -148,6 +148,33 @@ fn preference_callback_returns_before_disk_and_coalesces_a_b_c(cx: &mut TestAppC
         gate.queued.try_recv(),
         Err(mpsc::TryRecvError::Empty)
     ));
+
+    workbench.update(cx, |this, cx| {
+        this.preferences_io.test_executor = Some(gate.executor.clone());
+        this.set_minimal_firmware_confirmation(true, cx);
+        assert!(this.preferences.minimal_firmware_confirmation);
+        this.set_minimal_firmware_confirmation(false, cx);
+        assert!(!this.preferences.minimal_firmware_confirmation);
+        assert_eq!(this.preferences.accent, AccentColor::Purple);
+        assert!(this.preferences_io.busy());
+    });
+    assert!(!stored(&path).minimal_firmware_confirmation);
+    gate.run_next();
+    assert!(stored(&path).minimal_firmware_confirmation);
+    cx.run_until_parked();
+    gate.run_next();
+    cx.run_until_parked();
+    assert!(!stored(&path).minimal_firmware_confirmation);
+    assert_eq!(stored(&path).accent, AccentColor::Purple);
+    workbench.update(cx, |this, cx| {
+        assert!(this.preferences_io.latest_snapshot_saved(&this.preferences));
+        this.set_minimal_firmware_confirmation(false, cx);
+        assert!(!this.preferences_io.busy());
+    });
+    assert!(matches!(
+        gate.queued.try_recv(),
+        Err(mpsc::TryRecvError::Empty)
+    ));
 }
 
 #[gpui_kit::test]

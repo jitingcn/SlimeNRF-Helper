@@ -5,6 +5,7 @@ impl Image {
         firmware_update::FileImage {
             name: self.name,
             bytes: self.bytes,
+            approval: self.approval,
         }
     }
 }
@@ -25,9 +26,14 @@ impl Action {
             Self::EsbGroups(groups) => UpdateRequest::EsbGroups(
                 groups
                     .into_iter()
-                    .map(|group| firmware_update::EsbGroup {
-                        targets: group.targets,
-                        image: group.image.parsed,
+                    .map(|group| {
+                        let mut image = group.image;
+                        let parsed = image.parsed.take();
+                        firmware_update::EsbGroup {
+                            targets: group.targets,
+                            image: parsed,
+                            file: image.into_file(),
+                        }
                     })
                     .collect(),
             ),
@@ -597,8 +603,12 @@ impl Workbench {
                     self.flash.category,
                     volumes,
                     image,
+                    ConfirmationPolicy::Standard,
                 ) {
-                    Ok(action) => self.reserve_flash_action(action),
+                    Ok(mut action) => {
+                        action.approve(firmware_update::CompatibilityApproval::Standard);
+                        self.reserve_flash_action(action);
+                    }
                     Err(error) => self.flash.set_activity_error(error),
                 }
                 changed = true;

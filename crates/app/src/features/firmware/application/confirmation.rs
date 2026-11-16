@@ -18,12 +18,36 @@ pub(super) fn ota_confirmation_receivers(
 }
 
 impl FlashState {
+    fn review_requires_risk(&self) -> bool {
+        self.review_policy == ConfirmationPolicy::Minimal
+            && self.review_compatibility != Compatibility::Matched
+            && self.review.as_ref().is_some_and(Action::is_firmware_update)
+    }
+
+    fn review_acknowledged(&self) -> bool {
+        if self.review_requires_risk() {
+            self.risk_acknowledged
+        } else {
+            self.acknowledged
+        }
+    }
+
     pub(super) fn take_confirmed_action(&mut self) -> Option<Action> {
-        if self.busy() || !self.acknowledged {
+        if self.busy() || !self.review_acknowledged() {
             return None;
         }
-        let action = self.review.take()?;
+        let mut action = self.review.take()?;
+        let approval = if self.review_policy == ConfirmationPolicy::Minimal
+            && self.review_compatibility != Compatibility::Matched
+            && action.is_firmware_update()
+        {
+            firmware_update::CompatibilityApproval::RiskAccepted
+        } else {
+            firmware_update::CompatibilityApproval::Standard
+        };
+        action.approve(approval);
         self.acknowledged = false;
+        self.risk_acknowledged = false;
         if matches!(action, Action::EsbGroups(_)) {
             self.ota_presentation = OtaPresentation::Running;
         }
@@ -36,10 +60,30 @@ impl Workbench {
         if matches!(action, Action::Ble(..)) && !self.preferences.advanced_features {
             return;
         }
+        self.flash.review_policy =
+            ConfirmationPolicy::from_preference(self.preferences.minimal_firmware_confirmation);
+        self.flash.review_compatibility =
+            planning::action_compatibility(&action, self.flash.catalog.as_ref());
+        self.flash.risk_acknowledged = false;
         self.flash.review = Some(action);
         self.flash.auto_requested = false;
         self.flash.acknowledged = false;
         self.flash.error = None;
+    }
+
+    pub(super) fn start_firmware_action(
+        &mut self,
+        mut action: Action,
+        approval: firmware_update::CompatibilityApproval,
+    ) {
+        if self.shutting_down || self.flash.busy() {
+            return;
+        }
+        action.approve(approval);
+        if matches!(action, Action::EsbGroups(_)) {
+            self.flash.ota_presentation = OtaPresentation::Running;
+        }
+        self.reserve_flash_action(action);
     }
 
     #[inline(never)]
@@ -50,20 +94,52 @@ impl Workbench {
         let busy = self.flash.busy();
         let mut page = div().flex().flex_col().gap_3();
         let readiness = self.selected_flash_action();
+        let immediate = self.preferences.minimal_firmware_confirmation
+            && readiness.as_ref().is_ok_and(|action| {
+                action.is_firmware_update()
+                    && planning::action_compatibility(action, self.flash.catalog.as_ref())
+                        == Compatibility::Matched
+            });
         let disabled_reason = if self.flash.querying() {
             Some(tr("firmware.query.reading"))
         } else {
             readiness.as_ref().err().cloned()
         };
+        let disabled = busy || readiness.is_err();
+        let rendered_action = if immediate { readiness.ok() } else { None };
         page = page.child(
             Button::new("flash-review")
-                .label(tr("firmware.action.review"))
+                .label(tr(if immediate {
+                    "firmware.action.start_update"
+                } else {
+                    "firmware.action.review"
+                }))
                 .primary()
                 .when(!cx.theme().is_dark(), |button| button.outline())
-                .disabled(busy || readiness.is_err())
-                .on_click(cx.listener(|this, _, _, cx| {
+                .disabled(disabled)
+                .on_click(cx.listener(move |this, _, _, cx| {
                     match this.selected_flash_action() {
-                        Ok(action) => this.review_flash(action),
+                        Ok(action) => {
+                            let matched = this.preferences.minimal_firmware_confirmation
+                                && action.is_firmware_update()
+                                && planning::action_compatibility(
+                                    &action,
+                                    this.flash.catalog.as_ref(),
+                                ) == Compatibility::Matched;
+                            if immediate
+                                && matched
+                                && rendered_action
+                                    .as_ref()
+                                    .is_some_and(|shown| shown.same_update(&action))
+                            {
+                                this.start_firmware_action(
+                                    action,
+                                    firmware_update::CompatibilityApproval::Matched,
+                                );
+                            } else {
+                                this.review_flash(action);
+                            }
+                        }
                         Err(error) => this.flash.set_error(this.flash_mode(), error),
                     }
                     cx.notify();
@@ -113,6 +189,22 @@ impl Workbench {
                 )
             });
         panel = panel.child(self.flash_confirmation_targets(action, cx));
+        if self.flash.review_requires_risk() {
+            panel = panel.child(
+                div()
+                    .id("firmware-compatibility-warning")
+                    .test_support()
+                    .text_sm()
+                    .text_color(cx.theme().warning)
+                    .whitespace_normal()
+                    .child(tr(match self.flash.review_compatibility {
+                        Compatibility::Mismatch => "firmware.compatibility.mismatch",
+                        Compatibility::Unknown | Compatibility::Matched => {
+                            "firmware.compatibility.unknown"
+                        }
+                    })),
+            );
+        }
         let image = match action {
             Action::Uf2(_, image, _) | Action::OpenDfu(_, image, _) | Action::Ble(_, image) => {
                 Some(image)
@@ -124,7 +216,7 @@ impl Workbench {
         };
         if let Some(image) = image {
             panel = panel.child(self.flash_image_identity(image, "confirmation", cx));
-            if image.local && image.hints.is_empty() {
+            if image.local && image.hints.is_empty() && !self.flash.review_requires_risk() {
                 panel = panel.child(
                     div()
                         .text_sm()
@@ -133,7 +225,7 @@ impl Workbench {
                         .child(tr("firmware.image.unknown_local_target")),
                 );
             }
-            if image_category(&image.name, &image.hints) == ImageCategory::Bootloader {
+            if matches!(action, Action::Uf2(_, _, Uf2ImagePurpose::Bootloader(_))) {
                 panel = panel.child(
                     div()
                         .text_sm()
@@ -143,7 +235,20 @@ impl Workbench {
                 );
             }
         }
-        panel = panel.child(self.flash_confirmation_ack(cx));
+        if self.flash.review_requires_risk() {
+            panel = panel.child(
+                Checkbox::new("firmware-risk-ack")
+                    .label(tr("firmware.compatibility.acknowledge"))
+                    .checked(self.flash.risk_acknowledged)
+                    .disabled(self.flash.busy())
+                    .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                        this.flash.risk_acknowledged = *checked;
+                        cx.notify();
+                    })),
+            );
+        } else {
+            panel = panel.child(self.flash_confirmation_ack(cx));
+        }
         panel = panel.child(self.flash_confirmation_actions(cx));
         panel.into_any_element()
     }
@@ -231,7 +336,8 @@ impl Workbench {
             .label(tr("firmware.action.confirm_start"))
             .primary()
             .when(!cx.theme().is_dark(), |button| button.outline())
-            .disabled(!self.flash.acknowledged || self.flash.busy())
+            .when(self.flash.review_requires_risk(), |button| button.danger())
+            .disabled(!self.flash.review_acknowledged() || self.flash.busy())
             .on_click(cx.listener(|this, _, _, cx| {
                 if this.shutting_down {
                     return;
@@ -262,6 +368,7 @@ impl Workbench {
             .on_click(cx.listener(|this, _, _, cx| {
                 this.flash.review = None;
                 this.flash.acknowledged = false;
+                this.flash.risk_acknowledged = false;
                 if this.flash_mode() == Mode::Esb {
                     this.flash.ota_back();
                 }

@@ -95,6 +95,9 @@ app:
       hint: "Show firmware version details, bootloader information, SHA-256 checksums, and legacy Bluetooth updates."
       locked_hint: "Wait for the Bluetooth operation or file selection to finish before turning off advanced features."
       title: "Advanced features"
+    firmware_confirmation:
+      title: "Minimal firmware confirmation"
+      hint: "On: matching firmware starts without another confirmation; unknown or mismatched boards require risk confirmation. Image, MCU, and device checks still apply. Off: standard checks and confirmations apply."
     appearance:
       dark: "Dark"
       hint: "Choose Light or Dark for the workspace."
@@ -845,6 +848,7 @@ firmware:
     enter_holyiot_dfu: "Enter Holyiot DFU"
     exit_dfu: "Exit DFU"
     review: "Review update"
+    start_update: "Start update"
   assignment:
     empty: "No firmware selected"
     select_devices: "Select devices first to choose their firmware"
@@ -857,6 +861,10 @@ firmware:
     application: "Application firmware"
     bootloader: "Bootloader firmware"
     title: "Firmware category"
+  compatibility:
+    unknown: "Compatibility could not be verified for every selected target. Verify the firmware and hardware before continuing."
+    mismatch: "The firmware's board, device role, or hardware profile does not match at least one selected target. Installing it may make the device unusable."
+    acknowledge: "I understand the compatibility risk for these selected devices and this firmware"
   confirmation:
     acknowledge: "I confirm this image is built for every listed target and accept the update risk"
     bootloader_risk: "Bootloader updates replace the recovery program. Use the exact board image and do not disconnect power."

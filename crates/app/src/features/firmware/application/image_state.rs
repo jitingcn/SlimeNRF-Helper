@@ -125,7 +125,8 @@ impl FlashState {
                     self.selected_targets.contains(&ota_target_key(target))
                         && ota_assignment_key(target) == *key
                 }) {
-                    validate_ota_image(&image, target)?;
+                    validate_ota_image(&image, target, self.confirmation_policy)?;
+                    planning::validate_ota_catalog_mcu(&image, target, self.catalog.as_ref())?;
                 }
                 self.assignments.insert(key.clone(), image);
             }
@@ -147,7 +148,10 @@ impl FlashState {
         self.acknowledged = false;
         self.auto = false;
         self.auto_requested = false;
-        if images.len() == 1 && images[0].validation_error.is_none() {
+        let requires_selection = self.category == ImageCategory::Bootloader
+            && matches!(&destination, ImageDestination::Global)
+            && images.iter().any(Image::unclassified_bootloader_source);
+        if images.len() == 1 && images[0].validation_error.is_none() && !requires_selection {
             // Assignment validates before replacing the current image. A parsed
             // local file can still be incompatible with its frozen OTA group.
             if let Err(error) = self.choose_image(&destination, images[0].clone()) {

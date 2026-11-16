@@ -1,3 +1,4 @@
+use super::super::BootloaderNamePolicy;
 use super::super::tests::run;
 use super::*;
 use std::{
@@ -373,6 +374,7 @@ fn loopback_catalog_download_pipeline_and_public_futures_are_send() {
             &config,
             &network,
             super::super::SourceChannel::Release,
+            BootloaderNamePolicy::CanonicalOnly,
             &cancel,
             &mut |_| {},
         ))
@@ -382,6 +384,7 @@ fn loopback_catalog_download_pipeline_and_public_futures_are_send() {
             &config,
             &network,
             &versions[0],
+            BootloaderNamePolicy::CanonicalOnly,
             &cancel,
             &mut |_| {},
         ))
@@ -391,6 +394,7 @@ fn loopback_catalog_download_pipeline_and_public_futures_are_send() {
             &config,
             &network,
             &artifacts[0],
+            BootloaderNamePolicy::CanonicalOnly,
             &cancel,
             &mut |_| {},
         ))
@@ -409,6 +413,7 @@ fn loopback_catalog_download_pipeline_and_public_futures_are_send() {
                 &shared,
                 &config,
                 super::super::SourceChannel::Release,
+                BootloaderNamePolicy::CanonicalOnly,
                 &cancel,
                 &mut |_| {},
             ))
@@ -421,6 +426,7 @@ fn loopback_catalog_download_pipeline_and_public_futures_are_send() {
                 &shared,
                 &config,
                 super::super::SourceChannel::Release,
+                BootloaderNamePolicy::CanonicalOnly,
                 &cancel,
                 &mut |_| {},
             ))
@@ -433,6 +439,7 @@ fn loopback_catalog_download_pipeline_and_public_futures_are_send() {
                 &shared,
                 &config,
                 &versions[0],
+                BootloaderNamePolicy::CanonicalOnly,
                 &cancel,
                 &mut |_| {},
             ))
@@ -445,6 +452,7 @@ fn loopback_catalog_download_pipeline_and_public_futures_are_send() {
                 &shared,
                 &config,
                 &artifacts[0],
+                BootloaderNamePolicy::CanonicalOnly,
                 &cancel,
                 &mut |_| {},
             ))

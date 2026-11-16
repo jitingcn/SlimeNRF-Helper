@@ -33,7 +33,7 @@ CI packages include the default configuration but omit firmware payloads. Full b
 
 ## Firmware update safety
 
-Updates require an explicit review and confirmation of the target, board model, role, firmware source, and risks. Compatible firmware, stable power, and a USB recovery path are required. Cancellation does not undo written data or activation. A completed transfer does not prove that the new firmware runs correctly.
+By default, updates require an explicit review and confirmation of the target, board model, role, firmware source and risks. Optional minimal confirmation skips the extra confirmation only for matching selections; unknown or conflicting compatibility hints still require explicit risk acceptance. Image and device safety checks remain enforced. Use stable power and keep a USB recovery path available. Cancellation does not undo written data or activation. A completed transfer does not prove that the new firmware runs correctly.
 
 The [user guide](docs/USER_GUIDE.md#firmware-updates) describes each update method, recovery limits, and version checks after reconnection.
 

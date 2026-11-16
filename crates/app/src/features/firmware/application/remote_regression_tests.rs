@@ -1,6 +1,7 @@
 use super::{
-    Action, FlashState, ImageCategory, ImageDestination, Mode, Payload, artifact_firmware_hints,
-    firmware_filter_matches, firmware_page_matches, make_image, ota_target_key, validate_ota_image,
+    Action, ConfirmationPolicy, FlashState, ImageCategory, ImageDestination, Mode, Payload,
+    artifact_firmware_hints, firmware_filter_matches, firmware_page_matches, make_image,
+    ota_target_key, validate_ota_image,
 };
 use crate::application::{FeaturePage, Workbench};
 use crate::features::firmware::{
@@ -423,6 +424,7 @@ fn bootloader_ci_exact_board_container_is_visible_only_for_uf2_bootloader() {
                     &hints,
                     std::iter::empty(),
                     true,
+                    ConfirmationPolicy::Standard,
                 ),
                 mode == Mode::Uf2 && category == ImageCategory::Bootloader,
             );
@@ -451,6 +453,7 @@ fn bootloader_ci_exact_board_container_is_visible_only_for_uf2_bootloader() {
             &unknown,
             std::iter::empty(),
             true,
+            ConfirmationPolicy::Standard,
         ));
     }
     artifact.name = "update-slimenrf_promicro_bootloader-main_nosd.uf2".into();
@@ -592,6 +595,7 @@ fn tracker_ci_chrysalis_container_survives_matching_board_filter() {
         &hints,
         std::iter::once(&tracker),
         true,
+        ConfirmationPolicy::Standard,
     ));
     assert!(
         firmware_filter_matches(&hints, &artifact.variant, &targets, true, Some("Standard"),),
@@ -631,6 +635,7 @@ fn tracker_ci_chrysalis_container_survives_matching_board_filter() {
         &other_hints,
         std::iter::once(&tracker),
         true,
+        ConfirmationPolicy::Standard,
     ));
     assert!(!firmware_filter_matches(
         &hints,
@@ -658,6 +663,7 @@ fn tracker_ci_chrysalis_container_survives_matching_board_filter() {
         &hints,
         std::iter::once(&signed),
         true,
+        ConfirmationPolicy::Standard,
     ));
 }
 
@@ -705,6 +711,7 @@ fn ci_advertisements_preserve_complete_stems_and_release_filename_rules() {
         &category_hints,
         std::iter::once(&chrysalis_tracker()),
         true,
+        ConfirmationPolicy::Standard,
     ));
     artifact.version.channel = SourceChannel::ReceiverCi;
     artifact.name = "SlimeNRF_ProMicro_Chrysalis_Tracker".into();
@@ -754,11 +761,15 @@ fn ci_container_hints_cannot_authorize_unknown_or_other_board_members() {
         state.apply_images(destination.clone(), vec![member]);
         if name == "SlimeNRF_ProMicro_Chrysalis_Tracker.hex" {
             assert_eq!(state.displayed_image(Mode::Esb).unwrap().name, name);
-            assert_eq!(validate_ota_image(&state.images[0], &tracker), Ok(()));
+            assert_eq!(
+                validate_ota_image(&state.images[0], &tracker, ConfirmationPolicy::Standard),
+                Ok(())
+            );
         } else {
             assert!(state.displayed_image(Mode::Esb).is_none(), "{name}");
             assert!(
-                validate_ota_image(&state.images[0], &tracker).is_err(),
+                validate_ota_image(&state.images[0], &tracker, ConfirmationPolicy::Standard)
+                    .is_err(),
                 "{name}"
             );
             if name.contains(" - Copy") {
@@ -768,7 +779,8 @@ fn ci_container_hints_cannot_authorize_unknown_or_other_board_members() {
                     "promicro_uf2/nrf52840/spi"
                 );
                 assert_eq!(
-                    validate_ota_image(&state.images[0], &tracker).unwrap_err(),
+                    validate_ota_image(&state.images[0], &tracker, ConfirmationPolicy::Standard)
+                        .unwrap_err(),
                     crate::i18n::tr("firmware.error.image_method_mismatch")
                 );
             }
@@ -874,6 +886,7 @@ fn current_fox_ci_advertisements_preserve_board_role_and_variant_filters() {
             &hints,
             std::iter::once(&target),
             true,
+            ConfirmationPolicy::Standard,
         ));
         assert!(firmware_filter_matches(
             &hints,
@@ -921,6 +934,7 @@ fn current_fox_ci_advertisements_preserve_board_role_and_variant_filters() {
             &hints,
             std::iter::once(&target),
             true,
+            ConfirmationPolicy::Standard,
         ));
         artifact.version.channel = SourceChannel::Release;
         assert!(artifact_firmware_hints(&catalog, &artifact).is_empty());
@@ -1001,6 +1015,7 @@ fn synthetic_fox_targets_enforce_method_and_role_admission() {
                     &hints,
                     std::iter::once(&target),
                     false,
+                    ConfirmationPolicy::Standard,
                 ),
                 expected,
                 "{name} in {method}"
@@ -1022,6 +1037,7 @@ fn synthetic_fox_targets_enforce_method_and_role_admission() {
                 &hints,
                 std::iter::once(&wrong_role),
                 false,
+                ConfirmationPolicy::Standard,
             ),
             "{name} with the wrong role"
         );
@@ -1034,6 +1050,7 @@ fn synthetic_fox_targets_enforce_method_and_role_admission() {
                 &hints,
                 std::iter::once(&target),
                 false,
+                ConfirmationPolicy::Standard,
             ),
             "{name} with MCUboot"
         );
@@ -1114,18 +1131,25 @@ fn current_fox_ci_members_are_independently_authorized_for_both_roles() {
             state.apply_images(destination.clone(), vec![member]);
             if name == expected_name {
                 assert_eq!(state.displayed_image(Mode::Esb).unwrap().name, name);
-                assert_eq!(validate_ota_image(&state.images[0], &target), Ok(()));
+                assert_eq!(
+                    validate_ota_image(&state.images[0], &target, ConfirmationPolicy::Standard),
+                    Ok(())
+                );
                 let mut wrong_role = target.clone();
                 wrong_role.id = if receiver {
                     0
                 } else {
                     crate::features::firmware::esb_ota::RECEIVER_ID
                 };
-                assert!(validate_ota_image(&state.images[0], &wrong_role).is_err());
+                assert!(
+                    validate_ota_image(&state.images[0], &wrong_role, ConfirmationPolicy::Standard)
+                        .is_err()
+                );
             } else {
                 assert!(state.displayed_image(Mode::Esb).is_none(), "{name}");
                 assert!(
-                    validate_ota_image(&state.images[0], &target).is_err(),
+                    validate_ota_image(&state.images[0], &target, ConfirmationPolicy::Standard)
+                        .is_err(),
                     "{name}"
                 );
             }
@@ -1652,4 +1676,33 @@ fn esb_online_artifact_search_preserves_filters_assignment_and_original_identity
     cx: &mut TestAppContext,
 ) {
     exercise_artifact_search(cx, Mode::Esb);
+}
+
+#[test]
+fn acquisition_policy_is_frozen_and_stale_results_cannot_outlive_a_setting_change() {
+    use crate::features::firmware::source::BootloaderNamePolicy;
+    let mut state = FlashState::from_confirmation_preference(true);
+    state.category = ImageCategory::Bootloader;
+    state.remote_category = ImageCategory::Bootloader;
+    state.channel = SourceChannel::BootloaderRelease;
+    let request = state.remote_request(Mode::Uf2);
+    assert_eq!(request.name_policy, BootloaderNamePolicy::AllowUnclassified);
+    assert!(state.accepts_remote(Mode::Uf2, &request));
+
+    state.set_confirmation_policy(false);
+    assert!(!state.accepts_remote(Mode::Uf2, &request));
+    let image = make_image(
+        "unclassified.uf2".into(),
+        vec![],
+        "fixture".into(),
+        "fixture".into(),
+        false,
+    );
+    state.apply_remote(Mode::Uf2, Payload::RemoteImages(request, vec![image]));
+    assert!(state.images.is_empty());
+    assert!(state.image.is_none());
+    assert_eq!(
+        state.remote_request(Mode::Uf2).name_policy,
+        BootloaderNamePolicy::CanonicalOnly,
+    );
 }

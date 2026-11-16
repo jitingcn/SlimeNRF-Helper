@@ -84,6 +84,14 @@ pub(super) fn make_image(
         Ok(parsed) => (parsed, None),
         Err(error) => (None, Some(error)),
     };
+    let (uf2_family, uf2_application_error) = if extension == "uf2" && validation_error.is_none() {
+        match firmware::validate_uf2_content(&bytes, Uf2ImagePurpose::Application) {
+            Ok(facts) => (Some(facts.expected_application_family_id), None),
+            Err(error) => (None, Some(error.to_string())),
+        }
+    } else {
+        (None, None)
+    };
     Image {
         name,
         bytes: bytes.into(),
@@ -93,6 +101,10 @@ pub(super) fn make_image(
         local,
         parsed,
         hints: Arc::from([]),
+        acquisition_policy: source::BootloaderNamePolicy::CanonicalOnly,
+        uf2_family,
+        uf2_application_error,
+        approval: None,
         validation_error,
     }
 }
@@ -151,8 +163,15 @@ pub(super) fn firmware_page_matches<'a>(
     hints: &[board_catalog::FirmwareHint],
     targets: impl Iterator<Item = &'a esb_ota::Target> + Clone,
     archive: bool,
+    policy: ConfirmationPolicy,
 ) -> bool {
-    let actual_category = image_category(name, hints);
+    let actual_category = if mode == Mode::Uf2 && policy == ConfirmationPolicy::Minimal {
+        // The selected purpose is validated against the bytes and every target;
+        // a conflicting filename is compatibility metadata, not proof of content.
+        category
+    } else {
+        image_category(name, hints)
+    };
     if actual_category
         != if mode == Mode::Uf2 {
             category
@@ -163,7 +182,7 @@ pub(super) fn firmware_page_matches<'a>(
         return false;
     }
     let variant = board_catalog::filename_variant(name);
-    if actual_category == ImageCategory::Application {
+    if actual_category == ImageCategory::Application && policy == ConfirmationPolicy::Standard {
         if !matches!(variant, "Standard" | "DataCollect CDC")
             || hints
                 .iter()
@@ -185,7 +204,10 @@ pub(super) fn firmware_page_matches<'a>(
         }
     }
     let lower = name.to_ascii_lowercase();
-    if actual_category == ImageCategory::Bootloader && lower.contains("datacollect") {
+    if policy == ConfirmationPolicy::Standard
+        && actual_category == ImageCategory::Bootloader
+        && lower.contains("datacollect")
+    {
         return false;
     }
     let file = if archive {
@@ -197,9 +219,10 @@ pub(super) fn firmware_page_matches<'a>(
     };
     let mcuboot = actual_category == ImageCategory::Application
         && (file.ends_with(".bin")
-            || file.ends_with("_update")
-            || file.contains("mcuboot")
-            || hints.iter().any(|hint| hint.mcuboot));
+            || (policy == ConfirmationPolicy::Standard
+                && (file.ends_with("_update")
+                    || file.contains("mcuboot")
+                    || hints.iter().any(|hint| hint.mcuboot))));
     let container =
         archive && !file.ends_with(".uf2") && !file.ends_with(".hex") && !file.ends_with(".bin");
     match mode {
@@ -207,7 +230,11 @@ pub(super) fn firmware_page_matches<'a>(
         Mode::OpenDfu => {
             !mcuboot && (file.ends_with(".hex") || file.ends_with(".zip") || container)
         }
-        Mode::Ble => !mcuboot && file.ends_with(".zip") && variant == "Standard",
+        Mode::Ble => {
+            !mcuboot
+                && file.ends_with(".zip")
+                && (policy == ConfirmationPolicy::Minimal || variant == "Standard")
+        }
         Mode::Esb => {
             if mcuboot && !(file.ends_with(".bin") || container) {
                 return false;
@@ -219,9 +246,13 @@ pub(super) fn firmware_page_matches<'a>(
             let compatible = targets.clone().any(|target| {
                 known = true;
                 ota_supported(target)
-                    && (target.info.bootloader == "mcuboot") == mcuboot
-                    && (variant != "DataCollect CDC" || target.id == esb_ota::RECEIVER_ID)
-                    && (hints.is_empty()
+                    && ((policy == ConfirmationPolicy::Minimal && container)
+                        || (target.info.bootloader == "mcuboot") == mcuboot)
+                    && (policy == ConfirmationPolicy::Minimal
+                        || variant != "DataCollect CDC"
+                        || target.id == esb_ota::RECEIVER_ID)
+                    && (policy == ConfirmationPolicy::Minimal
+                        || hints.is_empty()
                         || hints.iter().any(|hint| {
                             board_catalog::canonical_board(&hint.board_target)
                                 == board_catalog::canonical_board(&target.info.board_target)
@@ -255,6 +286,12 @@ pub(super) fn uf2_preset_matches(
 }
 
 impl Image {
+    pub(super) fn unclassified_bootloader_source(&self) -> bool {
+        !self.local
+            && self.acquisition_policy == source::BootloaderNamePolicy::AllowUnclassified
+            && !source::is_bootloader_update(self.name.rsplit('/').next().unwrap_or(&self.name))
+    }
+
     pub(super) fn configured_opendfu<'a>(
         &self,
         catalog: &'a board_catalog::Catalog,
@@ -375,6 +412,7 @@ impl Workbench {
         // if this file later fails validation.
         self.flash.review = None;
         self.flash.acknowledged = false;
+        self.flash.risk_acknowledged = false;
         self.flash.auto = false;
         self.flash.auto_requested = false;
         self.start_flash_job_for(request.mode, ActivityKind::Preparation, move |cancel, _| {
@@ -415,6 +453,7 @@ impl Workbench {
             hints,
             targets,
             archive,
+            ConfirmationPolicy::from_preference(self.preferences.minimal_firmware_confirmation),
         )
     }
 

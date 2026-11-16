@@ -718,6 +718,7 @@ fn tab_and_reverse_tab_reveal_real_controls_after_section_and_page_jumps(cx: &mu
         "settings-accent-sakura",
         "manage-devices",
         "advanced-features",
+        "settings-minimal-firmware-confirmation",
         "settings-repository-application",
         "settings-repository-receiver",
         "settings-repository-tracker",
@@ -733,6 +734,7 @@ fn tab_and_reverse_tab_reveal_real_controls_after_section_and_page_jumps(cx: &mu
         "settings-repository-tracker",
         "settings-repository-receiver",
         "settings-repository-application",
+        "settings-minimal-firmware-confirmation",
         "advanced-features",
         "manage-devices",
         "settings-accent-sakura",
@@ -971,6 +973,12 @@ fn real_preference_controls_apply_immediately_and_save_only_to_the_private_store
     let runtime = crate::app_runtime::AppRuntime::new().unwrap();
     let _ui_session = crate::test_support::UiTestSession::new(cx);
     let fixture = fixture_with_executor(cx, 1100., 760., runtime.executor(), None);
+    let preference_path = fixture.directory.path().join("preferences.json");
+    std::fs::write(
+        &preference_path,
+        br#"{"language":"en","future":{"nested":[1,{"keep":true}]}}"#,
+    )
+    .unwrap();
     cx.update_window(fixture.handle, |_, window, cx| {
         window.render_frame(cx);
         window.click("nav-settings", cx);
@@ -984,6 +992,91 @@ fn real_preference_controls_apply_immediately_and_save_only_to_the_private_store
         );
     })
     .unwrap();
+    cx.update_window(fixture.handle, |_, window, cx| {
+        assert!(!fixture.workbench.read(cx).preferences.advanced_features);
+        assert!(
+            !fixture
+                .workbench
+                .read(cx)
+                .preferences
+                .minimal_firmware_confirmation
+        );
+        window.click("settings-search", cx);
+        window.input("minimal firmware confirmation", cx);
+        assert!(
+            window
+                .find("settings-minimal-firmware-confirmation")
+                .visible()
+        );
+        assert!(window.try_find("advanced-features").is_none());
+        window.click("settings-section-devices", cx);
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let id = "settings-minimal-firmware-confirmation";
+        assert_eq!(window.find(id).checked(), Some(false));
+        window.click(id, cx);
+        assert!(
+            fixture
+                .workbench
+                .read(cx)
+                .preferences
+                .minimal_firmware_confirmation
+        );
+        assert!(!fixture.workbench.read(cx).preferences.advanced_features);
+        assert_eq!(window.find(id).checked(), Some(true));
+        window.click("settings-search", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let saved: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&preference_path).unwrap()).unwrap();
+    assert_eq!(saved["minimal_firmware_confirmation"], true);
+    assert_eq!(saved["future"]["nested"][1]["keep"], true);
+    tab_to_setting(
+        cx,
+        &fixture,
+        "settings-minimal-firmware-confirmation",
+        "tab",
+    );
+    assert_setting_focus_visible(cx, &fixture, "settings-minimal-firmware-confirmation");
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let id = "settings-minimal-firmware-confirmation";
+        window.press("space", cx);
+        assert!(
+            !fixture
+                .workbench
+                .read(cx)
+                .preferences
+                .minimal_firmware_confirmation
+        );
+        assert_eq!(window.find(id).checked(), Some(false));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let saved: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&preference_path).unwrap()).unwrap();
+    assert_eq!(saved["minimal_firmware_confirmation"], false);
+    assert_eq!(saved["future"]["nested"][1]["keep"], true);
+    cx.update_window(fixture.handle, |_, window, cx| {
+        let id = "settings-minimal-firmware-confirmation";
+        assert_eq!(window.find(id).focused(), Some(true));
+        window.press("space", cx);
+        assert!(
+            fixture
+                .workbench
+                .read(cx)
+                .preferences
+                .minimal_firmware_confirmation
+        );
+        assert_eq!(window.find(id).checked(), Some(true));
+        window.click("settings-search", cx);
+        window.press("secondary-a", cx);
+        window.press("backspace", cx);
+    })
+    .unwrap();
+    settle_settings(cx, &fixture);
     for language in [Language::SimplifiedChinese, Language::English] {
         cx.update_window(fixture.handle, |_, window, cx| {
             window.click("settings-search", cx);
@@ -1032,6 +1125,18 @@ fn real_preference_controls_apply_immediately_and_save_only_to_the_private_store
             }
         })
         .unwrap();
+        if language == Language::SimplifiedChinese {
+            cx.update_window(fixture.handle, |_, window, cx| {
+                window.click("settings-search", cx);
+                window.press("secondary-a", cx);
+                window.input("最小固件确认", cx);
+                let control = window.find("settings-minimal-firmware-confirmation");
+                assert!(control.visible());
+                assert_eq!(control.label(), Some("最小固件确认"));
+                assert_eq!(control.checked(), Some(true));
+            })
+            .unwrap();
+        }
         cx.update_window(fixture.handle, |_, window, cx| {
             window.click("settings-search", cx);
             window.press("secondary-a", cx);
@@ -1094,10 +1199,12 @@ fn real_preference_controls_apply_immediately_and_save_only_to_the_private_store
     })
     .unwrap();
     cx.run_until_parked();
-    let stored: crate::features::settings::store::Preferences = serde_json::from_slice(
-        &std::fs::read(fixture.directory.path().join("preferences.json")).unwrap(),
-    )
-    .unwrap();
+    let bytes = std::fs::read(&preference_path).unwrap();
+    let stored: crate::features::settings::store::Preferences =
+        serde_json::from_slice(&bytes).unwrap();
+    let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(document["minimal_firmware_confirmation"], true);
+    assert_eq!(document["future"]["nested"][1]["keep"], true);
     cx.update(|cx| assert_eq!(fixture.workbench.read(cx).preferences, stored));
 }
 
@@ -1381,6 +1488,8 @@ fn explicit_technical_keywords_find_the_corresponding_existing_controls() {
         ("sakura", Setting::Accent),
         ("sha-256", Setting::Advanced),
         ("usb", Setting::Registry),
+        ("risk", Setting::FirmwareConfirmation),
+        ("最小固件确认", Setting::FirmwareConfirmation),
     ] {
         let found: Vec<_> = Setting::ALL
             .into_iter()

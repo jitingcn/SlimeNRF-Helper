@@ -1,7 +1,7 @@
 use super::support::{local_image, target};
 use crate::application::flash::{
-    ImageCategory, Mode, firmware_filter_matches, firmware_page_matches, ota_assignment_key,
-    uf2_preset_matches, validate_ota_image,
+    ConfirmationPolicy, ImageCategory, Mode, firmware_filter_matches, firmware_page_matches,
+    ota_assignment_key, uf2_preset_matches, validate_ota_image,
 };
 use crate::features::firmware::esb_ota::RECEIVER_ID;
 
@@ -97,8 +97,15 @@ fn legacy_firmware_field_exposes_bootloader_upgrade_only_in_bootloader_category(
             .filter(|(_, path, _)| {
                 let name = path.filename().unwrap();
                 let hints = catalog.match_filename(name);
-                firmware_page_matches(Mode::Uf2, category, name, &hints, std::iter::empty(), false)
-                    && uf2_preset_matches(preset, &hints)
+                firmware_page_matches(
+                    Mode::Uf2,
+                    category,
+                    name,
+                    &hints,
+                    std::iter::empty(),
+                    false,
+                    ConfirmationPolicy::Standard,
+                ) && uf2_preset_matches(preset, &hints)
             })
             .count()
     };
@@ -119,6 +126,7 @@ fn legacy_firmware_field_exposes_bootloader_upgrade_only_in_bootloader_category(
         &hints,
         std::iter::empty(),
         false,
+        ConfirmationPolicy::Standard,
     ));
 }
 
@@ -144,7 +152,8 @@ fn uf2_bootloader_category_keeps_board_scope_and_is_forbidden_in_ota() {
         "maintenance.uf2",
         &hints,
         std::iter::empty(),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
     assert!(!firmware_page_matches(
         Mode::Uf2,
@@ -152,7 +161,8 @@ fn uf2_bootloader_category_keeps_board_scope_and_is_forbidden_in_ota() {
         "maintenance.uf2",
         &hints,
         std::iter::empty(),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
     assert!(!firmware_page_matches(
         Mode::Uf2,
@@ -160,7 +170,8 @@ fn uf2_bootloader_category_keeps_board_scope_and_is_forbidden_in_ota() {
         "application.uf2",
         &[],
         std::iter::empty(),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
     for mode in [Mode::Esb, Mode::Ble, Mode::OpenDfu] {
         assert!(!firmware_page_matches(
@@ -169,12 +180,27 @@ fn uf2_bootloader_category_keeps_board_scope_and_is_forbidden_in_ota() {
             "maintenance.uf2",
             &hints,
             std::iter::empty(),
-            false
+            false,
+            ConfirmationPolicy::Standard
         ));
     }
     let device = target("a", 0, "board");
-    assert!(validate_ota_image(&local_image("board.hex"), &device).is_ok());
-    assert!(validate_ota_image(&local_image("update-board.hex"), &device).is_err());
+    assert!(
+        validate_ota_image(
+            &local_image("board.hex"),
+            &device,
+            ConfirmationPolicy::Standard
+        )
+        .is_ok()
+    );
+    assert!(
+        validate_ota_image(
+            &local_image("update-board.hex"),
+            &device,
+            ConfirmationPolicy::Standard
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -210,7 +236,8 @@ fn bootloader_versions_keep_exact_board_and_nosd_profile_filters() {
             &name,
             &hints,
             std::iter::empty(),
-            false
+            false,
+            ConfirmationPolicy::Standard
         ));
         assert!(!firmware_page_matches(
             Mode::Esb,
@@ -218,7 +245,8 @@ fn bootloader_versions_keep_exact_board_and_nosd_profile_filters() {
             &name,
             &hints,
             std::iter::empty(),
-            false
+            false,
+            ConfirmationPolicy::Standard
         ));
     }
     for name in [
@@ -260,7 +288,8 @@ fn application_format_filter_uses_matching_ota_group_not_global_bootloader() {
             "signed_update.bin",
             &hints,
             std::iter::empty(),
-            false
+            false,
+            ConfirmationPolicy::Standard
         ));
     }
     assert!(!firmware_page_matches(
@@ -269,7 +298,8 @@ fn application_format_filter_uses_matching_ota_group_not_global_bootloader() {
         "signed_update.bin",
         &hints,
         std::iter::once(&ordinary),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
     assert!(firmware_page_matches(
         Mode::Esb,
@@ -277,7 +307,8 @@ fn application_format_filter_uses_matching_ota_group_not_global_bootloader() {
         "signed_update.bin",
         &hints,
         [&ordinary, &mcuboot].into_iter(),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
     let mut wrong = hints.clone();
     wrong[0].board_target = "plain".into();
@@ -287,7 +318,8 @@ fn application_format_filter_uses_matching_ota_group_not_global_bootloader() {
         "plain_update.bin",
         &wrong,
         [&ordinary, &mcuboot].into_iter(),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
     assert!(!firmware_page_matches(
         Mode::Uf2,
@@ -295,7 +327,8 @@ fn application_format_filter_uses_matching_ota_group_not_global_bootloader() {
         "signed_update.bin.zip",
         &hints,
         std::iter::once(&mcuboot),
-        true
+        true,
+        ConfirmationPolicy::Standard
     ));
     assert!(firmware_page_matches(
         Mode::Esb,
@@ -303,7 +336,8 @@ fn application_format_filter_uses_matching_ota_group_not_global_bootloader() {
         "signed_update.bin.zip",
         &hints,
         std::iter::once(&mcuboot),
-        true
+        true,
+        ConfirmationPolicy::Standard
     ));
     let mut same_board = ordinary.clone();
     same_board.info.bootloader = "mcuboot".into();
@@ -317,7 +351,8 @@ fn application_format_filter_uses_matching_ota_group_not_global_bootloader() {
         "board.hex",
         &[],
         std::iter::empty(),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
     assert!(firmware_page_matches(
         Mode::Uf2,
@@ -325,7 +360,8 @@ fn application_format_filter_uses_matching_ota_group_not_global_bootloader() {
         "board.uf2",
         &[],
         std::iter::empty(),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
 }
 
@@ -370,6 +406,7 @@ fn copied_archive_labels_preserve_format_and_ota_group_filters() {
                     &[],
                     std::iter::empty(),
                     true,
+                    ConfirmationPolicy::Standard,
                 ),
                 expected,
                 "{name}"
@@ -384,6 +421,7 @@ fn copied_archive_labels_preserve_format_and_ota_group_filters() {
                     &[],
                     std::iter::once(device),
                     true,
+                    ConfirmationPolicy::Standard,
                 ),
                 expected,
                 "{name}, bootloader {}",
@@ -400,6 +438,7 @@ fn copied_archive_labels_preserve_format_and_ota_group_filters() {
             &[],
             std::iter::once(&signed),
             false,
+            ConfirmationPolicy::Standard,
         ));
         assert!(!firmware_page_matches(
             Mode::Esb,
@@ -408,6 +447,7 @@ fn copied_archive_labels_preserve_format_and_ota_group_filters() {
             &[],
             std::iter::once(&ordinary),
             false,
+            ConfirmationPolicy::Standard,
         ));
     }
     assert!(!firmware_page_matches(
@@ -417,6 +457,7 @@ fn copied_archive_labels_preserve_format_and_ota_group_filters() {
         &[],
         std::iter::once(&signed),
         false,
+        ConfirmationPolicy::Standard,
     ));
 }
 
@@ -447,6 +488,7 @@ fn copied_archive_labels_keep_cdc_role_and_bootloader_restrictions() {
                 &hints,
                 std::iter::once(&receiver),
                 true,
+                ConfirmationPolicy::Standard,
             ),
             "{name}"
         );
@@ -458,6 +500,7 @@ fn copied_archive_labels_keep_cdc_role_and_bootloader_restrictions() {
                 &hints,
                 std::iter::once(&tracker),
                 true,
+                ConfirmationPolicy::Standard,
             ),
             "{name}"
         );
@@ -477,6 +520,7 @@ fn copied_archive_labels_keep_cdc_role_and_bootloader_restrictions() {
                     &[],
                     std::iter::once(&receiver),
                     true,
+                    ConfirmationPolicy::Standard,
                 ),
                 "{name}"
             );
@@ -494,6 +538,7 @@ fn copied_archive_labels_keep_cdc_role_and_bootloader_restrictions() {
                 &[],
                 std::iter::empty(),
                 true,
+                ConfirmationPolicy::Standard,
             ),
             "{name}"
         );
@@ -506,6 +551,7 @@ fn copied_archive_labels_keep_cdc_role_and_bootloader_restrictions() {
                     &[],
                     std::iter::once(&receiver),
                     true,
+                    ConfirmationPolicy::Standard,
                 ),
                 "{name}"
             );
@@ -531,7 +577,8 @@ fn only_receiver_cdc_is_an_available_datacollect_application() {
         "board_datacollect_cdc.uf2",
         &hints,
         std::iter::once(&receiver),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
     assert!(!firmware_page_matches(
         Mode::Esb,
@@ -539,7 +586,8 @@ fn only_receiver_cdc_is_an_available_datacollect_application() {
         "board_datacollect_cdc.uf2",
         &hints,
         std::iter::once(&tracker),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
     for name in ["board_datacollect_hid.uf2", "board_datacollect.uf2"] {
         assert!(!firmware_page_matches(
@@ -548,7 +596,8 @@ fn only_receiver_cdc_is_an_available_datacollect_application() {
             name,
             &[],
             std::iter::empty(),
-            false
+            false,
+            ConfirmationPolicy::Standard
         ));
         assert!(!firmware_page_matches(
             Mode::Esb,
@@ -556,7 +605,8 @@ fn only_receiver_cdc_is_an_available_datacollect_application() {
             name,
             &[],
             std::iter::once(&receiver),
-            false
+            false,
+            ConfirmationPolicy::Standard
         ));
     }
     assert!(!firmware_page_matches(
@@ -565,7 +615,8 @@ fn only_receiver_cdc_is_an_available_datacollect_application() {
         "update-board_datacollect_cdc.uf2",
         &[],
         std::iter::empty(),
-        false
+        false,
+        ConfirmationPolicy::Standard
     ));
 }
 
@@ -578,6 +629,7 @@ fn bootloader_name_does_not_confuse_application_image_format() {
         &[],
         std::iter::empty(),
         false,
+        ConfirmationPolicy::Standard,
     ));
     let mut device = target("a", 0, "board");
     device.info.bootloader = "mcuboot".into();
@@ -588,5 +640,6 @@ fn bootloader_name_does_not_confuse_application_image_format() {
         &[],
         std::iter::once(&device),
         false,
+        ConfirmationPolicy::Standard,
     ));
 }

@@ -69,7 +69,7 @@ pub(super) struct SettingsUiState {
     anchors: [ScrollAnchor; 4],
     app_update_scroll_anchor: ScrollAnchor,
     layout: Entity<ResizableState>,
-    control_focus: [Option<ControlFocus>; 9],
+    control_focus: [Option<ControlFocus>; 10],
     repository_focus: [ControlFocus; 4],
     app_update_restart_focus: FocusHandle,
     _search_subscription: Subscription,
@@ -135,6 +135,7 @@ enum Setting {
     Accent,
     Registry,
     Advanced,
+    FirmwareConfirmation,
     Version,
     Repositories,
     Notices,
@@ -142,12 +143,13 @@ enum Setting {
 }
 
 impl Setting {
-    const ALL: [Self; 9] = [
+    const ALL: [Self; 10] = [
         Self::Language,
         Self::Appearance,
         Self::Accent,
         Self::Registry,
         Self::Advanced,
+        Self::FirmwareConfirmation,
         Self::Version,
         Self::Repositories,
         Self::Notices,
@@ -158,7 +160,7 @@ impl Setting {
         match self {
             Self::Language => Section::General,
             Self::Appearance | Self::Accent => Section::Appearance,
-            Self::Registry | Self::Advanced => Section::Devices,
+            Self::Registry | Self::Advanced | Self::FirmwareConfirmation => Section::Devices,
             Self::Version | Self::Repositories | Self::Notices | Self::AppUpdate => Section::About,
         }
     }
@@ -170,6 +172,7 @@ impl Setting {
             Self::Accent => "app.settings.accent.title",
             Self::Registry => "devices.registry.title",
             Self::Advanced => "app.settings.advanced.title",
+            Self::FirmwareConfirmation => "app.settings.firmware_confirmation.title",
             Self::Version => "app.settings.version.title",
             Self::Repositories => "app.settings.repositories.title",
             Self::Notices => "app.settings.notices.title",
@@ -185,6 +188,7 @@ impl Setting {
             Self::Registry => "devices.registry.hint",
             Self::Advanced if locked => "app.settings.advanced.locked_hint",
             Self::Advanced => "app.settings.advanced.hint",
+            Self::FirmwareConfirmation => "app.settings.firmware_confirmation.hint",
             Self::Version => "app.settings.version.hint",
             Self::Repositories => "app.settings.repositories.hint",
             Self::Notices => "app.settings.notices.hint",
@@ -208,6 +212,16 @@ impl Setting {
                 "bootloader",
                 "高级",
                 "蓝牙",
+            ],
+            Self::FirmwareConfirmation => &[
+                "firmware",
+                "confirmation",
+                "minimal",
+                "risk",
+                "固件",
+                "确认",
+                "最小固件确认",
+                "风险",
             ],
             Self::Version => &["version", "build", "slimenrf", "版本"],
             Self::Repositories => &[
@@ -389,6 +403,19 @@ fn setting_row(
 }
 
 impl Workbench {
+    pub(super) fn set_minimal_firmware_confirmation(
+        &mut self,
+        enabled: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if self.shutting_down || self.preferences.minimal_firmware_confirmation == enabled {
+            return;
+        }
+        self.preferences.minimal_firmware_confirmation = enabled;
+        self.flash.set_confirmation_policy(enabled);
+        self.save_preferences(cx);
+    }
+
     pub(super) fn focus_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.registry_is_open() && !self.app_update_navigation_locked() {
             self.open_device_registry(window, cx);
@@ -786,6 +813,13 @@ impl Workbench {
                     let mut preferences = this.preferences.clone();
                     preferences.advanced_features = *enabled;
                     this.update_preferences(preferences, window, cx);
+                }))
+                .into_any_element(),
+            Setting::FirmwareConfirmation => Switch::new("settings-minimal-firmware-confirmation")
+                .accessibility_label(tr("app.settings.firmware_confirmation.title"))
+                .checked(self.preferences.minimal_firmware_confirmation)
+                .on_change(cx.listener(|this, enabled, _, cx| {
+                    this.set_minimal_firmware_confirmation(*enabled, cx);
                 }))
                 .into_any_element(),
             Setting::Version => div()

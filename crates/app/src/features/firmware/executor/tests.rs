@@ -59,6 +59,7 @@ fn execute_uf2_fixture(
             FileImage {
                 name: source_name.into(),
                 bytes: Arc::clone(bytes),
+                approval: Some(CompatibilityApproval::Standard),
             },
             Uf2ImagePurpose::Application,
         ),
@@ -189,6 +190,11 @@ fn groups(devices: &[Target]) -> Vec<EsbGroup> {
         .map(|target| EsbGroup {
             targets: vec![target.clone()],
             image: Some(image.clone()),
+            file: FileImage {
+                name: "firmware.hex".into(),
+                bytes: Arc::from(b":0410000001020304E2\n:00000001FF\n".as_slice()),
+                approval: Some(CompatibilityApproval::Standard),
+            },
         })
         .collect()
 }
@@ -360,6 +366,7 @@ fn cancelled_async_ble_sequence_reports_each_frozen_device_without_hardware() {
     let image = FileImage {
         name: "legacy.zip".into(),
         bytes: Arc::clone(&bytes),
+        approval: Some(CompatibilityApproval::Standard),
     };
     let cancel = AtomicBool::new(true);
     let mut progress = |_| panic!("cancelled operation must not reach hardware discovery");
@@ -423,6 +430,7 @@ fn legacy_ble_image() -> FileImage {
     FileImage {
         name: "legacy.zip".into(),
         bytes: Arc::from(archive.finish().unwrap().into_inner()),
+        approval: Some(CompatibilityApproval::Standard),
     }
 }
 
@@ -562,6 +570,7 @@ fn ble_package_failure_preserves_every_frozen_target_without_starting_transfers(
             FileImage {
                 name: "broken.zip".into(),
                 bytes: Arc::from([1, 2, 3, 4]),
+                approval: Some(CompatibilityApproval::Standard),
             },
             &AtomicBool::new(false),
             &mut |_| panic!("invalid package must not reach device discovery"),

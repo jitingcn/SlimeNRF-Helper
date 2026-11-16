@@ -103,7 +103,7 @@ impl FlashState {
         }
     }
 
-    fn clear_remote(&mut self) {
+    pub(super) fn clear_remote(&mut self) {
         self.remote_generation += 1;
         self.versions.clear();
         self.artifacts.clear();
@@ -157,6 +157,12 @@ impl FlashState {
         self.clear_remote();
         self.variant_filter = None;
     }
+    fn bootloader_name_policy(&self) -> source::BootloaderNamePolicy {
+        match self.confirmation_policy {
+            ConfirmationPolicy::Standard => source::BootloaderNamePolicy::CanonicalOnly,
+            ConfirmationPolicy::Minimal => source::BootloaderNamePolicy::AllowUnclassified,
+        }
+    }
 
     fn remote_request(&self, mode: Mode) -> RemoteRequest {
         RemoteRequest {
@@ -164,6 +170,7 @@ impl FlashState {
             destination: self.remote_destination.clone(),
             category: self.remote_category,
             channel: self.channel,
+            name_policy: self.bootloader_name_policy(),
             generation: self.remote_generation,
             version: self.selected_version,
         }
@@ -176,6 +183,7 @@ impl FlashState {
             && request.destination == self.remote_destination
             && request.category == self.remote_category
             && request.channel == self.channel
+            && request.name_policy == self.bootloader_name_policy()
             && request.generation == self.remote_generation
             && request.version == self.selected_version
     }
@@ -345,6 +353,7 @@ impl Workbench {
                                 &client,
                                 sources.as_ref(),
                                 channel,
+                                request.name_policy,
                                 &cancel,
                                 &mut |value| reporter.emit(value),
                             )
@@ -377,6 +386,7 @@ impl Workbench {
                                 &client,
                                 sources.as_ref(),
                                 channel,
+                                request.name_policy,
                                 &cancel,
                                 &mut |value| reporter.emit(value),
                             )
@@ -476,6 +486,7 @@ impl Workbench {
                         &client,
                         sources.as_ref(),
                         &version,
+                        request.name_policy,
                         &cancel,
                         &mut |value| reporter.emit(value),
                     )
@@ -593,23 +604,27 @@ impl Workbench {
                         &client,
                         sources.as_ref(),
                         &artifact,
+                        request.name_policy,
                         &cancel,
                         &mut |value| reporter.emit(value),
                     )
                     .await?;
                     // Firmware decoding and image construction must not stall the
                     // shared network/BLE driver; retain its join through cancel.
+                    let name_policy = request.name_policy;
                     let images = tokio::task::spawn_blocking(move || {
                         files
                             .into_iter()
                             .map(|file| {
-                                make_image(
+                                let mut image = make_image(
                                     file.name,
                                     file.bytes,
                                     file.provenance,
                                     file.sha256,
                                     false,
-                                )
+                                );
+                                image.acquisition_policy = name_policy;
+                                image
                             })
                             .collect()
                     })

@@ -1,6 +1,7 @@
 use super::support::{local_image, target};
 use crate::application::flash::{
-    FlashState, OtaQueries, ota_assignment_key, ota_target_key, plan_ota_groups, validate_ota_image,
+    ConfirmationPolicy, FlashState, OtaQueries, ota_assignment_key, ota_target_key,
+    plan_ota_groups, validate_ota_image,
 };
 use crate::features::firmware::esb_ota::RECEIVER_ID;
 use slimenrf_firmware_image::image::{Nrf52Chip, Uf2ImagePurpose};
@@ -103,15 +104,15 @@ fn every_selected_board_and_role_requires_explicit_assignment() {
 fn assigned_images_still_enforce_mcuboot_protocol_and_known_board() {
     let mut device = target("a", 0, "board");
     let mut image = local_image("image.hex");
-    assert!(validate_ota_image(&image, &device).is_ok());
+    assert!(validate_ota_image(&image, &device, ConfirmationPolicy::Standard).is_ok());
     device.info.bootloader = "mcuboot".into();
-    assert!(validate_ota_image(&image, &device).is_err());
+    assert!(validate_ota_image(&image, &device, ConfirmationPolicy::Standard).is_err());
     device.info.bootloader = "none".into();
     device.info.protocol_version = 2;
-    assert!(validate_ota_image(&image, &device).is_err());
+    assert!(validate_ota_image(&image, &device, ConfirmationPolicy::Standard).is_err());
     device.info.protocol_version = 1;
     image.local = false;
-    assert!(validate_ota_image(&image, &device).is_err());
+    assert!(validate_ota_image(&image, &device, ConfirmationPolicy::Standard).is_err());
     image.local = true;
     image.hints = vec![crate::features::firmware::board_catalog::FirmwareHint {
         board_target: "another-board".into(),
@@ -121,7 +122,7 @@ fn assigned_images_still_enforce_mcuboot_protocol_and_known_board() {
         bootloader: false,
     }]
     .into();
-    assert!(validate_ota_image(&image, &device).is_err());
+    assert!(validate_ota_image(&image, &device, ConfirmationPolicy::Standard).is_err());
 }
 
 #[test]
@@ -285,7 +286,9 @@ fn copied_uf2_image(
 #[test]
 fn copied_uf2_names_freeze_purpose_volume_path_and_shared_payload() {
     use crate::application::flash::{Action, ImageCategory, planning::plan_uf2_action};
-    use crate::features::firmware::executor::{ExecutionRequest, UpdateRequest};
+    use crate::features::firmware::executor::{
+        CompatibilityApproval, ExecutionRequest, UpdateRequest,
+    };
 
     let catalog = copied_uf2_catalog();
     for (name, bootloader, expected) in [
@@ -331,6 +334,7 @@ fn copied_uf2_names_freeze_purpose_volume_path_and_shared_payload() {
             },
             vec![volume],
             image,
+            crate::application::flash::ConfirmationPolicy::Standard,
         )
         .unwrap_or_else(|error| panic!("{name}: {error}"));
         let Action::Uf2(_, reviewed_image, purpose) = &action else {
@@ -365,6 +369,7 @@ fn copied_uf2_names_freeze_purpose_volume_path_and_shared_payload() {
         assert_eq!(volumes[0].mount, mount);
         assert_eq!(image.name, name);
         assert!(Arc::ptr_eq(&image.bytes, &bytes));
+        assert_eq!(image.approval, Some(CompatibilityApproval::Standard));
 
         if bootloader && name.starts_with("out/") {
             use crate::features::firmware::executor::{ResultIdentity, UpdateCompletion, execute};
@@ -431,6 +436,7 @@ fn copied_known_uf2_names_still_reject_same_mcu_wrong_board() {
                 },
                 vec![volume],
                 image,
+                crate::application::flash::ConfirmationPolicy::Standard,
             )
             .err()
             .expect("a copied filename must not bypass a known board conflict");
@@ -471,9 +477,15 @@ fn copied_uf2_names_do_not_bypass_content_or_mcu_validation() {
         let image = copied_uf2_image(&catalog, name, payload_is_bootloader, false);
         assert!(!image.hints.is_empty(), "catalog must identify {name}");
         let (_directory, volume) = uf2_volume(board);
-        let error = plan_uf2_action(Some(&catalog), category, vec![volume], image)
-            .err()
-            .expect("filename recognition must not authorize incompatible content");
+        let error = plan_uf2_action(
+            Some(&catalog),
+            category,
+            vec![volume],
+            image,
+            crate::application::flash::ConfirmationPolicy::Standard,
+        )
+        .err()
+        .expect("filename recognition must not authorize incompatible content");
         assert!(error.contains(diagnostic), "{name}: {error}");
     }
 }
@@ -507,9 +519,15 @@ fn copied_unknown_remote_profiles_and_bootloaders_remain_blocked() {
         let image = copied_uf2_image(&catalog, name, bootloader, false);
         assert!(image.hints.is_empty(), "{name} must stay unidentified");
         let (_directory, volume) = uf2_volume("known");
-        let error = plan_uf2_action(Some(&catalog), category, vec![volume], image)
-            .err()
-            .expect("unknown remote firmware must not be admitted");
+        let error = plan_uf2_action(
+            Some(&catalog),
+            category,
+            vec![volume],
+            image,
+            crate::application::flash::ConfirmationPolicy::Standard,
+        )
+        .err()
+        .expect("unknown remote firmware must not be admitted");
         assert_eq!(error, crate::i18n::tr(error_key), "{name}");
     }
 
@@ -522,6 +540,7 @@ fn copied_unknown_remote_profiles_and_bootloaders_remain_blocked() {
         ImageCategory::Application,
         vec![volume],
         image,
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .err()
     .expect("UF2 must reject the unsupported DataCollect HID profile");
@@ -546,6 +565,7 @@ fn unhinted_local_bootloader_still_requires_known_volume_preset_and_mcu() {
             ImageCategory::Bootloader,
             vec![volume],
             image.clone(),
+            crate::application::flash::ConfirmationPolicy::Standard,
         )
         .err()
         .expect("unidentified bootloader MCU must not be admitted");
@@ -556,9 +576,15 @@ fn unhinted_local_bootloader_still_requires_known_volume_preset_and_mcu() {
         );
     }
     let (_directory, volume) = uf2_volume("known");
-    let error = plan_uf2_action(None, ImageCategory::Bootloader, vec![volume], image)
-        .err()
-        .expect("bootloader authorization requires a catalog preset");
+    let error = plan_uf2_action(
+        None,
+        ImageCategory::Bootloader,
+        vec![volume],
+        image,
+        crate::application::flash::ConfirmationPolicy::Standard,
+    )
+    .err()
+    .expect("bootloader authorization requires a catalog preset");
     assert_eq!(
         error,
         crate::i18n::tr("firmware.error.bootloader_identity_required")
@@ -582,6 +608,7 @@ fn local_bootloader_with_known_hints_still_rejects_board_mismatch() {
         ImageCategory::Bootloader,
         vec![volume],
         image,
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .err()
     .expect("known conflicting bootloader hints must not be bypassed");
@@ -606,6 +633,7 @@ fn unhinted_remote_bootloader_is_not_admitted_for_known_volume() {
         ImageCategory::Bootloader,
         vec![volume],
         image,
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .err()
     .expect("remote bootloaders require a known board hint");
@@ -630,6 +658,7 @@ fn shared_bootloader_image_cannot_mix_configured_chips() {
         ImageCategory::Bootloader,
         vec![known, other],
         image,
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .err()
     .expect("one frozen bootloader purpose cannot cover different MCUs");
@@ -655,6 +684,7 @@ fn catalog_classified_nonstandard_bootloader_freezes_purpose_and_shared_bytes_in
         ImageCategory::Bootloader,
         vec![volume],
         image,
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .unwrap();
     assert!(matches!(&action, Action::Uf2(_, _, purpose) if *purpose == expected));
@@ -688,6 +718,7 @@ fn unhinted_local_bootloader_freezes_purpose_shared_bytes_and_volume_identity_in
         ImageCategory::Bootloader,
         vec![volume],
         image,
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .unwrap();
     assert!(matches!(&action, Action::Uf2(_, _, purpose) if *purpose == expected));
@@ -718,6 +749,7 @@ fn unhinted_local_bootloader_still_validates_payload_against_configured_mcu() {
         ImageCategory::Bootloader,
         vec![volume],
         image,
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .err()
     .expect("nRF52840 content must not be authorized by an nRF52833 preset");
@@ -741,6 +773,7 @@ fn unhinted_local_bootloader_review_still_rejects_application_payload() {
         ImageCategory::Bootloader,
         vec![volume],
         image,
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .err()
     .expect("an unknown local filename cannot turn application bytes into a bootloader");
@@ -758,6 +791,7 @@ fn reviewed_local_application_keeps_unknown_board_bypass_but_validates_every_vol
         ImageCategory::Application,
         vec![volume.clone()],
         image.clone(),
+        crate::application::flash::ConfirmationPolicy::Standard,
     )
     .unwrap();
     assert!(matches!(
@@ -779,6 +813,7 @@ fn reviewed_local_application_keeps_unknown_board_bypass_but_validates_every_vol
             ImageCategory::Application,
             vec![volume.clone()],
             hinted,
+            crate::application::flash::ConfirmationPolicy::Standard,
         )
         .is_ok()
     );
@@ -790,6 +825,7 @@ fn reviewed_local_application_keeps_unknown_board_bypass_but_validates_every_vol
             ImageCategory::Application,
             vec![volume.clone()],
             remote,
+            crate::application::flash::ConfirmationPolicy::Standard,
         )
         .is_err()
     );
@@ -800,7 +836,389 @@ fn reviewed_local_application_keeps_unknown_board_bypass_but_validates_every_vol
             ImageCategory::Application,
             vec![volume, other],
             image,
+            crate::application::flash::ConfirmationPolicy::Standard,
         )
         .is_err()
     );
+}
+
+#[test]
+fn optional_policy_distinguishes_matched_unknown_and_conflicting_uf2_without_authorizing_io() {
+    use crate::application::flash::{
+        Compatibility, ConfirmationPolicy, ImageCategory,
+        planning::{action_compatibility, plan_uf2_action},
+    };
+    use crate::features::firmware::{
+        board_catalog::{EsbOtaKind, FirmwareHint, FlashTarget},
+        executor::{self, ExecutionRequest},
+    };
+    use std::sync::atomic::AtomicBool;
+
+    let mut catalog = uf2_catalog();
+    catalog
+        .board_targets
+        .get_mut("known")
+        .unwrap()
+        .targets
+        .push(FlashTarget {
+            name: Some("known".into()),
+            esb_ota_kind: Some(EsbOtaKind::Tracker),
+            ..FlashTarget::default()
+        });
+    let (_directory, volume) = uf2_volume("known");
+    let mut image = uf2_test_image(false);
+    image.name = "known.uf2".into();
+    image.hints = vec![FirmwareHint {
+        board_target: "known".into(),
+        kind: Some(EsbOtaKind::Tracker),
+        variant: "Standard".into(),
+        mcuboot: false,
+        bootloader: false,
+    }]
+    .into();
+
+    let matched = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Application,
+        vec![volume.clone()],
+        image.clone(),
+        ConfirmationPolicy::Minimal,
+    )
+    .unwrap();
+    assert_eq!(
+        action_compatibility(&matched, Some(&catalog)),
+        Compatibility::Matched
+    );
+
+    let mut wrong = image.clone();
+    Arc::make_mut(&mut wrong.hints)[0].board_target = "other".into();
+    assert!(
+        plan_uf2_action(
+            Some(&catalog),
+            ImageCategory::Application,
+            vec![volume.clone()],
+            wrong.clone(),
+            ConfirmationPolicy::Standard,
+        )
+        .is_err()
+    );
+    let conflicting = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Application,
+        vec![volume.clone()],
+        wrong,
+        ConfirmationPolicy::Minimal,
+    )
+    .unwrap();
+    assert_eq!(
+        action_compatibility(&conflicting, Some(&catalog)),
+        Compatibility::Mismatch
+    );
+    let ExecutionRequest::Blocking(request) = conflicting.into_request() else {
+        panic!("expected a UF2 request");
+    };
+    let error = executor::execute(request, &AtomicBool::new(false), &mut |_| {})
+        .err()
+        .expect("an unacknowledged request must stop before device IO");
+    assert!(error.contains("has not been confirmed"));
+
+    image.local = false;
+    image.hints = Arc::from([]);
+    assert!(
+        plan_uf2_action(
+            Some(&catalog),
+            ImageCategory::Application,
+            vec![volume.clone()],
+            image.clone(),
+            ConfirmationPolicy::Standard,
+        )
+        .is_err()
+    );
+    let unknown = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Application,
+        vec![volume],
+        image.clone(),
+        ConfirmationPolicy::Minimal,
+    )
+    .unwrap();
+    assert_eq!(
+        action_compatibility(&unknown, Some(&catalog)),
+        Compatibility::Unknown
+    );
+
+    let (_other_directory, other) = uf2_volume("other");
+    assert!(
+        plan_uf2_action(
+            Some(&catalog),
+            ImageCategory::Application,
+            vec![other],
+            image,
+            ConfirmationPolicy::Minimal,
+        )
+        .is_err(),
+        "metadata consent cannot waive the configured target MCU"
+    );
+}
+
+#[test]
+fn optional_ota_policy_keeps_content_and_physical_guards() {
+    use crate::application::flash::{Compatibility, ConfirmationPolicy, planning};
+    use crate::features::firmware::board_catalog::{EsbOtaKind, FirmwareHint};
+
+    let mut device = target("a", 0, "board/nrf52840");
+    let mut image = local_image("other.hex");
+    image.hints = vec![FirmwareHint {
+        board_target: "other/nrf52840".into(),
+        kind: Some(EsbOtaKind::Receiver),
+        variant: "Standard".into(),
+        mcuboot: false,
+        bootloader: false,
+    }]
+    .into();
+    assert!(planning::validate_ota_image(&image, &device, ConfirmationPolicy::Standard).is_err());
+    assert!(planning::validate_ota_image(&image, &device, ConfirmationPolicy::Minimal).is_ok());
+    assert_eq!(
+        planning::ota_compatibility(&image, &device),
+        Compatibility::Mismatch
+    );
+    device.info.protocol_version = 2;
+    assert!(planning::validate_ota_image(&image, &device, ConfirmationPolicy::Minimal).is_err());
+    device.info.protocol_version = 1;
+    device.info.bootloader = "mcuboot".into();
+    assert!(planning::validate_ota_image(&image, &device, ConfirmationPolicy::Minimal).is_err());
+    device.info.bootloader = "none".into();
+    let mut wrong_family = uf2_test_image(false);
+    device.info.board_target = "board/nrf52833".into();
+    wrong_family.hints = image.hints.clone();
+    assert!(
+        planning::validate_ota_image(&wrong_family, &device, ConfirmationPolicy::Minimal).is_err()
+    );
+    image.local = false;
+    image.hints = Arc::from([]);
+    assert!(planning::validate_ota_image(&image, &device, ConfirmationPolicy::Standard).is_err());
+    assert!(planning::validate_ota_image(&image, &device, ConfirmationPolicy::Minimal).is_ok());
+    assert_eq!(
+        planning::ota_compatibility(&image, &device),
+        Compatibility::Unknown
+    );
+}
+
+#[test]
+fn bootloader_candidates_require_explicit_selection_and_valid_chip_layout() {
+    use crate::application::flash::{
+        Compatibility, ImageCategory, ImageDestination,
+        planning::{action_compatibility, plan_uf2_action},
+    };
+    use crate::features::firmware::{board_catalog::FirmwareHint, source::BootloaderNamePolicy};
+
+    let catalog = uf2_catalog();
+    let (_directory, volume) = uf2_volume("known");
+    let mut image = uf2_test_image(true);
+    image.name = "unrecognized-application.uf2".into();
+    image.local = false;
+    image.acquisition_policy = BootloaderNamePolicy::AllowUnclassified;
+    let mut state = FlashState {
+        category: ImageCategory::Bootloader,
+        catalog: Some(catalog.clone()),
+        ..FlashState::default()
+    };
+    state.set_confirmation_policy(true);
+    state.apply_images(ImageDestination::Global, vec![image.clone()]);
+    assert!(
+        state.image.is_none(),
+        "an unclassified remote member needs explicit selection"
+    );
+    assert_eq!(state.images.len(), 1);
+    state
+        .choose_image(&ImageDestination::Global, image.clone())
+        .unwrap();
+    assert!(
+        plan_uf2_action(
+            Some(&catalog),
+            ImageCategory::Bootloader,
+            vec![volume.clone()],
+            image.clone(),
+            ConfirmationPolicy::Standard,
+        )
+        .is_err()
+    );
+    let action = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Bootloader,
+        vec![volume.clone()],
+        image,
+        ConfirmationPolicy::Minimal,
+    )
+    .unwrap();
+    assert_eq!(
+        action_compatibility(&action, Some(&catalog)),
+        Compatibility::Unknown
+    );
+    let mut application = uf2_test_image(false);
+    application.name = "unrecognized-application.uf2".into();
+    application.local = false;
+    application.acquisition_policy = BootloaderNamePolicy::AllowUnclassified;
+    assert!(
+        plan_uf2_action(
+            Some(&catalog),
+            ImageCategory::Bootloader,
+            vec![volume.clone()],
+            application.clone(),
+            ConfirmationPolicy::Minimal,
+        )
+        .is_err(),
+        "an application UF2 cannot become a bootloader updater by naming or consent"
+    );
+    application.name = "looks-like-bootloader.uf2".into();
+    application.hints = vec![FirmwareHint {
+        board_target: "known".into(),
+        kind: None,
+        variant: "Bootloader".into(),
+        mcuboot: false,
+        bootloader: true,
+    }]
+    .into();
+    let reviewed = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Application,
+        vec![volume],
+        application,
+        ConfirmationPolicy::Minimal,
+    )
+    .expect("valid application content can enter risk review despite a conflicting name");
+    assert_eq!(
+        action_compatibility(&reviewed, Some(&catalog)),
+        Compatibility::Mismatch
+    );
+}
+
+#[test]
+fn multi_hint_bootloader_is_matched_only_when_every_hint_belongs_to_the_selected_preset() {
+    use crate::application::flash::{
+        Compatibility, ImageCategory,
+        planning::{action_compatibility, plan_uf2_action},
+    };
+    use crate::features::firmware::board_catalog::{FirmwareHint, FlashTarget};
+    let mut catalog = uf2_catalog();
+    let preset = catalog.board_targets.get_mut("known").unwrap();
+    preset.targets = ["known-a", "known-b"]
+        .into_iter()
+        .map(|name| FlashTarget {
+            name: Some(name.into()),
+            ..FlashTarget::default()
+        })
+        .collect();
+    let mut image = uf2_test_image(true);
+    image.hints = ["known-a", "known-b"]
+        .into_iter()
+        .map(|board| FirmwareHint {
+            board_target: board.into(),
+            kind: None,
+            variant: "Bootloader".into(),
+            mcuboot: false,
+            bootloader: true,
+        })
+        .collect::<Vec<_>>()
+        .into();
+    let (_directory, volume) = uf2_volume("known");
+    let action = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Bootloader,
+        vec![volume],
+        image,
+        ConfirmationPolicy::Minimal,
+    )
+    .unwrap();
+    assert_eq!(
+        action_compatibility(&action, Some(&catalog)),
+        Compatibility::Matched
+    );
+}
+
+#[test]
+fn configured_opendfu_matching_uses_the_configured_board_and_receiver_hint() {
+    use crate::application::flash::{Action, Compatibility, planning::action_compatibility};
+    use crate::domain::{SerialEndpoint, SerialPortKind};
+    use crate::features::firmware::{
+        board_catalog::{EsbOtaKind, FirmwareHint, OpenDfuTarget},
+        bundled_resources::Resource,
+    };
+    use slimenrf_firmware_image::secure_dfu::Options;
+
+    let resource = Resource::File("custom.hex".into());
+    let mut catalog = uf2_catalog();
+    catalog.opendfu_targets.push(OpenDfuTarget {
+        name: "custom-board".into(),
+        firmware: resource.clone(),
+        hw_version: 52,
+        app_version: 1,
+        sd_req: "0x00".into(),
+        success: None,
+    });
+    let port = SerialEndpoint {
+        port_name: "synthetic".into(),
+        label: "Synthetic OpenDFU".into(),
+        manufacturer: None,
+        product: Some("Open DFU Bootloader".into()),
+        kind: SerialPortKind::Usb,
+        serial_number: Some("fixture".into()),
+        vid: None,
+        pid: None,
+        usb_interface: None,
+    };
+    let mut image = local_image("custom.hex");
+    image.resource = Some(Arc::new(resource));
+    image.hints = vec![FirmwareHint {
+        board_target: "custom-board".into(),
+        kind: Some(EsbOtaKind::Receiver),
+        variant: "Standard".into(),
+        mcuboot: false,
+        bootloader: false,
+    }]
+    .into();
+    let action = Action::OpenDfu(port.clone(), image.clone(), Options::default());
+    assert_eq!(
+        action_compatibility(&action, Some(&catalog)),
+        Compatibility::Matched
+    );
+    Arc::make_mut(&mut image.hints)[0].board_target = "different".into();
+    let action = Action::OpenDfu(port, image, Options::default());
+    assert_eq!(
+        action_compatibility(&action, Some(&catalog)),
+        Compatibility::Mismatch
+    );
+}
+
+#[test]
+fn restored_minimal_preference_is_used_by_first_assignment_and_plan() {
+    use crate::application::flash::{Action, Compatibility, Mode, planning::action_compatibility};
+    use crate::features::firmware::board_catalog::{EsbOtaKind, FirmwareHint};
+    let device = target("receiver", 0, "board/a");
+    let mut image = local_image("other.hex");
+    image.hints = vec![FirmwareHint {
+        board_target: "board/b".into(),
+        kind: Some(EsbOtaKind::Tracker),
+        variant: "Standard".into(),
+        mcuboot: false,
+        bootloader: false,
+    }]
+    .into();
+    for minimal in [false, true] {
+        let mut state = FlashState::from_confirmation_preference(minimal);
+        state.mode = Mode::Esb;
+        state.targets = vec![device.clone()];
+        state.selected_targets.insert(ota_target_key(&device));
+        state.reconcile_groups(None);
+        let destination = state.destination(Mode::Esb).unwrap();
+        let result = state.choose_image(&destination, image.clone());
+        assert_eq!(result.is_ok(), minimal);
+        if minimal {
+            let groups = plan_ota_groups(&state).unwrap();
+            assert_eq!(
+                action_compatibility(&Action::EsbGroups(groups), None),
+                Compatibility::Mismatch,
+            );
+        }
+    }
 }

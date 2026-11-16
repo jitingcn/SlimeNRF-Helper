@@ -2,9 +2,12 @@ use std::{collections::HashSet, io::Cursor, sync::atomic::AtomicBool};
 
 use sha2::{Digest, Sha256};
 
-use super::catalog::{is_bootloader_update, is_image};
+use super::catalog::{bootloader_candidate, is_image};
 use super::http::{Fetch, blocking_work, checked_url, consume_bounded, read_bounded};
-use super::{Artifact, DownloadedFile, MAX_DOWNLOAD, Progress, SourceChannel, cancelled};
+use super::{
+    Artifact, BootloaderNamePolicy, DownloadedFile, MAX_DOWNLOAD, Progress, SourceChannel,
+    cancelled,
+};
 use crate::features::firmware::remote_config::RemoteConfig;
 
 pub(super) const MAX_MEMBER: usize = 32 * 1024 * 1024;
@@ -37,14 +40,23 @@ pub(super) async fn download_with(
     config: &RemoteConfig,
     fetch: &impl Fetch,
     artifact: &Artifact,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Vec<DownloadedFile>, String> {
     cancelled(cancel)?;
     if artifact.version.channel == SourceChannel::BootloaderRelease
-        && !is_bootloader_update(&artifact.name)
+        && !bootloader_candidate(&artifact.name, name_policy)
     {
-        return Err("Bootloader releases require an update-*bootloader*.uf2 asset".into());
+        return Err(match name_policy {
+            BootloaderNamePolicy::CanonicalOnly => {
+                "Bootloader releases require an update-*bootloader*.uf2 asset"
+            }
+            BootloaderNamePolicy::AllowUnclassified => {
+                "Bootloader releases require a UF2 asset with a safe filename"
+            }
+        }
+        .into());
     }
     if artifact.size > MAX_DOWNLOAD as u64 {
         return Err("Firmware artifact exceeds the 64 MiB download limit".into());
@@ -71,7 +83,15 @@ pub(super) async fn download_with(
     };
     let artifact = artifact.clone();
     blocking_work(cancel, progress, move |cancel, progress| {
-        finish_download(bytes, &artifact, &acquisition, is_ci, cancel, progress)
+        finish_download(
+            bytes,
+            &artifact,
+            &acquisition,
+            is_ci,
+            name_policy,
+            cancel,
+            progress,
+        )
     })
     .await
 }
@@ -81,6 +101,7 @@ fn finish_download(
     artifact: &Artifact,
     acquisition: &str,
     is_ci: bool,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Vec<DownloadedFile>, String> {
@@ -121,6 +142,7 @@ fn finish_download(
             &bytes,
             &provenance,
             artifact.version.channel,
+            name_policy,
             cancel,
             progress,
         )
@@ -206,6 +228,7 @@ pub(super) fn extract_archive(
     bytes: &[u8],
     provenance: &str,
     channel: SourceChannel,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Vec<DownloadedFile>, String> {
@@ -230,7 +253,7 @@ pub(super) fn extract_archive(
         // Every firmware member is still checked, even when it is not an updater.
         // In particular, excluded nested DFU ZIPs retain their archive safety checks.
         let eligible = channel != SourceChannel::BootloaderCi
-            || is_bootloader_update(name.rsplit('/').next().unwrap_or(&name));
+            || bootloader_candidate(name.rsplit('/').next().unwrap_or(&name), name_policy);
         if !eligible && !name.to_ascii_lowercase().ends_with(".zip") {
             consume_bounded(&mut file, MAX_MEMBER, size, cancel, progress, |_| {})?;
             continue;

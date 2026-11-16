@@ -96,6 +96,7 @@ pub struct Preferences {
     pub accent: AccentColor,
     pub appearance: Appearance,
     pub advanced_features: bool,
+    pub minimal_firmware_confirmation: bool,
     pub app_update_auto_check: bool,
     pub app_update_include_prereleases: bool,
     pub app_update_last_attempt: Option<u64>,
@@ -108,6 +109,7 @@ impl Default for Preferences {
             accent: AccentColor::default(),
             appearance: Appearance::default(),
             advanced_features: false,
+            minimal_firmware_confirmation: false,
             app_update_auto_check: true,
             app_update_include_prereleases: false,
             app_update_last_attempt: None,
@@ -259,6 +261,10 @@ fn save_to(path: &Path, preferences: &Preferences) -> Result<(), String> {
             Value::Bool(preferences.advanced_features),
         );
         object.insert(
+            "minimal_firmware_confirmation".to_owned(),
+            Value::Bool(preferences.minimal_firmware_confirmation),
+        );
+        object.insert(
             "app_update_auto_check".to_owned(),
             Value::Bool(preferences.app_update_auto_check),
         );
@@ -372,14 +378,18 @@ mod tests {
         assert!(preferences.app_update_auto_check);
         assert!(!preferences.app_update_include_prereleases);
         assert_eq!(preferences.app_update_last_attempt, None);
+        assert!(!preferences.minimal_firmware_confirmation);
         assert_eq!(fs::read_to_string(&path).unwrap(), original);
 
-        for (auto_check, prereleases, last_attempt) in
-            [(false, true, Some(1_793_145_600)), (true, false, None)]
-        {
+        for (auto_check, prereleases, last_attempt, minimal_confirmation) in [
+            (false, true, Some(1_793_145_600), true),
+            (true, false, None, false),
+            (true, false, None, true),
+        ] {
             preferences.app_update_auto_check = auto_check;
             preferences.app_update_include_prereleases = prereleases;
             preferences.app_update_last_attempt = last_attempt;
+            preferences.minimal_firmware_confirmation = minimal_confirmation;
             save_to(&path, &preferences).unwrap();
             assert_eq!(load_from(&path).unwrap(), preferences);
             let document: serde_json::Value =
@@ -389,6 +399,10 @@ mod tests {
             assert_eq!(document["other"], original_document["other"]);
             assert_eq!(document["accent"], "blue");
             assert_eq!(document["advanced_features"], true);
+            assert_eq!(
+                document["minimal_firmware_confirmation"],
+                minimal_confirmation
+            );
             assert_eq!(document["app_update_auto_check"], auto_check);
             assert_eq!(document["app_update_include_prereleases"], prereleases);
             assert_eq!(
@@ -497,6 +511,7 @@ mod tests {
             r#"{"language":"en","accent":"unknown"}"#,
             r#"{"language":"en","accent":"blue","appearance":"system"}"#,
             r#"{"advanced_features":"yes"}"#,
+            r#"{"minimal_firmware_confirmation":"yes"}"#,
         ] {
             fs::write(&path, original).unwrap();
             assert!(load_from(&path).is_err());
@@ -562,14 +577,22 @@ mod tests {
     fn serialized_preferences_include_newline_in_the_byte_limit() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("preferences.json");
-        let empty_document = "{\n  \"accent\": \"neutral\",\n  \"advanced_features\": true,\n  \"app_update_auto_check\": true,\n  \"app_update_include_prereleases\": false,\n  \"app_update_last_attempt\": null,\n  \"appearance\": \"dark\",\n  \"future\": \"\",\n  \"language\": \"en\"\n}\n";
-        let future = "x".repeat(MAX_STORE_BYTES - empty_document.len());
-        let original = format!(r#"{{"future":"{future}"}}"#);
-        fs::write(&path, original).unwrap();
         let preferences = Preferences {
             advanced_features: true,
             ..Preferences::default()
         };
+        let mut empty_document = serde_json::to_value(&preferences).unwrap();
+        empty_document["future"] = "".into();
+        let empty_length = serde_json::to_vec_pretty(&empty_document).unwrap().len();
+        let future = "x".repeat(MAX_STORE_BYTES - empty_length - 1);
+        empty_document["advanced_features"] = false.into();
+        assert_eq!(
+            serde_json::to_vec_pretty(&empty_document).unwrap().len() + future.len(),
+            MAX_STORE_BYTES,
+            "the default preferences must leave room for the JSON but not its newline"
+        );
+        let original = format!(r#"{{"future":"{future}"}}"#);
+        fs::write(&path, original).unwrap();
 
         save_to(&path, &preferences).unwrap();
         let saved = fs::read(&path).unwrap();

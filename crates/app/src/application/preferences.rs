@@ -82,6 +82,8 @@ impl Workbench {
         }
         let language_changed = self.preferences.language != preferences.language;
         self.preferences = preferences;
+        self.flash
+            .set_confirmation_policy(self.preferences.minimal_firmware_confirmation);
         if advanced_changed {
             self.sync_esb_page();
         }

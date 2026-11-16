@@ -254,6 +254,9 @@ impl Workbench {
                 }
             }
         });
+        let flash = flash::FlashState::from_confirmation_preference(
+            preferences.minimal_firmware_confirmation,
+        );
         let mut this = Self {
             async_io,
             shutdown_host,
@@ -301,7 +304,7 @@ impl Workbench {
             _firmware_workflow_subscription: Self::observe_firmware_workflow(cx),
             batch_history: VecDeque::new(),
             custom_commands: shortcuts::CustomCommandState::default(),
-            flash: flash::FlashState::default(),
+            flash,
             capture: capture::CaptureUiState::default(),
             calibration: calibration::CalibrationUiState::default(),
             replay: cx.new(|_| replay::ReplayFeature::new(window, workbench_resize_handle())),

@@ -12,7 +12,6 @@ mod http;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
 pub(crate) use catalog::is_bootloader_update;
 pub(crate) use catalog::variant;
 use catalog::{latest_with, list_artifacts_with, list_versions_with};
@@ -28,6 +27,14 @@ pub enum SourceChannel {
     BootloaderCi,
     TrackerCi,
     ReceiverCi,
+}
+
+/// Controls bootloader filename admission, not device compatibility or write authorization.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BootloaderNamePolicy {
+    #[default]
+    CanonicalOnly,
+    AllowUnclassified,
 }
 
 impl SourceChannel {
@@ -93,6 +100,7 @@ pub async fn list_versions(
     client: &reqwest::Client,
     config: &RemoteConfig,
     channel: SourceChannel,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Vec<Version>, String> {
@@ -100,6 +108,7 @@ pub async fn list_versions(
         config,
         &Network::new(client.clone()),
         channel,
+        name_policy,
         cancel,
         progress,
     )
@@ -112,6 +121,7 @@ pub async fn latest(
     client: &reqwest::Client,
     config: &RemoteConfig,
     channel: SourceChannel,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Version, String> {
@@ -119,6 +129,7 @@ pub async fn latest(
         config,
         &Network::new(client.clone()),
         channel,
+        name_policy,
         cancel,
         progress,
     )
@@ -129,6 +140,7 @@ pub async fn list_artifacts(
     client: &reqwest::Client,
     config: &RemoteConfig,
     version: &Version,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Vec<Artifact>, String> {
@@ -136,6 +148,7 @@ pub async fn list_artifacts(
         config,
         &Network::new(client.clone()),
         version,
+        name_policy,
         cancel,
         progress,
     )
@@ -148,6 +161,7 @@ pub async fn download(
     client: &reqwest::Client,
     config: &RemoteConfig,
     artifact: &Artifact,
+    name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Vec<DownloadedFile>, String> {
@@ -155,6 +169,7 @@ pub async fn download(
         config,
         &Network::new(client.clone()),
         artifact,
+        name_policy,
         cancel,
         progress,
     )

@@ -22,7 +22,11 @@ pub(super) fn ota_role(target: &esb_ota::Target) -> &'static str {
     }
 }
 
-pub(super) fn validate_ota_image(image: &Image, target: &esb_ota::Target) -> Result<(), String> {
+pub(super) fn validate_ota_image(
+    image: &Image,
+    target: &esb_ota::Target,
+    policy: ConfirmationPolicy,
+) -> Result<(), String> {
     if let Some(error) = &image.validation_error {
         return Err(error.clone());
     }
@@ -33,14 +37,17 @@ pub(super) fn validate_ota_image(image: &Image, target: &esb_ota::Target) -> Res
         &image.hints,
         std::iter::once(target),
         false,
+        policy,
     ) {
         return Err(tr("firmware.error.image_method_mismatch"));
     }
-    if !image.local && image.hints.is_empty() {
-        return Err(tr("firmware.error.unknown_remote_target"));
-    }
-    if image.hints.len() > 1 {
-        return Err(tr("firmware.error.ambiguous_target"));
+    if policy == ConfirmationPolicy::Standard {
+        if !image.local && image.hints.is_empty() {
+            return Err(tr("firmware.error.unknown_remote_target"));
+        }
+        if image.hints.len() > 1 {
+            return Err(tr("firmware.error.ambiguous_target"));
+        }
     }
     if target.id == esb_ota::RECEIVER_ID && target.info.bootloader == "nrf5_opendfu" {
         return Err(tr("firmware.error.receiver_requires_opendfu"));
@@ -50,6 +57,7 @@ pub(super) fn validate_ota_image(image: &Image, target: &esb_ota::Target) -> Res
             target.info.bootloader.as_str(),
             "none" | "adafruit_uf2" | "mcuboot"
         )
+        || target.info.board_target.trim().is_empty()
     {
         return Err(tr("firmware.error.unsupported_method"));
     }
@@ -60,7 +68,23 @@ pub(super) fn validate_ota_image(image: &Image, target: &esb_ota::Target) -> Res
     if (target.info.bootloader == "mcuboot") != parsed.mcuboot {
         return Err(tr("firmware.error.mcuboot_image_format"));
     }
-    if let Some(hint) = image.hints.first() {
+    if let Some(error) = &image.uf2_application_error {
+        return Err(error.clone());
+    }
+    if let Some(family) = image.uf2_family {
+        let board = target.info.board_target.to_ascii_lowercase();
+        if (board.contains("nrf52840") && family != 0xada5_2840)
+            || (board.contains("nrf52833") && family != 0x621e_937a)
+        {
+            return Err(format!(
+                "UF2 family {family:#010x} does not match queried target {}",
+                target.info.board_target
+            ));
+        }
+    }
+    if policy == ConfirmationPolicy::Standard
+        && let Some(hint) = image.hints.first()
+    {
         let kind = if target.id == esb_ota::RECEIVER_ID {
             board_catalog::EsbOtaKind::Receiver
         } else {
@@ -75,6 +99,190 @@ pub(super) fn validate_ota_image(image: &Image, target: &esb_ota::Target) -> Res
         }
     }
     Ok(())
+}
+
+fn configured_family(chip: firmware::Nrf52Chip) -> u32 {
+    match chip {
+        firmware::Nrf52Chip::Nrf52833 => 0x621e_937a,
+        firmware::Nrf52Chip::Nrf52840 => 0xada5_2840,
+    }
+}
+
+pub(super) fn validate_ota_catalog_mcu(
+    image: &Image,
+    target: &esb_ota::Target,
+    catalog: Option<&board_catalog::Catalog>,
+) -> Result<(), String> {
+    let (Some(family), Some(catalog)) = (image.uf2_family, catalog) else {
+        return Ok(());
+    };
+    let kind = if target.id == esb_ota::RECEIVER_ID {
+        board_catalog::EsbOtaKind::Receiver
+    } else {
+        board_catalog::EsbOtaKind::Tracker
+    };
+    let board = board_catalog::canonical_board(&target.info.board_target);
+    for preset in catalog.presets() {
+        if preset.targets.iter().any(|configured| {
+            configured.esb_ota_kind == Some(kind)
+                && board_catalog::canonical_board(configured.name.as_deref().unwrap_or(&preset.key))
+                    == board
+        }) && preset
+            .bootloader_mcu
+            .is_some_and(|chip| configured_family(chip) != family)
+        {
+            return Err(format!(
+                "UF2 family {family:#010x} does not match the configured MCU for {}",
+                target.info.board_target
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn ota_compatibility(image: &Image, target: &esb_ota::Target) -> Compatibility {
+    let kind = if target.id == esb_ota::RECEIVER_ID {
+        board_catalog::EsbOtaKind::Receiver
+    } else {
+        board_catalog::EsbOtaKind::Tracker
+    };
+    if image.hints.is_empty() {
+        return Compatibility::Unknown;
+    }
+    if image.hints.iter().any(|hint| {
+        hint.bootloader
+            || hint.kind.is_some_and(|value| value != kind)
+            || board_catalog::canonical_board(&hint.board_target)
+                != board_catalog::canonical_board(&target.info.board_target)
+            || !matches!(hint.variant.as_str(), "Standard" | "DataCollect CDC")
+            || (hint.variant == "DataCollect CDC" && kind != board_catalog::EsbOtaKind::Receiver)
+    }) {
+        return Compatibility::Mismatch;
+    }
+    if image.hints.len() == 1 && image.hints[0].kind == Some(kind) {
+        Compatibility::Matched
+    } else {
+        Compatibility::Unknown
+    }
+}
+
+fn uf2_compatibility<'a>(
+    volumes: impl Iterator<Item = &'a uf2::Uf2Volume>,
+    image: &Image,
+    application: bool,
+    catalog: Option<&board_catalog::Catalog>,
+) -> Compatibility {
+    if image.hints.is_empty() {
+        return Compatibility::Unknown;
+    }
+    if image.hints.iter().any(|hint| {
+        hint.bootloader == application || (!application && hint.variant != "Bootloader")
+    }) {
+        return Compatibility::Mismatch;
+    }
+    let mut result = if !application && image.unclassified_bootloader_source() {
+        Compatibility::Unknown
+    } else {
+        Compatibility::Matched
+    };
+    let mut any = false;
+    for volume in volumes {
+        any = true;
+        let Some(preset) = catalog.and_then(|catalog| {
+            catalog.preset_for_volume(&volume.label, volume.board_id.as_deref())
+        }) else {
+            result = result.max(Compatibility::Unknown);
+            continue;
+        };
+        if image
+            .hints
+            .iter()
+            .any(|hint| !uf2_preset_matches(preset, std::slice::from_ref(hint)))
+        {
+            return Compatibility::Mismatch;
+        }
+        if application && image.hints.len() != 1 {
+            result = result.max(Compatibility::Unknown);
+            continue;
+        }
+        let hint = &image.hints[0];
+        if !matches!(
+            hint.variant.as_str(),
+            "Standard" | "DataCollect CDC" | "Bootloader"
+        ) || (hint.variant == "DataCollect CDC"
+            && hint.kind != Some(board_catalog::EsbOtaKind::Receiver))
+        {
+            return Compatibility::Mismatch;
+        }
+        if application
+            && !preset.targets.iter().any(|target| {
+                hint.kind.is_some()
+                    && hint.kind == target.esb_ota_kind
+                    && board_catalog::canonical_board(&hint.board_target)
+                        == board_catalog::canonical_board(
+                            target.name.as_deref().unwrap_or(&preset.key),
+                        )
+            })
+        {
+            result = result.max(Compatibility::Unknown);
+        }
+    }
+    if any { result } else { Compatibility::Unknown }
+}
+
+fn opendfu_compatibility(image: &Image, catalog: Option<&board_catalog::Catalog>) -> Compatibility {
+    let expected = catalog
+        .and_then(|catalog| image.configured_opendfu(catalog))
+        .map(|target| target.name.as_str())
+        .unwrap_or("holyiot-21017");
+    if image.hints.iter().any(|hint| {
+        hint.bootloader
+            || hint.kind == Some(board_catalog::EsbOtaKind::Tracker)
+            || board_catalog::canonical_board(&hint.board_target)
+                != board_catalog::canonical_board(expected)
+            || !matches!(hint.variant.as_str(), "Standard" | "DataCollect CDC")
+    }) {
+        Compatibility::Mismatch
+    } else if image.hints.len() == 1
+        && image.hints[0].kind == Some(board_catalog::EsbOtaKind::Receiver)
+    {
+        Compatibility::Matched
+    } else {
+        Compatibility::Unknown
+    }
+}
+
+pub(super) fn action_compatibility(
+    action: &Action,
+    catalog: Option<&board_catalog::Catalog>,
+) -> Compatibility {
+    match action {
+        Action::Uf2(volumes, image, purpose) => uf2_compatibility(
+            volumes.iter(),
+            image,
+            *purpose == Uf2ImagePurpose::Application,
+            catalog,
+        ),
+        Action::EsbGroups(groups) => {
+            if groups.is_empty() || groups.iter().any(|group| group.targets.is_empty()) {
+                return Compatibility::Unknown;
+            }
+            groups
+                .iter()
+                .flat_map(|group| {
+                    group
+                        .targets
+                        .iter()
+                        .map(|target| ota_compatibility(&group.image, target))
+                })
+                .max()
+                .unwrap_or(Compatibility::Unknown)
+        }
+        Action::OpenDfu(_, image, _) => opendfu_compatibility(image, catalog),
+        Action::Ble(..) | Action::Reboot(..) | Action::Enter(..) | Action::QueryGroups(..) => {
+            Compatibility::Unknown
+        }
+    }
 }
 
 pub(super) fn plan_ota_groups(state: &FlashState) -> Result<Vec<OtaPlanGroup>, String> {
@@ -100,7 +308,8 @@ pub(super) fn plan_ota_groups(state: &FlashState) -> Result<Vec<OtaPlanGroup>, S
                 tr("firmware.error.assign_every_group")
             )
         })?;
-        validate_ota_image(image, target)?;
+        validate_ota_image(image, target, state.confirmation_policy)?;
+        validate_ota_catalog_mcu(image, target, state.catalog.as_ref())?;
         groups
             .entry((
                 target.id == esb_ota::RECEIVER_ID,
@@ -182,6 +391,7 @@ pub(super) fn plan_uf2_action(
     category: ImageCategory,
     volumes: Vec<uf2::Uf2Volume>,
     image: Image,
+    policy: ConfirmationPolicy,
 ) -> Result<Action, String> {
     if let Some(error) = &image.validation_error {
         return Err(error.clone());
@@ -193,6 +403,7 @@ pub(super) fn plan_uf2_action(
         &image.hints,
         std::iter::empty(),
         false,
+        policy,
     ) {
         return Err(tr("firmware.error.image_method_mismatch"));
     }
@@ -205,7 +416,9 @@ pub(super) fn plan_uf2_action(
     let hints = &image.hints;
     let purpose = match category {
         ImageCategory::Bootloader => {
-            if (!image.local && hints.is_empty()) || hints.iter().any(|hint| !hint.bootloader) {
+            if policy == ConfirmationPolicy::Standard
+                && (hints.iter().any(|hint| !hint.bootloader) || (!image.local && hints.is_empty()))
+            {
                 return Err(tr("firmware.error.bootloader_board_mismatch"));
             }
             let mut requested_chip = None;
@@ -218,7 +431,10 @@ pub(super) fn plan_uf2_action(
                 let chip = preset
                     .bootloader_mcu
                     .ok_or_else(|| tr("firmware.error.bootloader_identity_required"))?;
-                if !hints.is_empty() && !uf2_preset_matches(preset, hints) {
+                if policy == ConfirmationPolicy::Standard
+                    && !hints.is_empty()
+                    && !uf2_preset_matches(preset, hints)
+                {
                     return Err(tr("firmware.error.bootloader_board_mismatch"));
                 }
                 if requested_chip.is_some_and(|previous| previous != chip) {
@@ -229,13 +445,13 @@ pub(super) fn plan_uf2_action(
             Uf2ImagePurpose::Bootloader(requested_chip.expect("nonempty selected volumes"))
         }
         ImageCategory::Application => {
-            if !image.local && hints.is_empty() {
+            if policy == ConfirmationPolicy::Standard && !image.local && hints.is_empty() {
                 return Err(tr("firmware.error.unknown_remote_target"));
             }
-            if hints.len() > 1 {
+            if policy == ConfirmationPolicy::Standard && hints.len() > 1 {
                 return Err(tr("firmware.error.ambiguous_target"));
             }
-            if !hints.is_empty() {
+            if policy == ConfirmationPolicy::Standard && !hints.is_empty() {
                 for volume in &volumes {
                     let preset = catalog.and_then(|catalog| {
                         catalog.preset_for_volume(&volume.label, volume.board_id.as_deref())
@@ -253,11 +469,63 @@ pub(super) fn plan_uf2_action(
     };
     for volume in &volumes {
         uf2::validate_for_volume(volume, &image.bytes, purpose)?;
+        if purpose == Uf2ImagePurpose::Application
+            && let Some(family) = image.uf2_family
+            && let Some(chip) = catalog
+                .and_then(|catalog| {
+                    catalog.preset_for_volume(&volume.label, volume.board_id.as_deref())
+                })
+                .and_then(|preset| preset.bootloader_mcu)
+            && family != configured_family(chip)
+        {
+            return Err(format!(
+                "UF2 family {family:#010x} does not match the configured target MCU"
+            ));
+        }
     }
     Ok(Action::Uf2(volumes, image, purpose))
 }
 
 impl Workbench {
+    pub(super) fn preview_compatibility(&self, image: &Image) -> Compatibility {
+        match self.flash_mode() {
+            Mode::Uf2 => uf2_compatibility(
+                self.flash
+                    .volumes
+                    .iter()
+                    .filter(|volume| self.flash.selected_volumes.contains(&volume.identity)),
+                image,
+                self.flash.category == ImageCategory::Application,
+                self.flash.catalog.as_ref(),
+            ),
+            Mode::Esb => self
+                .flash
+                .targets
+                .iter()
+                .filter(|target| {
+                    self.flash
+                        .selected_targets
+                        .contains(&ota_target_key(target))
+                        && self.flash.active_group.as_deref()
+                            == Some(ota_assignment_key(target).as_str())
+                })
+                .map(|target| ota_compatibility(image, target))
+                .max()
+                .unwrap_or(Compatibility::Unknown),
+            Mode::OpenDfu => {
+                if self.flash_selected_port().is_ok_and(|port| {
+                    port.is_open_dfu_bootloader()
+                        && crate::domain::console_port_allowed(&port, &self.inventory)
+                }) {
+                    opendfu_compatibility(image, self.flash.catalog.as_ref())
+                } else {
+                    Compatibility::Unknown
+                }
+            }
+            Mode::Ble => Compatibility::Unknown,
+        }
+    }
+
     pub(super) fn selected_flash_action(&self) -> Result<Action, String> {
         if self.flash_mode() == Mode::Esb {
             let groups = plan_ota_groups(&self.flash)?;
@@ -282,6 +550,7 @@ impl Workbench {
                 self.flash.category,
                 volumes,
                 image,
+                ConfirmationPolicy::from_preference(self.preferences.minimal_firmware_confirmation),
             );
         }
         if let Some(error) = &image.validation_error {
@@ -290,10 +559,13 @@ impl Workbench {
         self.validate_page_image(&image)?;
         let mode = self.flash_mode();
         let hints = &image.hints;
-        if !image.local && hints.is_empty() {
+        if self.flash.confirmation_policy == ConfirmationPolicy::Standard
+            && !image.local
+            && hints.is_empty()
+        {
             return Err(tr("firmware.error.unknown_remote_target").to_string());
         }
-        if hints.len() > 1 {
+        if self.flash.confirmation_policy == ConfirmationPolicy::Standard && hints.len() > 1 {
             return Err(tr("firmware.error.ambiguous_target").to_string());
         }
         match mode {
@@ -318,7 +590,8 @@ impl Workbench {
                 let board = configured
                     .map(|target| target.name.as_str())
                     .unwrap_or("holyiot-21017");
-                if let Some(hint) = hints.first()
+                if self.flash.confirmation_policy == ConfirmationPolicy::Standard
+                    && let Some(hint) = hints.first()
                     && (hint.kind == Some(board_catalog::EsbOtaKind::Tracker)
                         || board_catalog::canonical_board(&hint.board_target)
                             != board_catalog::canonical_board(board))

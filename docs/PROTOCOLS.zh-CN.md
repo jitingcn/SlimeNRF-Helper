@@ -29,11 +29,11 @@ FoxSnackLiteV3 固件使用 `foxsnacklitev3_uf2/nrf52840`，对应 bootloader �
 
 应用 CI 压缩包名称可以省略镜像扩展名。远程选择器为完整名称分别附加 `.uf2` 和 `.hex`，再按现有目录规则匹配，保留精确板型配置、角色和变种。例如，`SlimeNRF_ProMicro_Chrysalis_Tracker` 对应 `promicro_uf2/nrf52840/chrysalis`，不对应其他 ProMicro 配置。Release 资产和解包成员按各自的实际文件名匹配。压缩包名称不为成员提供板型身份或写入授权。
 
-引导程序发行版和 CI 在 `remote_firmware.bootloader` 下分别配置仓库。引导程序 CI 只接受 `master` 分支中 [`.github/workflows/githubci.yml`](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/blob/7f0654b898e92dd13f89c4fef108559a3d1c4b0e/.github/workflows/githubci.yml) 已完成且成功的 `push` 和 `workflow_dispatch` 构建，不使用应用固件的构建编号门槛。过期产物不列出。压缩包名称与配置的 `bootloader_board` 精确匹配，仅用于筛选。解包只提供 `update-*_bootloader-*_nosd.uf2` 成员，对被排除的成员也保留压缩包大小和路径检查。每个 updater 保留独立的文件名、摘要和板型分类。完整 HEX 和 DFU ZIP 不作为引导程序自更新文件提供。
+引导程序发行版和 CI 在 `remote_firmware.bootloader` 下分别配置仓库。引导程序 CI 只接受 `master` 分支中 [`.github/workflows/githubci.yml`](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/blob/7f0654b898e92dd13f89c4fef108559a3d1c4b0e/.github/workflows/githubci.yml) 已完成且成功的 `push` 和 `workflow_dispatch` 构建，不使用应用固件的构建编号门槛。过期产物不列出。压缩包名称与配置的 `bootloader_board` 精确匹配，仅用于筛选。标准模式只提供 `update-*_bootloader-*_nosd.uf2` 成员；最小确认模式可提供其他 UF2 名称作为待核实候选，不据此认定它是自更新镜像或已匹配板型。对被排除的成员也保留压缩包大小和路径检查。每个 updater 保留独立的文件名、摘要和板型分类。完整 HEX 和 DFU ZIP 不作为引导程序自更新文件提供，实际写入仍须通过所选 MCU 的引导程序内容检查。
 
 应用写入与 bootloader 写入冻结不同用途。Adafruit nosd updater family `0xd663823c` 同时用于 nRF52833/52840，不是应用 family，也不标识 MCU。配置 `bootloader_mcu` 来自板级证据；写入冻结用途、配置 MCU、卷身份，核对 b43e929b nosd 链接布局及 CF2 flash/RAM/SoC family：bootstart=`flash−0xc000`、CF2=`flash−0x2800`、MBRparams=`flash−0x2000`，仅允许相应 MBR/bootloader/UICR 范围，拒绝 SoftDevice、应用与错芯片镜像。不承诺未来或自定义布局兼容，也不向通用应用白名单加入该 family。
 
-板型无法分类的本地引导程序镜像，只有在每个所选卷均对应明确配置且一致的 `bootloader_mcu` 时，才可通过板型提示准入；已知提示冲突和板型未知的远程镜像仍被拒绝。冻结确认页显示镜像目标未知警告，并要求重新确认风险，不改变内容或挂载身份校验。
+板型无法分类的本地引导程序镜像，只有在每个所选卷均对应明确配置且一致的 `bootloader_mcu` 时，才可通过板型提示准入。标准模式仍拒绝已知提示冲突和板型未知的远程镜像；可选的最小确认允许这些语义提示冲突进入明确的风险接受流程，不放宽 MCU、布局、用途或挂载身份检查。风险接受绑定冻结的镜像和卷，不给后续镜像或卷授权。明确匹配的选择可省去最终确认；Legacy BLE 无法确定目标板型，仍须确认。
 
 Linux UF2 只接纳真实可写 FAT 块设备与 UF2 标记，卷标按 `/dev/disk/by-label` 对应块设备号获取，不把目录名当卷标。写前复核挂载实例与 device identity；同路径换盘、重挂载或 mount incarnation 变化使旧授权失效。全局 mountinfo 可以包含合法伪文件系统 root，只有 UF2 候选才要求原生块设备与绝对路径条件；不能让无关 namespace 挂载破坏全部枚举。
 

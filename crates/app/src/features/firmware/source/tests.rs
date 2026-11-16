@@ -3,7 +3,7 @@ use super::download::{
     MAX_MEMBER, bounded_archive, download_with, extract_archive, hash, parse_digest,
 };
 use super::http::{Fetch, checked_url, read_bounded, safe_error_chain, status_error};
-use super::{Artifact, Progress, SourceChannel, Version, variant};
+use super::{Artifact, BootloaderNamePolicy, Progress, SourceChannel, Version, variant};
 use crate::features::firmware::remote_config::{GithubRepository, RemoteConfig};
 use serde_json::json;
 use std::{
@@ -135,6 +135,7 @@ fn artifact_categories_agree_with_local_names_without_exposing_mcuboot_variant()
             &RemoteConfig::default(),
             &source,
             &v,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -193,6 +194,7 @@ fn release_versions_preserve_receivers_and_variants_not_executables() {
             &RemoteConfig::default(),
             &source,
             SourceChannel::Release,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -235,6 +237,7 @@ fn artifact_pagination_keeps_all_variants_and_digests() {
             &RemoteConfig::default(),
             &source,
             &v,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -287,6 +290,7 @@ fn latest_skips_expired_ci_and_ignores_other_workflows() {
                 &RemoteConfig::default(),
                 &source,
                 channel,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {}
             )
@@ -369,6 +373,7 @@ fn latest_skips_oversized_artifacts_but_accepts_exact_download_limit() {
                     &RemoteConfig::default(),
                     &source,
                     channel,
+                    BootloaderNamePolicy::CanonicalOnly,
                     &AtomicBool::new(false),
                     &mut |_| {},
                 )
@@ -386,6 +391,7 @@ fn latest_skips_oversized_artifacts_but_accepts_exact_download_limit() {
                     &RemoteConfig::default(),
                     &source,
                     &oversized,
+                    BootloaderNamePolicy::CanonicalOnly,
                     &AtomicBool::new(false),
                     &mut |_| {}
                 )
@@ -420,6 +426,7 @@ fn download_verifies_archive_then_preserves_uf2_hex_and_nested_package() {
             &RemoteConfig::default(),
             &source,
             &artifact,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -448,6 +455,7 @@ fn digest_mismatch_and_truncated_asset_fail_closed() {
                 &RemoteConfig::default(),
                 &source,
                 &asset,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {}
             )
@@ -466,6 +474,7 @@ fn digest_mismatch_and_truncated_asset_fail_closed() {
                 &RemoteConfig::default(),
                 &source,
                 &asset,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {}
             )
@@ -500,6 +509,7 @@ fn public_ci_failure_can_use_authenticated_api_fallback() {
                 &RemoteConfig::default(),
                 &source,
                 &asset,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {}
             )
@@ -524,6 +534,7 @@ fn archive_rejects_traversal_duplicate_names_and_oversize() {
                     &zip(&entries),
                     "fixture",
                     SourceChannel::ReceiverCi,
+                    BootloaderNamePolicy::CanonicalOnly,
                     &AtomicBool::new(false),
                     &mut |_| {}
                 )
@@ -536,6 +547,7 @@ fn archive_rejects_traversal_duplicate_names_and_oversize() {
                 &zip(&[("huge.hex", &oversized)]),
                 "fixture",
                 SourceChannel::ReceiverCi,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {}
             )
@@ -569,6 +581,7 @@ fn zip_envelope_and_link_metadata_fail_before_member_allocation() {
                 &linked,
                 "fixture",
                 SourceChannel::ReceiverCi,
+                BootloaderNamePolicy::CanonicalOnly,
                 &cancel,
                 &mut |_| {}
             )
@@ -601,6 +614,7 @@ fn release_dfu_zip_is_retained_but_unsafe_package_is_rejected() {
                 &RemoteConfig::default(),
                 &source,
                 &asset,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {},
             )
@@ -639,6 +653,7 @@ fn zip_member_sizes_are_exact_including_zero_and_crc_is_still_checked() {
                 &malformed,
                 "fixture",
                 SourceChannel::ReceiverCi,
+                BootloaderNamePolicy::CanonicalOnly,
                 &cancel,
                 &mut |_| {}
             )
@@ -650,6 +665,7 @@ fn zip_member_sizes_are_exact_including_zero_and_crc_is_still_checked() {
             &zip(&[("application.hex", b"")]),
             "fixture",
             SourceChannel::ReceiverCi,
+            BootloaderNamePolicy::CanonicalOnly,
             &cancel,
             &mut |_| {}
         )
@@ -659,6 +675,7 @@ fn zip_member_sizes_are_exact_including_zero_and_crc_is_still_checked() {
         &bytes,
         "fixture",
         SourceChannel::ReceiverCi,
+        BootloaderNamePolicy::CanonicalOnly,
         &cancel,
         &mut |_| {},
     )
@@ -676,6 +693,7 @@ fn zip_member_sizes_are_exact_including_zero_and_crc_is_still_checked() {
             &corrupt,
             "fixture",
             SourceChannel::ReceiverCi,
+            BootloaderNamePolicy::CanonicalOnly,
             &cancel,
             &mut |_| {}
         )
@@ -917,6 +935,7 @@ fn configured_repositories_route_every_channel_independently() {
                     &config,
                     &source,
                     channel,
+                    BootloaderNamePolicy::CanonicalOnly,
                     &AtomicBool::new(false),
                     &mut |_| {}
                 )
@@ -939,10 +958,16 @@ fn configured_repositories_route_every_channel_independently() {
                 )
             };
             let source = Fixture::new(vec![reply]);
-            let artifacts =
-                list_artifacts_with(&config, &source, &v, &AtomicBool::new(false), &mut |_| {})
-                    .await
-                    .unwrap();
+            let artifacts = list_artifacts_with(
+                &config,
+                &source,
+                &v,
+                BootloaderNamePolicy::CanonicalOnly,
+                &AtomicBool::new(false),
+                &mut |_| {},
+            )
+            .await
+            .unwrap();
             if !channel.is_release() {
                 assert_eq!(
                     artifacts[0].url,
@@ -981,6 +1006,7 @@ fn configured_ci_download_fallback_uses_selected_repository() {
             &config,
             &source,
             &asset,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -1016,6 +1042,7 @@ fn bootloader_semver_listing_has_no_application_date_gate_or_ci_requests() {
             &config,
             &source,
             SourceChannel::BootloaderRelease,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -1076,10 +1103,16 @@ fn bootloader_assets_keep_actual_update_metadata_and_filter_full_images() {
     "https://api.github.com/repos/jitingcn/Adafruit_nRF52_Bootloader/releases/407199605/assets?per_page=100&page=1".into(),
     json!(assets),
 )]);
-        let artifacts =
-            list_artifacts_with(&config, &source, &v, &AtomicBool::new(false), &mut |_| {})
-                .await
-                .unwrap();
+        let artifacts = list_artifacts_with(
+            &config,
+            &source,
+            &v,
+            BootloaderNamePolicy::CanonicalOnly,
+            &AtomicBool::new(false),
+            &mut |_| {},
+        )
+        .await
+        .unwrap();
         assert_eq!(artifacts.len(), 2);
         assert_eq!(artifacts[0].name, BOOTLOADER_NAME);
         assert_eq!(artifacts[0].id, 622821323);
@@ -1134,6 +1167,7 @@ fn bootloader_latest_uses_configured_release_assets_and_skips_unavailable_versio
             &config,
             &source,
             SourceChannel::BootloaderRelease,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -1158,6 +1192,7 @@ fn bootloader_latest_empty_releases_never_fall_back_to_ci() {
                 &config,
                 &source,
                 SourceChannel::BootloaderRelease,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {}
             )
@@ -1185,6 +1220,7 @@ fn bootloader_release_download_retains_uf2_and_checks_digest_and_size() {
             &config,
             &source,
             &asset,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -1215,6 +1251,7 @@ fn bootloader_release_download_retains_uf2_and_checks_digest_and_size() {
                     &config,
                     &source,
                     &asset,
+                    BootloaderNamePolicy::CanonicalOnly,
                     &AtomicBool::new(false),
                     &mut |_| {}
                 )
@@ -1243,6 +1280,7 @@ fn bootloader_download_failure_never_uses_authenticated_ci_fallback() {
             &config,
             &source,
             &asset,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -1265,6 +1303,7 @@ fn bootloader_download_rejects_ineligible_direct_selection_before_network() {
                 &config,
                 &source,
                 &asset,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {}
             )
@@ -1344,6 +1383,7 @@ fn bootloader_ci_lists_low_successful_runs_with_pagination_dedup_and_exact_polic
             &config,
             &source,
             channel,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -1399,6 +1439,7 @@ fn application_ci_keeps_existing_run_thresholds_and_workflow_policy() {
                 &config,
                 &source,
                 channel,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {},
             )
@@ -1456,6 +1497,7 @@ fn bootloader_ci_latest_skips_expired_newest_and_keeps_container_metadata() {
             &config,
             &source,
             channel,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -1466,6 +1508,7 @@ fn bootloader_ci_latest_skips_expired_newest_and_keeps_container_metadata() {
             &config,
             &source,
             &latest,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
@@ -1499,10 +1542,8 @@ fn bootloader_ci_download_returns_only_strict_updaters_with_real_paths_and_prove
         let nested = zip(&[("manifest.json", b"{}"), ("bootloader.bin", b"full image")]);
         let updater = "out/update-slimenrf_promicro_bootloader-0.11.1-slimenrf-3-g7f0654b_nosd.uf2";
         let other_updater = format!("out/{BOOTLOADER_NAME}");
-        let copied = updater.replace(".uf2", " (2).uf2");
         let bytes = zip(&[
             (updater, b"updater"),
-            (&copied, b"copied updater"),
             (&other_updater, b"independent updater"),
             ("out/slimenrf_promicro_bootloader-0.11.1_nosd.hex", b"hex"),
             (
@@ -1533,16 +1574,15 @@ fn bootloader_ci_download_returns_only_strict_updaters_with_real_paths_and_prove
             &RemoteConfig::default(),
             &source,
             &asset,
+            BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
         )
         .await
         .unwrap();
-        assert_eq!(files.len(), 3);
+        assert_eq!(files.len(), 2);
         let promicro = files.iter().find(|file| file.name == updater).unwrap();
         assert_eq!(promicro.bytes, b"updater");
-        let copied_file = files.iter().find(|file| file.name == copied).unwrap();
-        assert_eq!(copied_file.bytes, b"copied updater");
         let other = files
             .iter()
             .find(|file| file.name == other_updater)
@@ -1570,6 +1610,7 @@ fn bootloader_ci_archive_without_updater_is_unavailable() {
         &bytes,
         "fixture",
         SourceChannel::BootloaderCi,
+        BootloaderNamePolicy::CanonicalOnly,
         &AtomicBool::new(false),
         &mut |_| {},
     )
@@ -1605,6 +1646,7 @@ fn bootloader_ci_rejects_unsafe_excluded_members_and_nested_packages() {
                 &zip(&entries),
                 "fixture",
                 SourceChannel::BootloaderCi,
+                BootloaderNamePolicy::CanonicalOnly,
                 &cancel,
                 &mut |_| {},
             )
@@ -1626,6 +1668,7 @@ fn bootloader_ci_rejects_unsafe_excluded_members_and_nested_packages() {
             &linked,
             "fixture",
             SourceChannel::BootloaderCi,
+            BootloaderNamePolicy::CanonicalOnly,
             &cancel,
             &mut |_| {},
         )
@@ -1640,6 +1683,7 @@ fn bootloader_ci_rejects_unsafe_excluded_members_and_nested_packages() {
             &oversized,
             "fixture",
             SourceChannel::BootloaderCi,
+            BootloaderNamePolicy::CanonicalOnly,
             &cancel,
             &mut |_| {},
         )
@@ -1654,6 +1698,7 @@ fn bootloader_ci_rejects_unsafe_excluded_members_and_nested_packages() {
             &corrupt,
             "fixture",
             SourceChannel::BootloaderCi,
+            BootloaderNamePolicy::CanonicalOnly,
             &cancel,
             &mut |_| {},
         )
@@ -1693,6 +1738,7 @@ fn bootloader_ci_configured_public_download_and_token_fallback_preserve_digest_c
                 &config,
                 &source,
                 &asset,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {},
             )
@@ -1718,6 +1764,7 @@ fn bootloader_ci_configured_public_download_and_token_fallback_preserve_digest_c
                 &config,
                 &source,
                 &asset,
+                BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
                 &mut |_| {},
             )
@@ -1726,5 +1773,549 @@ fn bootloader_ci_configured_public_download_and_token_fallback_preserve_digest_c
             .contains("SHA-256 mismatch")
         );
         assert!(source.replies.lock().unwrap().is_empty());
+    });
+}
+
+fn name_policy_catalog() -> crate::features::firmware::board_catalog::Catalog {
+    let directory = tempfile::tempdir().unwrap();
+    let config = directory.path().join("slimenrf-helper.yaml");
+    std::fs::write(
+        &config,
+        br#"{"schema_version":1,"firmware_root":"missing","board_targets":{
+        "canonical":{"bootloader_board":"slimenrf_receiver_aerorx_r1","bootloader_mcu":"nrf52840","targets":[]},
+        "alias":{"name":"custom/nrf52833","firmware_aliases":["Custom.uf2"]}
+    }}"#,
+    )
+    .unwrap();
+    crate::features::firmware::board_catalog::Catalog::load(&config).unwrap()
+}
+
+#[test]
+fn bootloader_release_name_policy_controls_versions_artifacts_and_downloads() {
+    run(async {
+        let config = RemoteConfig::default();
+        let channel = SourceChannel::BootloaderRelease;
+        let api = channel.api(&config);
+        let copied = BOOTLOADER_NAME.replace(".uf2", " (2).uf2");
+        let known = "Custom (2).uf2";
+        let unknown = "Mystery Board.UF2";
+        let metadata = |id, name: &str, bytes: &[u8]| {
+            json!({
+                "id":id, "name":name, "size":bytes.len(),
+                "digest":format!("sha256:{}", hash(bytes)),
+                "browser_download_url":format!("https://github.com/assets/{id}")
+            })
+        };
+        let canonical = metadata(1, BOOTLOADER_NAME, b"abc");
+        let copied_metadata = metadata(2, &copied, b"def");
+        let known_metadata = metadata(3, known, b"ghi");
+        let unknown_metadata = metadata(4, unknown, b"jkl");
+        let releases = json!([
+            {"id":43,"tag_name":"new","published_at":"2026-10-10","html_url":"https://github.com/release/43",
+             "assets":[known_metadata.clone(), unknown_metadata.clone()]},
+            {"id":42,"tag_name":"old","published_at":"2026-10-09","html_url":"https://github.com/release/42",
+             "assets":[canonical.clone()]},
+            {"id":44,"tag_name":"draft","draft":true,"published_at":"2026-10-11","html_url":"https://github.com/release/44",
+             "assets":[unknown_metadata.clone()]},
+            {"id":45,"tag_name":"hex","published_at":"2026-10-12","html_url":"https://github.com/release/45",
+             "assets":[metadata(5, "full.hex", b"hex")]}
+        ]);
+        let cancel = AtomicBool::new(false);
+        let release_url = format!("{api}/releases?per_page=100&page=1");
+        let v = bootloader_version();
+        let catalog = name_policy_catalog();
+
+        for (policy, expected_versions) in [
+            (BootloaderNamePolicy::CanonicalOnly, vec![42]),
+            (BootloaderNamePolicy::AllowUnclassified, vec![43, 42]),
+        ] {
+            let source = Fixture::new(vec![(release_url.clone(), releases.clone())]);
+            let versions =
+                list_versions_with(&config, &source, channel, policy, &cancel, &mut |_| {})
+                    .await
+                    .unwrap();
+            assert_eq!(
+                versions
+                    .iter()
+                    .map(|version| version.id)
+                    .collect::<Vec<_>>(),
+                expected_versions
+            );
+
+            let latest_id = expected_versions[0];
+            let latest_assets = if latest_id == 43 {
+                json!([known_metadata.clone(), unknown_metadata.clone()])
+            } else {
+                json!([canonical.clone()])
+            };
+            let source = Fixture::new(vec![
+                (release_url.clone(), releases.clone()),
+                (
+                    format!("{api}/releases/{latest_id}/assets?per_page=100&page=1"),
+                    latest_assets,
+                ),
+            ]);
+            let latest = latest_with(&config, &source, channel, policy, &cancel, &mut |_| {})
+                .await
+                .unwrap();
+            assert_eq!(latest.id, latest_id);
+            assert!(source.replies.lock().unwrap().is_empty());
+
+            let mut assets = vec![
+                canonical.clone(),
+                copied_metadata.clone(),
+                known_metadata.clone(),
+                unknown_metadata.clone(),
+            ];
+            for name in [
+                "full.hex",
+                "firmware.bin",
+                "dfu.zip",
+                "image.uf2.bin",
+                "../escape.uf2",
+                "nested/image.uf2",
+                "nested\\image.uf2",
+                "C:image.uf2",
+                "unsafe\nname.uf2",
+                &format!("{}.uf2", "x".repeat(1021)),
+            ] {
+                assets.push(metadata(100, name, b"excluded"));
+            }
+            let source = Fixture::new(vec![(
+                format!("{api}/releases/{}/assets?per_page=100&page=1", v.id),
+                json!(assets),
+            )]);
+            let artifacts = list_artifacts_with(&config, &source, &v, policy, &cancel, &mut |_| {})
+                .await
+                .unwrap();
+            let mut expected_names = vec![BOOTLOADER_NAME, copied.as_str()];
+            if policy == BootloaderNamePolicy::AllowUnclassified {
+                expected_names.extend([known, unknown]);
+            }
+            expected_names.sort_unstable();
+            assert_eq!(
+                artifacts
+                    .iter()
+                    .map(|item| item.name.as_str())
+                    .collect::<Vec<_>>(),
+                expected_names
+            );
+            assert!(artifacts.len() > 1, "all choices must remain distinct");
+
+            for item in &artifacts {
+                let expected = match item.id {
+                    1 => b"abc".as_slice(),
+                    2 => b"def".as_slice(),
+                    3 => b"ghi".as_slice(),
+                    4 => b"jkl".as_slice(),
+                    id => panic!("unexpected asset {id}"),
+                };
+                assert_eq!(item.sha256.as_deref(), Some(hash(expected).as_str()));
+                let source = Fixture {
+                    replies: Mutex::new(VecDeque::from([(
+                        item.url.clone(),
+                        Ok(expected.to_vec()),
+                    )])),
+                    token: false,
+                };
+                let files = download_with(&config, &source, item, policy, &cancel, &mut |_| {})
+                    .await
+                    .unwrap();
+                assert_eq!(files.len(), 1);
+                assert_eq!(files[0].name, item.name);
+                assert_eq!(files[0].bytes, expected);
+                assert_eq!(files[0].sha256, hash(expected));
+                assert!(files[0].provenance.contains(&item.url));
+                assert!(files[0].provenance.contains("matches upstream digest"));
+                if item.id <= 2 {
+                    let hints = catalog.match_filename(&files[0].name);
+                    assert_eq!(hints.len(), 1);
+                    assert!(hints[0].bootloader);
+                } else if item.id == 3 {
+                    let hints = catalog.match_filename(&files[0].name);
+                    assert_eq!(hints.len(), 1);
+                    assert_eq!(hints[0].board_target, "custom/nrf52833");
+                    assert!(!hints[0].bootloader);
+                } else {
+                    assert!(catalog.match_filename(&files[0].name).is_empty());
+                }
+            }
+        }
+
+        for name in [
+            "unknown.uf2",
+            "full.hex",
+            "firmware.bin",
+            "dfu.zip",
+            "../escape.uf2",
+            "nested/image.uf2",
+            "nested\\image.uf2",
+            "C:image.uf2",
+            "unsafe\nname.uf2",
+        ] {
+            for policy in [
+                BootloaderNamePolicy::CanonicalOnly,
+                BootloaderNamePolicy::AllowUnclassified,
+            ] {
+                if name == "unknown.uf2" && policy == BootloaderNamePolicy::AllowUnclassified {
+                    continue;
+                }
+                let mut item = bootloader_artifact(b"abc");
+                item.name = name.into();
+                let source = Fixture::new(Vec::new());
+                assert!(
+                    download_with(&config, &source, &item, policy, &cancel, &mut |_| {})
+                        .await
+                        .is_err(),
+                    "{name:?} under {policy:?}"
+                );
+                assert!(source.replies.lock().unwrap().is_empty());
+            }
+        }
+
+        let mut item = bootloader_artifact(b"abc");
+        item.name = unknown.into();
+        for (size, digest, expected_error) in [
+            (3, Some("0".repeat(64)), "SHA-256 mismatch"),
+            (4, None, "size differs"),
+        ] {
+            item.size = size;
+            item.sha256 = digest;
+            let source = Fixture {
+                replies: Mutex::new(VecDeque::from([(item.url.clone(), Ok(b"abc".to_vec()))])),
+                token: false,
+            };
+            assert!(
+                download_with(
+                    &config,
+                    &source,
+                    &item,
+                    BootloaderNamePolicy::AllowUnclassified,
+                    &cancel,
+                    &mut |_| {},
+                )
+                .await
+                .unwrap_err()
+                .contains(expected_error)
+            );
+        }
+    });
+}
+
+#[test]
+fn bootloader_ci_name_policy_preserves_distinct_members_and_provenance() {
+    run(async {
+        let config = RemoteConfig::default();
+        let cancel = AtomicBool::new(false);
+        let canonical = format!("out/{BOOTLOADER_NAME}");
+        let copied = canonical.replace(".uf2", " (2).uf2");
+        let known = "out/Custom (2).uf2";
+        let unknown = "out/Mystery Board.UF2";
+        let nested = zip(&[
+            ("manifest.json", b"{}"),
+            ("inner.uf2", b"not an outer member"),
+        ]);
+        let bytes = zip(&[
+            (&canonical, b"abc"),
+            (&copied, b"def"),
+            (known, b"ghi"),
+            (unknown, b"jkl"),
+            ("out/full.hex", b"hex"),
+            ("out/full.bin", b"bin"),
+            ("out/dfu.zip", &nested),
+        ]);
+        let mut item = artifact(SourceChannel::BootloaderCi, &bytes);
+        item.name = "slimenrf_promicro".into();
+        item.version.commit = Some("7f0654b".into());
+        let catalog = name_policy_catalog();
+
+        for policy in [
+            BootloaderNamePolicy::CanonicalOnly,
+            BootloaderNamePolicy::AllowUnclassified,
+        ] {
+            let source = Fixture {
+                replies: Mutex::new(VecDeque::from([(item.url.clone(), Ok(bytes.clone()))])),
+                token: false,
+            };
+            let files = download_with(&config, &source, &item, policy, &cancel, &mut |_| {})
+                .await
+                .unwrap();
+            let mut expected_names = vec![canonical.as_str(), copied.as_str()];
+            if policy == BootloaderNamePolicy::AllowUnclassified {
+                expected_names.extend([known, unknown]);
+            }
+            expected_names.sort_unstable();
+            assert_eq!(
+                files
+                    .iter()
+                    .map(|file| file.name.as_str())
+                    .collect::<Vec<_>>(),
+                expected_names
+            );
+            assert!(files.len() > 1, "all choices must remain distinct");
+            for file in &files {
+                let expected = if file.name == canonical {
+                    b"abc".as_slice()
+                } else if file.name == copied {
+                    b"def".as_slice()
+                } else if file.name == known {
+                    b"ghi".as_slice()
+                } else if file.name == unknown {
+                    b"jkl".as_slice()
+                } else {
+                    panic!("unexpected archive member {}", file.name);
+                };
+                assert_eq!(file.bytes, expected);
+                assert_eq!(file.sha256, hash(expected));
+                if file.name == canonical {
+                    assert_eq!(
+                        file.sha256,
+                        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+                    );
+                }
+                assert!(file.provenance.contains(&format!("member {}", file.name)));
+                assert!(
+                    file.provenance
+                        .contains(&format!("member SHA-256 {}", file.sha256))
+                );
+                assert!(file.provenance.contains(&hash(&bytes)));
+                assert!(file.provenance.contains("7f0654b"));
+                assert!(file.provenance.contains("matches upstream digest"));
+                let hints = catalog.match_filename(&file.name);
+                if file.name == canonical || file.name == copied {
+                    assert_eq!(hints.len(), 1);
+                    assert!(hints[0].bootloader);
+                } else if file.name == known {
+                    assert_eq!(hints.len(), 1);
+                    assert_eq!(hints[0].board_target, "custom/nrf52833");
+                    assert!(!hints[0].bootloader);
+                } else {
+                    assert!(hints.is_empty());
+                }
+            }
+            assert!(source.replies.lock().unwrap().is_empty());
+        }
+
+        let no_uf2 = zip(&[
+            ("out/full.hex", b"hex"),
+            ("out/full.bin", b"bin"),
+            ("out/dfu.zip", &nested),
+        ]);
+        assert!(
+            extract_archive(
+                &no_uf2,
+                "fixture",
+                SourceChannel::BootloaderCi,
+                BootloaderNamePolicy::AllowUnclassified,
+                &cancel,
+                &mut |_| {},
+            )
+            .unwrap_err()
+            .contains("no bootloader self-update UF2")
+        );
+        item.sha256 = Some("0".repeat(64));
+        let source = Fixture {
+            replies: Mutex::new(VecDeque::from([(item.url.clone(), Ok(bytes))])),
+            token: false,
+        };
+        assert!(
+            download_with(
+                &config,
+                &source,
+                &item,
+                BootloaderNamePolicy::AllowUnclassified,
+                &cancel,
+                &mut |_| {},
+            )
+            .await
+            .unwrap_err()
+            .contains("SHA-256 mismatch")
+        );
+    });
+}
+
+#[test]
+fn bootloader_unclassified_ci_still_rejects_unsafe_and_excessive_members() {
+    let cancel = AtomicBool::new(false);
+    let nested = zip(&[("../manifest.json", b"{}")]);
+    for entries in [
+        vec![
+            ("unclassified.uf2", b"candidate".as_slice()),
+            ("../excluded.txt", b"unsafe".as_slice()),
+        ],
+        vec![
+            ("unclassified.uf2", b"candidate".as_slice()),
+            ("excluded.hex", b"a".as_slice()),
+            ("EXCLUDED.hex", b"b".as_slice()),
+        ],
+        vec![
+            ("unclassified.uf2", b"candidate".as_slice()),
+            ("excluded.zip", nested.as_slice()),
+        ],
+        vec![
+            ("unclassified.uf2", b"candidate".as_slice()),
+            ("excluded.hex", b"".as_slice()),
+        ],
+    ] {
+        assert!(
+            extract_archive(
+                &zip(&entries),
+                "fixture",
+                SourceChannel::BootloaderCi,
+                BootloaderNamePolicy::AllowUnclassified,
+                &cancel,
+                &mut |_| {},
+            )
+            .is_err()
+        );
+    }
+
+    let bytes = zip(&[
+        ("excluded.txt", b"ignored"),
+        ("unclassified.uf2", b"candidate"),
+    ]);
+    let end = bytes.len() - 22;
+    let central = u32::from_le_bytes(bytes[end + 16..end + 20].try_into().unwrap()) as usize;
+    let local = u32::from_le_bytes(bytes[central + 42..central + 46].try_into().unwrap()) as usize;
+    let mut linked = bytes.clone();
+    linked[central + 5] = 3;
+    linked[central + 38..central + 42].copy_from_slice(&(0o120777u32 << 16).to_le_bytes());
+    let mut oversized = bytes.clone();
+    oversized[local + 22..local + 26].copy_from_slice(&((MAX_MEMBER + 1) as u32).to_le_bytes());
+    oversized[central + 24..central + 28].copy_from_slice(&((MAX_MEMBER + 1) as u32).to_le_bytes());
+    let mut excessive_members = bytes;
+    excessive_members[end + 8..end + 12].copy_from_slice(&[0x01, 0x04, 0x01, 0x04]);
+    for (archive, error) in [
+        (linked, "link"),
+        (oversized, "size limits"),
+        (excessive_members, "too many members"),
+    ] {
+        let result = extract_archive(
+            &archive,
+            "fixture",
+            SourceChannel::BootloaderCi,
+            BootloaderNamePolicy::AllowUnclassified,
+            &cancel,
+            &mut |_| {},
+        )
+        .unwrap_err();
+        assert!(result.contains(error), "{result}");
+    }
+
+    let bytes = zip(&[
+        ("excluded.hex", b"excluded"),
+        ("unclassified.uf2", b"candidate"),
+    ]);
+    let end = bytes.len() - 22;
+    let central = u32::from_le_bytes(bytes[end + 16..end + 20].try_into().unwrap()) as usize;
+    let local = u32::from_le_bytes(bytes[central + 42..central + 46].try_into().unwrap()) as usize;
+    let mut corrupt = bytes;
+    corrupt[local + 14] ^= 1;
+    corrupt[central + 16] ^= 1;
+    assert!(
+        extract_archive(
+            &corrupt,
+            "fixture",
+            SourceChannel::BootloaderCi,
+            BootloaderNamePolicy::AllowUnclassified,
+            &cancel,
+            &mut |_| {},
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn bootloader_name_policy_does_not_broaden_application_channels() {
+    run(async {
+        let config = RemoteConfig::default();
+        let channel = SourceChannel::Release;
+        let api = channel.api(&config);
+        let asset = |id, name| {
+            json!({
+                "id":id, "name":name, "size":3,
+                "browser_download_url":format!("https://github.com/assets/{id}")
+            })
+        };
+        let images = vec![
+            asset(1, "app.uf2"),
+            asset(2, "app.hex"),
+            asset(3, "app.bin"),
+            asset(4, "dfu.zip"),
+            asset(5, "program.exe"),
+        ];
+        let releases = json!([
+            {"id":1,"tag_name":"261010","published_at":"2026-10-10","html_url":"https://github.com/release/1",
+             "assets":images},
+            {"id":2,"tag_name":"261011","published_at":"2026-10-11","html_url":"https://github.com/release/2",
+             "assets":[asset(6, "app.uf2.exe")]}
+        ]);
+        let cancel = AtomicBool::new(false);
+        let nested = zip(&[("manifest.json", b"{}"), ("app.bin", b"image")]);
+        let archive = zip(&[
+            ("out/app.uf2", b"uf2"),
+            ("out/app.hex", b"hex"),
+            ("out/app.bin", b"bin"),
+            ("out/dfu.zip", &nested),
+            ("out/program.exe", b"exe"),
+        ]);
+        for policy in [
+            BootloaderNamePolicy::CanonicalOnly,
+            BootloaderNamePolicy::AllowUnclassified,
+        ] {
+            let source = Fixture::new(vec![(
+                format!("{api}/releases?per_page=100&page=1"),
+                releases.clone(),
+            )]);
+            let versions =
+                list_versions_with(&config, &source, channel, policy, &cancel, &mut |_| {})
+                    .await
+                    .unwrap();
+            assert_eq!(
+                versions
+                    .iter()
+                    .map(|version| version.id)
+                    .collect::<Vec<_>>(),
+                [1]
+            );
+            let source = Fixture::new(vec![(
+                format!("{api}/releases/1/assets?per_page=100&page=1"),
+                json!([
+                    asset(1, "app.uf2"),
+                    asset(2, "app.hex"),
+                    asset(3, "app.bin"),
+                    asset(4, "dfu.zip"),
+                    asset(5, "program.exe")
+                ]),
+            )]);
+            let artifacts =
+                list_artifacts_with(&config, &source, &versions[0], policy, &cancel, &mut |_| {})
+                    .await
+                    .unwrap();
+            assert_eq!(
+                artifacts
+                    .iter()
+                    .map(|item| item.name.as_str())
+                    .collect::<Vec<_>>(),
+                ["app.bin", "app.hex", "app.uf2", "dfu.zip"]
+            );
+            let files = extract_archive(
+                &archive,
+                "fixture",
+                SourceChannel::ReceiverCi,
+                policy,
+                &cancel,
+                &mut |_| {},
+            )
+            .unwrap();
+            assert_eq!(
+                files
+                    .iter()
+                    .map(|file| file.name.as_str())
+                    .collect::<Vec<_>>(),
+                ["out/app.bin", "out/app.hex", "out/app.uf2", "out/dfu.zip"]
+            );
+            assert_eq!(files[3].bytes, nested);
+        }
     });
 }
