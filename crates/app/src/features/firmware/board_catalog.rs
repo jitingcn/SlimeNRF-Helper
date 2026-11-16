@@ -7,7 +7,7 @@ mod identities;
 mod inventory;
 mod loading;
 pub use filename_hints::filename_variant;
-pub(crate) use identities::bootloader_board;
+pub(crate) use identities::{bootloader_board, strip_download_suffix};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]

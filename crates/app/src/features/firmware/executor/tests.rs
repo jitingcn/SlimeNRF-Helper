@@ -4,6 +4,160 @@ use crate::update::{Job, OtaPreparation};
 use std::collections::VecDeque;
 use std::io::{Cursor, Write};
 
+#[test]
+fn uf2_destination_uses_only_well_formed_relative_member_basenames() {
+    for (source, destination) in [
+        ("firmware.uf2", "firmware.uf2"),
+        ("out/update-board_nosd.uf2", "update-board_nosd.uf2"),
+        ("out/release/firmware (2).uf2", "firmware (2).uf2"),
+        ("../escape.uf2", "../escape.uf2"),
+        ("out/../../escape.uf2", "out/../../escape.uf2"),
+        ("out/./escape.uf2", "out/./escape.uf2"),
+        ("out//escape.uf2", "out//escape.uf2"),
+        ("/escape.uf2", "/escape.uf2"),
+        ("out\\escape.uf2", "out\\escape.uf2"),
+        ("C:/escape.uf2", "C:/escape.uf2"),
+        ("out/bad\nname.uf2", "out/bad\nname.uf2"),
+    ] {
+        assert_eq!(uf2_destination_name(source), destination, "{source:?}");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn uf2_executor_fixture() -> (tempfile::TempDir, uf2::Uf2Volume, Arc<[u8]>) {
+    let directory = tempfile::tempdir().unwrap();
+    let mount = directory.path().join("selected");
+    std::fs::create_dir(&mount).unwrap();
+    std::fs::write(mount.join("INFO_UF2.TXT"), "Board-ID: nrf52840-test\n").unwrap();
+    let volume = uf2::inspect_volume(&mount, "INFO_UF2.TXT").unwrap();
+    let mut bytes = vec![0u8; 512];
+    for (offset, value) in [
+        (0, 0x0a32_4655u32),
+        (4, 0x9e5d_5157),
+        (8, 0x2000),
+        (12, 0x1000),
+        (16, 256),
+        (20, 0),
+        (24, 1),
+        (28, 0xada5_2840),
+        (508, 0x0ab1_6f30),
+    ] {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+    (directory, volume, bytes.into())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn execute_uf2_fixture(
+    volume: &uf2::Uf2Volume,
+    source_name: &str,
+    bytes: &Arc<[u8]>,
+) -> (uf2::Uf2Volume, UpdateOutcome) {
+    let completion = execute(
+        UpdateRequest::Uf2(
+            vec![volume.clone()],
+            FileImage {
+                name: source_name.into(),
+                bytes: Arc::clone(bytes),
+            },
+            Uf2ImagePurpose::Application,
+        ),
+        &AtomicBool::new(false),
+        &mut |_| {},
+    )
+    .unwrap();
+    let UpdateCompletion::Results(mut results) = completion else {
+        panic!("expected per-volume UF2 results");
+    };
+    assert_eq!(results.len(), 1);
+    let (ResultIdentity::Uf2(volume), outcome) = results.pop().unwrap() else {
+        panic!("expected frozen UF2 volume identity");
+    };
+    (volume, outcome)
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn nested_ci_member_writes_basename_to_frozen_volume() {
+    let (_directory, volume, bytes) = uf2_executor_fixture();
+    let source_name = "out/firmware (2).uf2";
+    let (returned, outcome) = execute_uf2_fixture(&volume, source_name, &bytes);
+    assert!(matches!(outcome, UpdateOutcome::Completed));
+    assert_eq!(returned.identity, volume.identity);
+    assert_eq!(returned.mount, volume.mount);
+    assert_eq!(
+        std::fs::read(volume.mount.join("firmware (2).uf2"))
+            .unwrap()
+            .as_slice(),
+        bytes.as_ref()
+    );
+    assert!(!volume.mount.join("out").exists());
+
+    let direct = uf2::write(
+        &volume,
+        source_name,
+        &bytes,
+        Uf2ImagePurpose::Application,
+        &AtomicBool::new(false),
+        &mut |_| {},
+    )
+    .unwrap_err();
+    assert!(direct.contains("plain .uf2 filename"), "{direct}");
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn uf2_member_copy_preserves_destination_and_identity_guards() {
+    let (directory, volume, bytes) = uf2_executor_fixture();
+    let marker = volume.mount.join("CURRENT.UF2");
+    let existing = volume.mount.join("existing.uf2");
+    std::fs::write(&marker, b"source marker").unwrap();
+    std::fs::write(&existing, b"existing destination").unwrap();
+
+    for source_name in [
+        "../escape.uf2",
+        "out/../../escape.uf2",
+        "out/./escape.uf2",
+        "out//escape.uf2",
+        "/escape.uf2",
+        "out\\escape.uf2",
+        "C:/escape.uf2",
+    ] {
+        let (_, outcome) = execute_uf2_fixture(&volume, source_name, &bytes);
+        let UpdateOutcome::Failed(error) = outcome else {
+            panic!("unsafe source path must fail: {source_name:?}");
+        };
+        assert!(
+            error.contains("plain .uf2 filename"),
+            "{source_name:?}: {error}"
+        );
+        assert!(!directory.path().join("escape.uf2").exists());
+        assert!(!volume.mount.join("escape.uf2").exists());
+    }
+
+    let (_, outcome) = execute_uf2_fixture(&volume, "out/current.uf2", &bytes);
+    let UpdateOutcome::Failed(error) = outcome else {
+        panic!("nested member must not overwrite the source marker");
+    };
+    assert!(error.contains("identity/source marker"), "{error}");
+    assert_eq!(std::fs::read(&marker).unwrap(), b"source marker");
+
+    let (_, outcome) = execute_uf2_fixture(&volume, "out/existing.uf2", &bytes);
+    let UpdateOutcome::Failed(error) = outcome else {
+        panic!("nested member must not replace an existing destination");
+    };
+    assert!(error.contains("Cannot create"), "{error}");
+    assert_eq!(std::fs::read(&existing).unwrap(), b"existing destination");
+
+    std::fs::write(volume.mount.join("INFO_UF2.TXT"), "Board-ID: replacement\n").unwrap();
+    let (_, outcome) = execute_uf2_fixture(&volume, "out/new.uf2", &bytes);
+    let UpdateOutcome::Failed(error) = outcome else {
+        panic!("changed volume identity must revoke the write");
+    };
+    assert!(error.contains("identity changed"), "{error}");
+    assert!(!volume.mount.join("new.uf2").exists());
+}
+
 fn target(receiver: &str, id: u8) -> Target {
     Target {
         receiver: ReceiverEndpoint {

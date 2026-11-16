@@ -740,6 +740,7 @@ fn ci_container_hints_cannot_authorize_unknown_or_other_board_members() {
     for name in [
         "Unknown_Tracker.hex",
         "SlimeNRF_ProMicro_StackedSmol_Tracker_SPI.hex",
+        "SlimeNRF_ProMicro_StackedSmol_Tracker_SPI - Copy（2）.hex",
         "SlimeNRF_ProMicro_Chrysalis_Tracker.hex",
     ] {
         let mut member = make_image(
@@ -760,6 +761,17 @@ fn ci_container_hints_cannot_authorize_unknown_or_other_board_members() {
                 validate_ota_image(&state.images[0], &tracker).is_err(),
                 "{name}"
             );
+            if name.contains(" - Copy") {
+                assert_eq!(state.images[0].hints.len(), 1);
+                assert_eq!(
+                    state.images[0].hints[0].board_target,
+                    "promicro_uf2/nrf52840/spi"
+                );
+                assert_eq!(
+                    validate_ota_image(&state.images[0], &tracker).unwrap_err(),
+                    crate::i18n::tr("firmware.error.image_method_mismatch")
+                );
+            }
         }
     }
 }

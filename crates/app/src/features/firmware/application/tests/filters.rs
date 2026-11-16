@@ -330,6 +330,190 @@ fn application_format_filter_uses_matching_ota_group_not_global_bootloader() {
 }
 
 #[test]
+fn copied_archive_labels_preserve_format_and_ota_group_filters() {
+    let ordinary = target("a", 0, "board");
+    let mut signed = target("a", 1, "board");
+    signed.info.bootloader = "mcuboot".into();
+
+    for (name, uf2, opendfu, ordinary_ota, signed_ota) in [
+        ("board", true, true, true, false),
+        ("board [2] - Copy", true, true, true, false),
+        ("board.uf2.zip", true, false, true, false),
+        ("board.uf2 - Copy.zip", true, false, true, false),
+        ("board.hex.zip", false, true, true, false),
+        ("board.hex - 副本.zip", false, true, true, false),
+        ("board.bin.zip", false, false, false, true),
+        ("board.bin - Copy.zip", false, false, false, true),
+        ("signed_update", false, false, false, true),
+        ("signed_update - Copy", false, false, false, true),
+        ("signed_update [2]", false, false, false, true),
+        ("signed_update copy 2", false, false, false, true),
+        ("signed_update 拷贝", false, false, false, true),
+        ("signed_update [2] - Copy（２）", false, false, false, true),
+        ("signed_update.bin.zip", false, false, false, true),
+        ("signed_update.bin - Copy.zip", false, false, false, true),
+        ("signed_update.bin（2）.zip", false, false, false, true),
+        ("signed_update -2", true, true, true, false),
+        ("signed_update_2", true, true, true, false),
+        ("signed_update 2", true, true, true, false),
+    ] {
+        for (mode, expected) in [
+            (Mode::Uf2, uf2),
+            (Mode::OpenDfu, opendfu),
+            (Mode::Ble, false),
+        ] {
+            assert_eq!(
+                firmware_page_matches(
+                    mode,
+                    ImageCategory::Application,
+                    name,
+                    &[],
+                    std::iter::empty(),
+                    true,
+                ),
+                expected,
+                "{name}"
+            );
+        }
+        for (device, expected) in [(&ordinary, ordinary_ota), (&signed, signed_ota)] {
+            assert_eq!(
+                firmware_page_matches(
+                    Mode::Esb,
+                    ImageCategory::Application,
+                    name,
+                    &[],
+                    std::iter::once(device),
+                    true,
+                ),
+                expected,
+                "{name}, bootloader {}",
+                device.info.bootloader
+            );
+        }
+    }
+
+    for name in ["signed_update.bin", "signed_update [2] - Copy.bin"] {
+        assert!(firmware_page_matches(
+            Mode::Esb,
+            ImageCategory::Application,
+            name,
+            &[],
+            std::iter::once(&signed),
+            false,
+        ));
+        assert!(!firmware_page_matches(
+            Mode::Esb,
+            ImageCategory::Application,
+            name,
+            &[],
+            std::iter::once(&ordinary),
+            false,
+        ));
+    }
+    assert!(!firmware_page_matches(
+        Mode::Esb,
+        ImageCategory::Application,
+        "signed_update (2).bin.txt",
+        &[],
+        std::iter::once(&signed),
+        false,
+    ));
+}
+
+#[test]
+fn copied_archive_labels_keep_cdc_role_and_bootloader_restrictions() {
+    use crate::features::firmware::board_catalog::{EsbOtaKind, FirmwareHint};
+
+    let receiver = target("a", RECEIVER_ID, "board");
+    let tracker = target("a", 0, "board");
+    let hints = [FirmwareHint {
+        board_target: "board".into(),
+        kind: Some(EsbOtaKind::Receiver),
+        variant: "DataCollect CDC".into(),
+        mcuboot: false,
+        bootloader: false,
+    }];
+    for name in [
+        "board_datacollect_cdc",
+        "board_datacollect_cdc [2] - Copy",
+        "board_datacollect_cdc.hex.zip",
+        "board_datacollect_cdc.hex - 副本（２）.zip",
+    ] {
+        assert!(
+            firmware_page_matches(
+                Mode::Esb,
+                ImageCategory::Application,
+                name,
+                &hints,
+                std::iter::once(&receiver),
+                true,
+            ),
+            "{name}"
+        );
+        assert!(
+            !firmware_page_matches(
+                Mode::Esb,
+                ImageCategory::Application,
+                name,
+                &hints,
+                std::iter::once(&tracker),
+                true,
+            ),
+            "{name}"
+        );
+    }
+    for name in [
+        "board_datacollect_hid",
+        "board_datacollect_hid [2] - Copy",
+        "board_datacollect",
+        "board_datacollect.hex - 副本.zip",
+    ] {
+        for mode in [Mode::Uf2, Mode::OpenDfu, Mode::Ble, Mode::Esb] {
+            assert!(
+                !firmware_page_matches(
+                    mode,
+                    ImageCategory::Application,
+                    name,
+                    &[],
+                    std::iter::once(&receiver),
+                    true,
+                ),
+                "{name}"
+            );
+        }
+    }
+    for name in [
+        "update-mcuboot.uf2.zip",
+        "update-mcuboot.uf2 - Copy（２）.zip",
+    ] {
+        assert!(
+            firmware_page_matches(
+                Mode::Uf2,
+                ImageCategory::Bootloader,
+                name,
+                &[],
+                std::iter::empty(),
+                true,
+            ),
+            "{name}"
+        );
+        for mode in [Mode::OpenDfu, Mode::Ble, Mode::Esb] {
+            assert!(
+                !firmware_page_matches(
+                    mode,
+                    ImageCategory::Application,
+                    name,
+                    &[],
+                    std::iter::once(&receiver),
+                    true,
+                ),
+                "{name}"
+            );
+        }
+    }
+}
+
+#[test]
 fn only_receiver_cdc_is_an_available_datacollect_application() {
     use crate::features::firmware::board_catalog::{EsbOtaKind, FirmwareHint};
     let receiver = target("a", RECEIVER_ID, "board");

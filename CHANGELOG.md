@@ -14,6 +14,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Update the GUI framework to GPUI Kit 0.10.0 and GPUI Fast 0.1.16, retaining gpui-pre 0.3.12. This incorporates upstream grapheme-aware input, IME positioning, text-selection, keyboard navigation, accessibility, tooltip and native-window fixes.
 - Internal: the terminal uses the framework's blanket element conversion and lost-mouse-release handling instead of duplicate application workarounds.
 
+### Fixed
+
+- Recognize common download/copy suffixes, including repeated numeric brackets and English or Chinese copy labels, consistently for application and bootloader firmware. Holyiot/OpenDFU, UF2 and ESB keep board, profile, role, format and content checks; original source names and hashes are retained.
+- Keep copied MCUboot archive labels in the correct firmware filters, and write nested CI UF2 members using a plain destination filename while preserving the original member path and provenance.
+
 ## [0.4.6] - 2026-11-11
 
 ### Changed

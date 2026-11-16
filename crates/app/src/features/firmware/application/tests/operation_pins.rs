@@ -667,3 +667,225 @@ fn opendfu_planning_requires_unambiguous_structured_bootloader_metadata(
         assert!(this.flash.leases.is_empty());
     });
 }
+
+#[gpui_kit::test]
+fn opendfu_download_copies_keep_filename_identity_and_board_guards(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    let _ui_session = crate::test_support::UiTestSession::new(cx);
+    use crate::application::FeaturePage;
+    use crate::application::flash::{ImageDestination, Mode, images::load_local_image};
+    use crate::application::test_support::offline_workbench;
+    use crate::domain::{InterfaceDescription, UsbInterface};
+    use crate::features::firmware::board_catalog::Catalog;
+    use crate::features::firmware::bundled_resources::Resource;
+    use crate::features::firmware::executor::{ExecutionRequest, UpdateRequest};
+    use gpui_kit::VisualContext as _;
+    use slimenrf_firmware_image::secure_dfu;
+    use std::sync::{Arc, atomic::AtomicBool};
+
+    let bootloader = SerialEndpoint {
+        vid: Some(0x1915),
+        pid: Some(0x521f),
+        usb_interface: Some(UsbInterface {
+            number: Some(0),
+            description: InterfaceDescription::Value("Open DFU Bootloader".into()),
+        }),
+        ..endpoint("COM10", "SYNTHETIC-DOWNLOAD-COPY")
+    };
+    let (manager, _listener) = fixture();
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        let mut this = offline_workbench(window, cx, manager, executor);
+        this.active_page = FeaturePage::Uf2;
+        this.inventory = inventory(std::slice::from_ref(&bootloader));
+        this.flash.mode = Mode::OpenDfu;
+        this.flash.selected_port = Some(bootloader.port_name);
+        this.flash.catalog = Some(Catalog::load_embedded().unwrap());
+        this
+    });
+    let directory = tempfile::tempdir().unwrap();
+    let bytes = b":0410000001020304E2\n:00000001FF\n";
+    for (name, error_key) in [
+        ("SlimeNRF_Holyiot_Dongle_Receiver_DataCollect_CDC.hex", None),
+        (
+            "SlimeNRF_Holyiot_Dongle_Receiver_DataCollect_CDC (2).hex",
+            None,
+        ),
+        (
+            "SlimeNRF_Holyiot_Dongle_Receiver_DataCollect_CDC(2).hex",
+            None,
+        ),
+        (
+            "SlimeNRF_Holyiot_Dongle_Receiver_DataCollect_CDC - 副本（２）.hex",
+            None,
+        ),
+        (
+            "SlimeNRF_Holyiot_Dongle_Receiver_DataCollect_CDC [3] - Copy (4).HEX",
+            None,
+        ),
+        (
+            "SlimeNRF_Nordic_eByte_Dongle_Receiver_DataCollect_CDC - Copy (3).hex",
+            Some("firmware.error.board_role_mismatch"),
+        ),
+        (
+            "Aero_Tracker (2).hex",
+            Some("firmware.error.board_role_mismatch"),
+        ),
+        (
+            "SlimeNRF_Holyiot_Dongle_Receiver_DataCollect_HID - 副本.hex",
+            Some("firmware.error.image_method_mismatch"),
+        ),
+    ] {
+        let path = directory.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        let image = load_local_image(path.clone(), &AtomicBool::new(false)).unwrap();
+        let original_bytes = image.bytes.clone();
+        workbench.update(cx, |this, _| {
+            this.flash
+                .apply_images(ImageDestination::Global, vec![image]);
+            let selected = this.flash.image.as_ref().unwrap();
+            assert_eq!(selected.name, name);
+            assert_eq!(selected.resource.as_deref(), Some(&Resource::File(path)));
+            assert_eq!(selected.hints.len(), 1, "{name}: {:?}", selected.hints);
+            let action = this.selected_flash_action();
+            if let Some(error_key) = error_key {
+                assert_eq!(action.err().unwrap(), crate::i18n::tr(error_key), "{name}");
+                return;
+            }
+            assert_eq!(selected.hints[0].board_target, "holyiot_21017/nrf52840");
+            assert_eq!(selected.hints[0].variant, "DataCollect CDC");
+            this.review_flash(action.unwrap());
+            assert!(this.flash.take_confirmed_action().is_none());
+            this.flash.acknowledged = true;
+            let ExecutionRequest::Blocking(UpdateRequest::OpenDfu(port, file, options)) =
+                this.flash.take_confirmed_action().unwrap().into_request()
+            else {
+                panic!("Holyiot HEX must retain its OpenDFU request");
+            };
+            assert_eq!(port.port_name, "COM10");
+            assert_eq!(file.name, name);
+            assert!(Arc::ptr_eq(&file.bytes, &original_bytes));
+            let prepared = secure_dfu::parse_images(&file.name, &file.bytes, &options).unwrap();
+            assert_eq!(prepared[0].firmware(), &[1, 2, 3, 4]);
+            assert!(this.flash.job.is_none());
+            assert!(this.flash.leases.is_empty());
+        });
+    }
+}
+
+#[gpui_kit::test]
+fn ble_download_copies_preserve_package_members_and_frozen_request(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    let _ui_session = crate::test_support::UiTestSession::new(cx);
+    use crate::application::FeaturePage;
+    use crate::application::flash::{ImageDestination, Mode, images::load_local_image};
+    use crate::application::test_support::offline_workbench;
+    use crate::features::firmware::{ble_ota::BleDevice, executor::ExecutionRequest};
+    use gpui_kit::VisualContext as _;
+    use slimenrf_firmware_image::legacy_dfu;
+    use std::io::Cursor;
+    use std::sync::{Arc, atomic::AtomicBool};
+
+    let package = |bin_name: &str| {
+        let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for (name, bytes) in [
+            (
+                "manifest.json",
+                br#"{"manifest":{"application":{"bin_file":"application.bin","dat_file":"application.dat"}}}"#.as_slice(),
+            ),
+            (bin_name, &[1, 2, 3, 4]),
+            (
+                "application.dat",
+                &[0x52, 0, 0xff, 0xff, 1, 0, 0, 0, 1, 0, 0xfe, 0xff, 0, 0],
+            ),
+        ] {
+            archive
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            archive.write_all(bytes).unwrap();
+        }
+        archive.finish().unwrap().into_inner()
+    };
+    let bytes = package("application.bin");
+    let (manager, _listener) = fixture();
+    let runtime = crate::app_runtime::AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        let mut this = offline_workbench(window, cx, manager, executor);
+        this.active_page = FeaturePage::Ota;
+        this.preferences.advanced_features = true;
+        this.flash.mode = Mode::Ble;
+        this.flash.ble = vec![BleDevice {
+            id: "synthetic-ble-device".into(),
+            adapter_id: "synthetic-adapter".into(),
+            name: "Synthetic Legacy DFU".into(),
+            address: "synthetic-address".into(),
+        }];
+        this.flash
+            .selected_ble
+            .insert("synthetic-ble-device".into());
+        this
+    });
+    let directory = tempfile::tempdir().unwrap();
+    for name in [
+        "legacy.zip",
+        "legacy(2).zip",
+        "legacy（２）.zip",
+        "legacy [2] - COPY (3).ZIP",
+        "legacy - 副本 [2].zip",
+    ] {
+        let path = directory.path().join(name);
+        std::fs::write(&path, &bytes).unwrap();
+        let image = load_local_image(path, &AtomicBool::new(false)).unwrap();
+        let original_bytes = image.bytes.clone();
+        workbench.update(cx, |this, _| {
+            this.flash
+                .apply_images(ImageDestination::Global, vec![image]);
+            let action = this.selected_flash_action().unwrap();
+            this.review_flash(action);
+            assert!(this.flash.take_confirmed_action().is_none());
+            this.flash.acknowledged = true;
+            let ExecutionRequest::Ble(devices, file) =
+                this.flash.take_confirmed_action().unwrap().into_request()
+            else {
+                panic!("a local Legacy ZIP must retain its BLE request");
+            };
+            assert_eq!(devices[0].id, "synthetic-ble-device");
+            assert_eq!(file.name, name);
+            assert!(Arc::ptr_eq(&file.bytes, &original_bytes));
+            let parsed = legacy_dfu::parse_package(&file.name, &file.bytes).unwrap();
+            assert_eq!(
+                parsed.payloads(),
+                (
+                    &[1, 2, 3, 4][..],
+                    &[0x52, 0, 0xff, 0xff, 1, 0, 0, 0, 1, 0, 0xfe, 0xff, 0, 0][..]
+                )
+            );
+            assert!(this.flash.job.is_none());
+            assert!(this.flash.leases.is_empty());
+        });
+    }
+    let misleading = directory.path().join("legacy_DataCollect_HID - Copy.zip");
+    std::fs::write(&misleading, &bytes).unwrap();
+    let image = load_local_image(misleading, &AtomicBool::new(false)).unwrap();
+    workbench.update(cx, |this, _| {
+        this.flash
+            .apply_images(ImageDestination::Global, vec![image]);
+        assert_eq!(
+            this.selected_flash_action().err().unwrap(),
+            crate::i18n::tr("firmware.error.image_method_mismatch")
+        );
+    });
+    let wrong_extension = directory.path().join("legacy.zip.1");
+    std::fs::write(&wrong_extension, &bytes).unwrap();
+    assert!(load_local_image(wrong_extension, &AtomicBool::new(false)).is_err());
+    assert!(
+        legacy_dfu::parse_package("legacy - Copy.zip", &package("application - Copy.bin")).is_err(),
+        "copy suffixes on the outer ZIP must not relax manifest member lookup"
+    );
+}

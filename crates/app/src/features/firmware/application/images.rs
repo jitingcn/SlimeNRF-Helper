@@ -189,7 +189,9 @@ pub(super) fn firmware_page_matches<'a>(
         return false;
     }
     let file = if archive {
-        lower.strip_suffix(".zip").unwrap_or(&lower)
+        // An archive label is an advertisement; the downloaded image keeps its real name.
+        let wrapped = lower.strip_suffix(".zip").unwrap_or(&lower);
+        board_catalog::strip_download_suffix(wrapped)
     } else {
         &lower
     };

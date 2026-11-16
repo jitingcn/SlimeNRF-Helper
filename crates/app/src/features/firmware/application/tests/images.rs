@@ -382,3 +382,239 @@ fn incompatible_local_replacement_preserves_validated_ota_assignment() {
     assert!(!state.auto_requested);
     assert!(!state.busy());
 }
+
+#[test]
+fn copied_local_ota_images_keep_catalog_identity_and_frozen_requests() {
+    use crate::features::firmware::{
+        board_catalog::{Catalog, EsbOtaKind},
+        esb_ota::RECEIVER_ID,
+        executor::{ExecutionRequest, UpdateRequest},
+    };
+    use sha2::{Digest, Sha256};
+
+    let directory = tempfile::tempdir().unwrap();
+    let config = directory.path().join("slimenrf-helper.yaml");
+    std::fs::write(
+        &config,
+        br#"{"schema_version":1,"firmware_root":".","application_targets":{
+            "tracker":{"name":"fixture/common","esb_ota_kind":"tracker","firmware":"tracker.hex","esb_ota_mcuboot_firmware":"signed_update.bin"},
+            "receiver":{"name":"fixture/common","esb_ota_kind":"receiver","firmware":"receiver_DataCollect_CDC.hex"},
+            "other":{"name":"fixture/other","esb_ota_kind":"tracker","firmware":"other.hex"}
+        }}"#,
+    )
+    .unwrap();
+    let catalog = Catalog::load(&config).unwrap();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let hex = b":0410000001020304E2\n:00000001FF\n";
+    let uf2 = super::planning::uf2_test_image(false);
+    let mut bin = vec![0; 76];
+    bin[..4].copy_from_slice(&0x96f3_b83du32.to_le_bytes());
+    bin[8..10].copy_from_slice(&32u16.to_le_bytes());
+    bin[12..16].copy_from_slice(&4u32.to_le_bytes());
+    bin[32..36].fill(7);
+    bin[36..40].copy_from_slice(&[7, 0x69, 40, 0]);
+    bin[40..44].copy_from_slice(&[0x10, 0, 32, 0]);
+    let digest = Sha256::digest(&bin[..36]);
+    bin[44..].copy_from_slice(&digest);
+
+    let tracker = target("a", 0, "fixture/common");
+    let receiver = target("a", RECEIVER_ID, "fixture/common");
+    let mut signed = tracker.clone();
+    signed.info.bootloader = "mcuboot".into();
+    signed.info.flash_base = 0;
+    for (name, bytes, device, kind, variant, mcuboot, base) in [
+        (
+            "tracker.hex",
+            hex.as_slice(),
+            &tracker,
+            EsbOtaKind::Tracker,
+            "Standard",
+            false,
+            0x1000,
+        ),
+        (
+            "tracker - 副本.hex",
+            hex.as_slice(),
+            &tracker,
+            EsbOtaKind::Tracker,
+            "Standard",
+            false,
+            0x1000,
+        ),
+        (
+            "tracker [2] - Copy（２）.uf2",
+            uf2.bytes.as_ref(),
+            &tracker,
+            EsbOtaKind::Tracker,
+            "Standard",
+            false,
+            0x1000,
+        ),
+        (
+            "receiver_DataCollect_CDC - Copy (3).HEX",
+            hex.as_slice(),
+            &receiver,
+            EsbOtaKind::Receiver,
+            "DataCollect CDC",
+            false,
+            0x1000,
+        ),
+        (
+            "signed_update.bin",
+            bin.as_slice(),
+            &signed,
+            EsbOtaKind::Tracker,
+            "Standard",
+            true,
+            0,
+        ),
+        (
+            "signed_update（２）.BIN",
+            bin.as_slice(),
+            &signed,
+            EsbOtaKind::Tracker,
+            "Standard",
+            true,
+            0,
+        ),
+        (
+            "signed_update [2] - Copy (3).bin",
+            bin.as_slice(),
+            &signed,
+            EsbOtaKind::Tracker,
+            "Standard",
+            true,
+            0,
+        ),
+    ] {
+        let path = directory.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        let image = load_local_image(path.clone(), &cancel).unwrap();
+        let parsed = image.parsed.as_ref().unwrap().clone();
+        assert_eq!(parsed.mcuboot, mcuboot, "{name}");
+        assert_eq!(parsed.base_address, base, "{name}");
+        let expected_data = if mcuboot {
+            bin.as_slice()
+        } else if name.ends_with(".uf2") {
+            uf2.parsed.as_ref().unwrap().data.as_slice()
+        } else {
+            b"\x01\x02\x03\x04".as_slice()
+        };
+        assert_eq!(parsed.data.as_slice(), expected_data, "{name}");
+        assert_eq!(image.bytes.as_ref(), bytes, "{name}");
+
+        let mut state = FlashState {
+            mode: Mode::Esb,
+            activity_origin: Mode::Esb,
+            catalog: Some(catalog.clone()),
+            selected_targets: [ota_target_key(device)].into(),
+            targets: vec![device.clone()],
+            ..FlashState::default()
+        };
+        state.reconcile_groups(None);
+        let destination = state.destination(Mode::Esb).unwrap();
+        state.apply_images(destination, vec![image.clone()]);
+        assert!(state.error.is_none(), "{name}: {:?}", state.error);
+        let retained = state.displayed_image(Mode::Esb).unwrap();
+        assert_eq!(retained.name, name);
+        assert_eq!(retained.resource.as_deref(), Some(&Resource::File(path)));
+        assert!(Arc::ptr_eq(&retained.bytes, &image.bytes), "{name}");
+        assert!(
+            Arc::ptr_eq(retained.parsed.as_ref().unwrap(), &parsed),
+            "{name}"
+        );
+        assert_eq!(retained.hints.len(), 1, "{name}: {:?}", retained.hints);
+        let hint = &retained.hints[0];
+        assert_eq!(hint.board_target, "fixture/common", "{name}");
+        assert_eq!(hint.kind, Some(kind), "{name}");
+        assert_eq!(hint.variant, variant, "{name}");
+        assert_eq!(hint.mcuboot, mcuboot, "{name}");
+        assert!(!hint.bootloader, "{name}");
+
+        let groups = plan_ota_groups(&state).unwrap();
+        assert_eq!(groups.len(), 1, "{name}");
+        assert_eq!(groups[0].image.name, name);
+        assert_eq!(groups[0].image.resource, image.resource);
+        assert!(Arc::ptr_eq(&groups[0].image.bytes, &image.bytes), "{name}");
+        assert!(
+            Arc::ptr_eq(groups[0].image.parsed.as_ref().unwrap(), &parsed),
+            "{name}"
+        );
+        let ExecutionRequest::Blocking(UpdateRequest::EsbGroups(request)) =
+            Action::EsbGroups(groups).into_request()
+        else {
+            panic!("expected a frozen ESB request for {name}");
+        };
+        assert_eq!(request.len(), 1, "{name}");
+        assert_eq!(request[0].targets.len(), 1, "{name}");
+        assert_eq!(request[0].targets[0].id, device.id, "{name}");
+        assert_eq!(
+            request[0].targets[0].info.board_target, device.info.board_target,
+            "{name}"
+        );
+        let request_image = request[0].image.as_ref().unwrap();
+        assert!(Arc::ptr_eq(request_image, &parsed), "{name}");
+        assert_eq!(request_image.mcuboot, mcuboot, "{name}");
+        assert_eq!(request_image.base_address, base, "{name}");
+    }
+
+    for (name, device, expected_board, expected_kind) in [
+        (
+            "other [2] - Copy.hex",
+            &tracker,
+            "fixture/other",
+            EsbOtaKind::Tracker,
+        ),
+        (
+            "receiver - 副本（２）.hex",
+            &tracker,
+            "fixture/common",
+            EsbOtaKind::Receiver,
+        ),
+        (
+            "tracker [2] - Copy.hex",
+            &receiver,
+            "fixture/common",
+            EsbOtaKind::Tracker,
+        ),
+    ] {
+        let path = directory.path().join(name);
+        std::fs::write(&path, hex).unwrap();
+        let image = load_local_image(path, &cancel).unwrap();
+        let mut state = FlashState {
+            mode: Mode::Esb,
+            activity_origin: Mode::Esb,
+            catalog: Some(catalog.clone()),
+            selected_targets: [ota_target_key(device)].into(),
+            targets: vec![device.clone()],
+            ..FlashState::default()
+        };
+        state.reconcile_groups(None);
+        let destination = state.destination(Mode::Esb).unwrap();
+        state.apply_images(destination, vec![image]);
+        assert_eq!(
+            state.images[0].hints.len(),
+            1,
+            "{name}: {:?}",
+            state.images[0].hints
+        );
+        assert_eq!(
+            state.images[0].hints[0].board_target, expected_board,
+            "{name}"
+        );
+        assert_eq!(state.images[0].hints[0].kind, Some(expected_kind), "{name}");
+        let expected_error = crate::i18n::tr("firmware.error.image_method_mismatch");
+        assert_eq!(
+            state.error.as_deref(),
+            Some(expected_error.as_str()),
+            "{name}"
+        );
+        assert!(state.displayed_image(Mode::Esb).is_none(), "{name}");
+        assert!(plan_ota_groups(&state).is_err(), "{name}");
+    }
+
+    let path = directory.path().join("signed_update - Copy.bin");
+    bin[32] ^= 1;
+    std::fs::write(&path, bin).unwrap();
+    assert!(load_local_image(path, &cancel).is_err());
+}

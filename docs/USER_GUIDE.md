@@ -241,6 +241,8 @@ Local files, configuration presets, and embedded members are distinct sources. N
 
 To load a local file, open a firmware-update page and drop one file onto the window or a firmware card. You can still click **Choose local file**. For OTA, select the firmware group first. A rejected file leaves the previous selection intact. Loading does not start an update.
 
+Firmware recognition tolerates common copy decorations before the real extension: `(2)`, `[2]`, `（２）`, ` - Copy`, ` copy 2`, ` - 副本`, and ` 拷贝`, including repeated combinations. The original file or archive-member name, source identity, and hash are retained. Known-board recognition still requires the complete board, role, variant, and hardware profile; copy decorations do not override content checks or the unknown-board risk policy. Bare numeric suffixes such as `-2`, `_2`, or ` 2` are not guessed away because they may identify hardware revisions. Keep the correct extension; names such as `firmware.hex.1` are not treated as HEX.
+
 The remote application catalog offers Tracker repository releases, which also include receiver assets, and supported successful Tracker and Receiver CI artifacts.
 
 For a bootloader, choose **Bootloader firmware**, then **Remote firmware**. Select **Bootloader releases** or **Bootloader CI**. The CI channel lists successful builds from the repository's `master` branch and loads only self-update UF2 files.

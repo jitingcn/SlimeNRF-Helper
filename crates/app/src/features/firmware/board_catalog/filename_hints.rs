@@ -1,23 +1,24 @@
-use super::identities::{matches_application_stem, matches_bootloader, matches_firmware_alias};
+use super::identities::{
+    copy_stems, matches_application_stem, matches_bootloader, matches_firmware_alias,
+};
 use super::{Catalog, EsbOtaKind, FirmwareHint, FlashPreset, canonical_board};
 use std::collections::BTreeSet;
 
 impl Catalog {
     pub fn match_filename(&self, name: &str) -> Vec<FirmwareHint> {
         let filename = name.rsplit(['/', '\\']).next().unwrap_or(name);
-        let (key, variant) = filename_key(name);
+        let variant = filename_variant(filename);
         let mut hints = Vec::new();
         for preset in self.presets() {
             if matches_bootloader(preset, filename)
                 || preset.bootloader.as_ref().is_some_and(|resource| {
                     resource
                         .filename()
-                        .is_some_and(|pin| pin.eq_ignore_ascii_case(filename))
+                        .is_some_and(|pin| matches_exact_pin(pin, filename))
                 })
             {
                 append_bootloader_hints(preset, &mut hints);
-                // A preset-level bootloader never inherits its applications' roles.
-                continue;
+                // Separately configured applications can be ambiguous with a custom pin.
             }
             for target in &preset.targets {
                 let board_target = canonical_board(target.name.as_deref().unwrap_or(&preset.key));
@@ -28,7 +29,9 @@ impl Catalog {
                     (target.esb_ota_mcuboot_firmware.as_ref(), true),
                 ] {
                     if path.is_some_and(|resource| {
-                        filename_key(resource.filename().unwrap_or("")).0 == key
+                        resource
+                            .filename()
+                            .is_some_and(|pin| matches_resource_pin(pin, filename, variant))
                     }) {
                         let bootloader = variant == "Bootloader";
                         let hint = FirmwareHint {
@@ -38,7 +41,7 @@ impl Catalog {
                             } else {
                                 target.esb_ota_kind
                             },
-                            variant: variant.clone(),
+                            variant: variant.into(),
                             mcuboot: mcuboot && !bootloader,
                             bootloader,
                         };
@@ -55,7 +58,7 @@ impl Catalog {
                     let hint = FirmwareHint {
                         board_target,
                         kind: target.esb_ota_kind,
-                        variant: variant.clone(),
+                        variant: variant.into(),
                         mcuboot: filename.to_ascii_lowercase().ends_with(".bin"),
                         bootloader: false,
                     };
@@ -66,7 +69,7 @@ impl Catalog {
             }
         }
         for target in &self.opendfu_targets {
-            if filename_key(target.firmware.filename().unwrap_or("")).0 == key {
+            if matches_resource_pin(target.firmware.filename().unwrap_or(""), filename, variant) {
                 hints.push(FirmwareHint {
                     board_target: canonical_board(&target.name),
                     kind: if variant == "Bootloader" {
@@ -74,13 +77,13 @@ impl Catalog {
                     } else {
                         Some(EsbOtaKind::Receiver)
                     },
-                    variant: variant.clone(),
+                    variant: variant.into(),
                     mcuboot: false,
                     bootloader: variant == "Bootloader",
                 });
             }
         }
-        let mut upstream = upstream_hints(filename, &variant);
+        let mut upstream = upstream_hints(filename, variant);
         upstream.retain(|hint| {
             let mut declared = false;
             for target in self
@@ -408,38 +411,99 @@ fn normalized_filename_variant(name: &str) -> &'static str {
     }
 }
 
-fn filename_key(name: &str) -> (String, String) {
-    let name = name
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(name)
-        .to_ascii_lowercase();
-    let variant = normalized_filename_variant(&name);
-    let mut key = name;
+#[derive(Clone, Copy)]
+enum FilenameExtension<'a> {
+    Flash,
+    Exact(Option<&'a str>),
+}
+
+fn split_filename(name: &str) -> (&str, Option<&str>) {
+    name.rsplit_once('.')
+        .map_or((name, None), |(stem, extension)| (stem, Some(extension)))
+}
+
+fn supported_extension(extension: Option<&str>) -> bool {
+    extension.is_some_and(|extension| {
+        ["uf2", "hex", "bin", "zip"]
+            .iter()
+            .any(|allowed| extension.eq_ignore_ascii_case(allowed))
+    })
+}
+
+fn matches_exact_pin(pin: &str, filename: &str) -> bool {
+    if pin.eq_ignore_ascii_case(filename) {
+        return true;
+    }
+    let (pin_stem, pin_extension) = split_filename(pin);
+    let (stem, extension) = split_filename(filename);
+    supported_extension(extension)
+        && pin_extension
+            .zip(extension)
+            .is_some_and(|(expected, actual)| expected.eq_ignore_ascii_case(actual))
+        && copy_stems(stem).any(|candidate| candidate.eq_ignore_ascii_case(pin_stem))
+}
+
+fn matches_resource_pin(pin: &str, filename: &str, variant: &str) -> bool {
+    let (pin_stem, pin_extension) = split_filename(pin);
+    let pin_key = filename_key(pin_stem, pin_extension, filename_variant(pin));
+    let (stem, extension) = split_filename(filename);
+    let max_candidates = if supported_extension(extension) {
+        usize::MAX
+    } else {
+        1
+    };
+    copy_stems(stem).take(max_candidates).any(|candidate| {
+        let key = filename_key(candidate, extension, variant);
+        pin_key.0.eq_ignore_ascii_case(key.0)
+            && match (pin_key.1, key.1) {
+                (FilenameExtension::Flash, FilenameExtension::Flash) => true,
+                (FilenameExtension::Exact(Some(a)), FilenameExtension::Exact(Some(b))) => {
+                    a.eq_ignore_ascii_case(b)
+                }
+                (FilenameExtension::Exact(None), FilenameExtension::Exact(None)) => true,
+                _ => false,
+            }
+    })
+}
+
+fn filename_key<'a>(
+    mut stem: &'a str,
+    extension: Option<&'a str>,
+    variant: &str,
+) -> (&'a str, FilenameExtension<'a>) {
     // Bootloader pins retain their complete board, profile and container.
     // Version compatibility belongs exclusively to the strict updater parser.
     if variant == "Bootloader" {
-        return (key, variant.into());
+        return (stem, FilenameExtension::Exact(extension));
     }
-    for suffix in [
-        "_datacollect_cdc",
-        "_datacollect_hid",
-        "-datacollect-cdc",
-        "-datacollect-hid",
-        "_datacollect",
-        "-datacollect",
-    ] {
-        if let Some(dot) = key.rfind('.')
-            && key[..dot].ends_with(suffix)
-        {
-            key.replace_range(dot - suffix.len()..dot, "");
-            break;
+    if extension.is_some() {
+        for suffix in [
+            "_datacollect_cdc",
+            "_datacollect_hid",
+            "-datacollect-cdc",
+            "-datacollect-hid",
+            "_datacollect",
+            "-datacollect",
+        ] {
+            let Some(index) = stem.len().checked_sub(suffix.len()) else {
+                continue;
+            };
+            if stem
+                .get(index..)
+                .is_some_and(|tail| tail.eq_ignore_ascii_case(suffix))
+            {
+                stem = &stem[..index];
+                break;
+            }
         }
     }
     // Only these two containers are alternative encodings of the same full firmware.
-    if key.ends_with(".uf2") || key.ends_with(".hex") {
-        key.truncate(key.len() - 4);
-        key.push_str(".flash");
-    }
-    (key, variant.into())
+    let extension = if extension
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("uf2") || ext.eq_ignore_ascii_case("hex"))
+    {
+        FilenameExtension::Flash
+    } else {
+        FilenameExtension::Exact(extension)
+    };
+    (stem, extension)
 }

@@ -236,6 +236,301 @@ pub(super) fn uf2_test_image(bootloader: bool) -> crate::application::flash::Ima
     )
 }
 
+#[cfg(not(target_os = "linux"))]
+fn copied_uf2_catalog() -> crate::features::firmware::board_catalog::Catalog {
+    use crate::features::firmware::{
+        board_catalog::{EsbOtaKind, FlashTarget},
+        bundled_resources::Resource,
+    };
+
+    let mut catalog = uf2_catalog();
+    for (board, bootloader_board, firmware) in [
+        ("known", "known_board", "known-app.uf2"),
+        ("other", "other_board", "other-app.uf2"),
+    ] {
+        let preset = catalog.board_targets.get_mut(board).unwrap();
+        preset.bootloader_board = Some(bootloader_board.into());
+        preset.targets.push(FlashTarget {
+            name: Some(board.into()),
+            firmware: Some(Resource::File(firmware.into())),
+            esb_ota_kind: Some(EsbOtaKind::Tracker),
+            ..FlashTarget::default()
+        });
+    }
+    let mut peer = catalog.board_targets["known"].clone();
+    peer.key = "peer".into();
+    peer.display_name = "peer".into();
+    peer.bootloader_board = Some("peer_board".into());
+    peer.targets[0].name = Some("peer".into());
+    peer.targets[0].firmware = Some(Resource::File("peer-app.uf2".into()));
+    catalog.board_targets.insert("peer".into(), peer);
+    catalog
+}
+
+#[cfg(not(target_os = "linux"))]
+fn copied_uf2_image(
+    catalog: &crate::features::firmware::board_catalog::Catalog,
+    name: &str,
+    bootloader: bool,
+    local: bool,
+) -> crate::application::flash::Image {
+    let mut image = uf2_test_image(bootloader);
+    image.name = name.into();
+    image.hints = catalog.match_filename(name).into();
+    image.local = local;
+    image
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn copied_uf2_names_freeze_purpose_volume_path_and_shared_payload() {
+    use crate::application::flash::{Action, ImageCategory, planning::plan_uf2_action};
+    use crate::features::firmware::executor::{ExecutionRequest, UpdateRequest};
+
+    let catalog = copied_uf2_catalog();
+    for (name, bootloader, expected) in [
+        ("out/known-app (2).uf2", false, Uf2ImagePurpose::Application),
+        ("known-app - Copy.uf2", false, Uf2ImagePurpose::Application),
+        ("known-app 副本.uf2", false, Uf2ImagePurpose::Application),
+        (
+            "known-app（２） [3] copy 2.uf2",
+            false,
+            Uf2ImagePurpose::Application,
+        ),
+        (
+            "out/update-known_board_bootloader-0.11.1_nosd (2).uf2",
+            true,
+            Uf2ImagePurpose::Bootloader(Nrf52Chip::Nrf52840),
+        ),
+        (
+            "maintenance - Copy.uf2",
+            true,
+            Uf2ImagePurpose::Bootloader(Nrf52Chip::Nrf52840),
+        ),
+    ] {
+        let mut image = copied_uf2_image(&catalog, name, bootloader, false);
+        assert!(
+            image
+                .hints
+                .iter()
+                .any(|hint| hint.board_target == "known" && hint.bootloader == bootloader),
+            "catalog must identify {name}"
+        );
+        let provenance = format!("CI provenance | member {name}");
+        image.provenance = provenance.clone();
+        let bytes = Arc::clone(&image.bytes);
+        let (_directory, volume) = uf2_volume("known");
+        let identity = volume.identity.clone();
+        let mount = volume.mount.clone();
+        let action = plan_uf2_action(
+            Some(&catalog),
+            if bootloader {
+                ImageCategory::Bootloader
+            } else {
+                ImageCategory::Application
+            },
+            vec![volume],
+            image,
+        )
+        .unwrap_or_else(|error| panic!("{name}: {error}"));
+        let Action::Uf2(_, reviewed_image, purpose) = &action else {
+            panic!("expected UF2 action for {name}");
+        };
+        assert_eq!(*purpose, expected, "{name}");
+        assert_eq!(reviewed_image.name, name);
+        assert_eq!(reviewed_image.provenance, provenance);
+        assert!(Arc::ptr_eq(&reviewed_image.bytes, &bytes));
+
+        let mut review = FlashState {
+            review: Some(action),
+            ..FlashState::default()
+        };
+        assert!(
+            review.take_confirmed_action().is_none(),
+            "standard review must be acknowledged before executing {name}"
+        );
+        review.acknowledged = true;
+        let action = review
+            .take_confirmed_action()
+            .expect("acknowledged review must admit the frozen UF2 action");
+
+        let ExecutionRequest::Blocking(UpdateRequest::Uf2(volumes, image, purpose)) =
+            action.into_request()
+        else {
+            panic!("expected frozen UF2 request for {name}");
+        };
+        assert_eq!(purpose, expected, "{name}");
+        assert_eq!(volumes.len(), 1);
+        assert_eq!(volumes[0].identity, identity);
+        assert_eq!(volumes[0].mount, mount);
+        assert_eq!(image.name, name);
+        assert!(Arc::ptr_eq(&image.bytes, &bytes));
+
+        if bootloader && name.starts_with("out/") {
+            use crate::features::firmware::executor::{ResultIdentity, UpdateCompletion, execute};
+            use crate::update::UpdateOutcome;
+            use std::sync::atomic::AtomicBool;
+
+            let completion = execute(
+                UpdateRequest::Uf2(volumes, image, purpose),
+                &AtomicBool::new(false),
+                &mut |_| {},
+            )
+            .unwrap();
+            let UpdateCompletion::Results(mut results) = completion else {
+                panic!("expected UF2 write results for {name}");
+            };
+            assert_eq!(results.len(), 1);
+            let (ResultIdentity::Uf2(written_volume), outcome) = results.pop().unwrap() else {
+                panic!("expected the frozen UF2 volume for {name}");
+            };
+            assert_eq!(written_volume.identity, identity);
+            assert!(matches!(outcome, UpdateOutcome::Completed));
+            assert_eq!(
+                std::fs::read(mount.join("update-known_board_bootloader-0.11.1_nosd (2).uf2"))
+                    .unwrap()
+                    .as_slice(),
+                bytes.as_ref()
+            );
+            assert!(!mount.join("out").exists());
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn copied_known_uf2_names_still_reject_same_mcu_wrong_board() {
+    use crate::application::flash::{ImageCategory, planning::plan_uf2_action};
+
+    let catalog = copied_uf2_catalog();
+    for (name, bootloader, error_key) in [
+        (
+            "peer-app - Copy.uf2",
+            false,
+            "firmware.error.board_role_mismatch",
+        ),
+        (
+            "update-peer_board_bootloader-0.11.1_nosd [2].uf2",
+            true,
+            "firmware.error.bootloader_board_mismatch",
+        ),
+    ] {
+        for local in [true, false] {
+            let image = copied_uf2_image(&catalog, name, bootloader, local);
+            assert!(
+                image.hints.iter().any(|hint| hint.board_target == "peer"),
+                "catalog must identify the conflicting board for {name}"
+            );
+            let (_directory, volume) = uf2_volume("known");
+            let error = plan_uf2_action(
+                Some(&catalog),
+                if bootloader {
+                    ImageCategory::Bootloader
+                } else {
+                    ImageCategory::Application
+                },
+                vec![volume],
+                image,
+            )
+            .err()
+            .expect("a copied filename must not bypass a known board conflict");
+            assert_eq!(error, crate::i18n::tr(error_key), "{name}, local={local}");
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn copied_uf2_names_do_not_bypass_content_or_mcu_validation() {
+    use crate::application::flash::{ImageCategory, planning::plan_uf2_action};
+
+    let catalog = copied_uf2_catalog();
+    for (name, category, payload_is_bootloader, board, diagnostic) in [
+        (
+            "known-app - Copy.uf2",
+            ImageCategory::Application,
+            true,
+            "known",
+            "not a supported nRF52 application family",
+        ),
+        (
+            "update-known_board_bootloader-0.11.1_nosd (2).uf2",
+            ImageCategory::Bootloader,
+            false,
+            "known",
+            "not an application image",
+        ),
+        (
+            "update-other_board_bootloader-0.11.1_nosd (2).uf2",
+            ImageCategory::Bootloader,
+            true,
+            "other",
+            "outside the Nrf52833 bootloader/MBR layout",
+        ),
+    ] {
+        let image = copied_uf2_image(&catalog, name, payload_is_bootloader, false);
+        assert!(!image.hints.is_empty(), "catalog must identify {name}");
+        let (_directory, volume) = uf2_volume(board);
+        let error = plan_uf2_action(Some(&catalog), category, vec![volume], image)
+            .err()
+            .expect("filename recognition must not authorize incompatible content");
+        assert!(error.contains(diagnostic), "{name}: {error}");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn copied_unknown_remote_profiles_and_bootloaders_remain_blocked() {
+    use crate::application::flash::{ImageCategory, planning::plan_uf2_action};
+
+    let catalog = copied_uf2_catalog();
+    for (name, category, bootloader, error_key) in [
+        (
+            "known-app-Pro (2).uf2",
+            ImageCategory::Application,
+            false,
+            "firmware.error.unknown_remote_target",
+        ),
+        (
+            "update-known_board_bootloader-0.11.1_s140 - Copy.uf2",
+            ImageCategory::Bootloader,
+            true,
+            "firmware.error.bootloader_board_mismatch",
+        ),
+        (
+            "custom_bootloader (2).uf2",
+            ImageCategory::Bootloader,
+            true,
+            "firmware.error.bootloader_board_mismatch",
+        ),
+    ] {
+        let image = copied_uf2_image(&catalog, name, bootloader, false);
+        assert!(image.hints.is_empty(), "{name} must stay unidentified");
+        let (_directory, volume) = uf2_volume("known");
+        let error = plan_uf2_action(Some(&catalog), category, vec![volume], image)
+            .err()
+            .expect("unknown remote firmware must not be admitted");
+        assert_eq!(error, crate::i18n::tr(error_key), "{name}");
+    }
+
+    let name = "known-app_DataCollect_HID (2).uf2";
+    let image = copied_uf2_image(&catalog, name, false, false);
+    assert!(!image.hints.is_empty(), "catalog must identify {name}");
+    let (_directory, volume) = uf2_volume("known");
+    let error = plan_uf2_action(
+        Some(&catalog),
+        ImageCategory::Application,
+        vec![volume],
+        image,
+    )
+    .err()
+    .expect("UF2 must reject the unsupported DataCollect HID profile");
+    assert_eq!(
+        error,
+        crate::i18n::tr("firmware.error.image_method_mismatch")
+    );
+}
+
 #[test]
 fn unhinted_local_bootloader_still_requires_known_volume_preset_and_mcu() {
     use crate::application::flash::{ImageCategory, planning::plan_uf2_action};

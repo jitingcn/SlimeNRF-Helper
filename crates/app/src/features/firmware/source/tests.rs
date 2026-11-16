@@ -1499,8 +1499,10 @@ fn bootloader_ci_download_returns_only_strict_updaters_with_real_paths_and_prove
         let nested = zip(&[("manifest.json", b"{}"), ("bootloader.bin", b"full image")]);
         let updater = "out/update-slimenrf_promicro_bootloader-0.11.1-slimenrf-3-g7f0654b_nosd.uf2";
         let other_updater = format!("out/{BOOTLOADER_NAME}");
+        let copied = updater.replace(".uf2", " (2).uf2");
         let bytes = zip(&[
             (updater, b"updater"),
+            (&copied, b"copied updater"),
             (&other_updater, b"independent updater"),
             ("out/slimenrf_promicro_bootloader-0.11.1_nosd.hex", b"hex"),
             (
@@ -1536,9 +1538,11 @@ fn bootloader_ci_download_returns_only_strict_updaters_with_real_paths_and_prove
         )
         .await
         .unwrap();
-        assert_eq!(files.len(), 2);
+        assert_eq!(files.len(), 3);
         let promicro = files.iter().find(|file| file.name == updater).unwrap();
         assert_eq!(promicro.bytes, b"updater");
+        let copied_file = files.iter().find(|file| file.name == copied).unwrap();
+        assert_eq!(copied_file.bytes, b"copied updater");
         let other = files
             .iter()
             .find(|file| file.name == other_updater)

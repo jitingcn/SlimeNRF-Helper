@@ -99,11 +99,15 @@ pub(crate) fn bootloader_board(filename: &str) -> Option<&str> {
     if filename.contains(['/', '\\', ':']) {
         return None;
     }
-    let artifact = filename
-        .strip_prefix("update-")?
-        .strip_suffix("_nosd.uf2")?;
-    let (board, version) = artifact.split_once("_bootloader-")?;
-    (valid_board_token(board) && valid_bootloader_version(version)).then_some(board)
+    let (stem, extension) = filename.rsplit_once('.')?;
+    if !extension.eq_ignore_ascii_case("uf2") {
+        return None;
+    }
+    copy_stems(stem).find_map(|candidate| {
+        let artifact = candidate.strip_prefix("update-")?.strip_suffix("_nosd")?;
+        let (board, version) = artifact.split_once("_bootloader-")?;
+        (valid_board_token(board) && valid_bootloader_version(version)).then_some(board)
+    })
 }
 
 pub(super) fn matches_bootloader(preset: &FlashPreset, filename: &str) -> bool {
@@ -126,21 +130,78 @@ pub(super) fn matches_bootloader(preset: &FlashPreset, filename: &str) -> bool {
 fn artifact_parts(filename: &str) -> Option<(&str, Option<&str>)> {
     if filename.is_empty()
         || filename.chars().any(|ch| ch.is_control())
-        || filename.contains(['/', '\\', ':', '*', '?', '[', ']'])
+        || filename.contains(['/', '\\', ':', '*', '?'])
         || matches!(filename, "." | "..")
     {
         return None;
     }
-    match filename.rsplit_once('.') {
-        Some((stem, extension)) if matches!(extension, "uf2" | "hex" | "bin" | "zip") => {
-            Some((stem, Some(extension)))
+    let (stem, extension) = match filename.rsplit_once('.') {
+        Some((stem, extension))
+            if ["uf2", "hex", "bin", "zip"]
+                .iter()
+                .any(|allowed| extension.eq_ignore_ascii_case(allowed)) =>
+        {
+            (stem, Some(extension))
         }
-        _ => Some((filename, None)),
-    }
+        _ => (filename, None),
+    };
+    Some((stem, extension))
 }
 
 pub(super) fn valid_firmware_alias(alias: &str) -> bool {
-    artifact_parts(alias).is_some() && super::filename_variant(alias) != "Bootloader"
+    artifact_parts(alias).is_some_and(|(stem, _)| {
+        !strip_download_suffix(stem).contains(['[', ']'])
+            && super::filename_variant(alias) != "Bootloader"
+    })
+}
+
+fn copy_digits(digits: &str) -> bool {
+    !digits.is_empty()
+        && digits
+            .chars()
+            .all(|ch| ch.is_ascii_digit() || ('０'..='９').contains(&ch))
+}
+
+fn peel_copy_suffix(stem: &str) -> Option<&str> {
+    for (open, close) in [('(', ')'), ('[', ']'), ('（', '）')] {
+        if let Some(without_close) = stem.strip_suffix(close)
+            && let Some((prefix, digits)) = without_close.rsplit_once(open)
+            && copy_digits(digits)
+        {
+            return Some(prefix.strip_suffix(' ').unwrap_or(prefix));
+        }
+    }
+
+    let without_count = stem
+        .rsplit_once(' ')
+        .filter(|(_, digits)| copy_digits(digits))
+        .map_or(stem, |(prefix, _)| prefix);
+    for word in ["copy", "副本", "拷贝"] {
+        let Some(index) = without_count.len().checked_sub(word.len()) else {
+            continue;
+        };
+        let Some(suffix) = without_count.get(index..) else {
+            continue;
+        };
+        if suffix.eq_ignore_ascii_case(word) {
+            let prefix = &without_count[..index];
+            if let Some(original) = prefix
+                .strip_suffix(" - ")
+                .or_else(|| prefix.strip_suffix(' '))
+            {
+                return Some(original);
+            }
+        }
+    }
+    None
+}
+
+pub(super) fn copy_stems(stem: &str) -> impl Iterator<Item = &str> {
+    std::iter::successors(Some(stem), |&candidate| peel_copy_suffix(candidate))
+}
+
+pub(crate) fn strip_download_suffix(stem: &str) -> &str {
+    copy_stems(stem).last().unwrap_or(stem)
 }
 
 fn unversioned_stem(stem: &str) -> (&str, &str) {
@@ -177,11 +238,13 @@ fn strip_version(stem: &str) -> &str {
 }
 
 pub(super) fn matches_application_stem(expected: &[&str], stem: &str) -> bool {
-    let (prefix, suffix) = unversioned_stem(stem);
-    expected
-        .iter()
-        .flat_map(|part| part.bytes())
-        .eq(prefix.bytes().chain(suffix.bytes()))
+    copy_stems(stem).any(|candidate| {
+        let (prefix, suffix) = unversioned_stem(candidate);
+        expected
+            .iter()
+            .flat_map(|part| part.bytes())
+            .eq(prefix.bytes().chain(suffix.bytes()))
+    })
 }
 
 pub(super) fn matches_firmware_alias(alias: &str, filename: &str) -> bool {
@@ -196,15 +259,23 @@ pub(super) fn matches_firmware_alias(alias: &str, filename: &str) -> bool {
     let Some((stem, extension)) = artifact_parts(&filename) else {
         return false;
     };
+    // A literal bracketed alias may be followed by a version, but brackets
+    // anywhere else must still be a recognized numeric copy suffix.
+    let (unversioned, _) = unversioned_stem(strip_download_suffix(stem));
+    if strip_download_suffix(unversioned).contains(['[', ']']) {
+        return false;
+    }
     let container_matches = match alias_extension {
         Some(expected) => extension == Some(expected),
         None => matches!(extension, Some("uf2" | "hex")),
     };
     let (alias_prefix, alias_suffix) = unversioned_stem(alias_stem);
-    let (prefix, suffix) = unversioned_stem(stem);
-    container_matches
-        && alias_prefix
+    let matches_stem = |stem| {
+        let (prefix, suffix) = unversioned_stem(stem);
+        alias_prefix
             .bytes()
             .chain(alias_suffix.bytes())
             .eq(prefix.bytes().chain(suffix.bytes()))
+    };
+    container_matches && copy_stems(stem).any(matches_stem)
 }

@@ -77,6 +77,24 @@ pub(crate) enum UpdateCompletion {
     Results(Vec<(ResultIdentity, UpdateOutcome)>),
 }
 
+fn uf2_destination_name(name: &str) -> &str {
+    // CI archive members retain their relative path for provenance. Only a
+    // well-formed relative path may contribute a basename to the UF2 writer;
+    // malformed names are left intact for its plain-filename guard to reject.
+    let mut destination = name;
+    for part in name.split('/') {
+        if part.is_empty()
+            || matches!(part, "." | "..")
+            || part.contains(['\\', ':'])
+            || part.chars().any(char::is_control)
+        {
+            return name;
+        }
+        destination = part;
+    }
+    destination
+}
+
 pub(crate) fn execute(
     request: UpdateRequest,
     cancel: &AtomicBool,
@@ -85,10 +103,11 @@ pub(crate) fn execute(
     let mut results = Vec::new();
     match request {
         UpdateRequest::Uf2(volumes, image, purpose) => {
+            let destination = uf2_destination_name(&image.name);
             for volume in volumes {
                 let result = uf2::write(
                     &volume,
-                    &image.name,
+                    destination,
                     &image.bytes,
                     purpose,
                     cancel,

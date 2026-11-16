@@ -76,6 +76,14 @@ fn raw_hex_and_nonstandard_pins_do_not_gain_updater_profile_compatibility() {
             .len(),
         1
     );
+    for filename in [
+        "update-board_bootloader-0.11.1_s140_7.3.0 [２] - Copy.HEX",
+        "maintenance - 副本 (2).uf2",
+    ] {
+        let hints = catalog.match_filename(filename);
+        assert_eq!(hints.len(), 1, "{filename}: {hints:?}");
+        assert!(hints[0].bootloader && hints[0].kind.is_none());
+    }
     assert!(
         catalog
             .match_filename("update-board_bootloader-0.12.0_s140_7.3.0.hex")
@@ -86,6 +94,13 @@ fn raw_hex_and_nonstandard_pins_do_not_gain_updater_profile_compatibility() {
             .match_filename("update-board_bootloader-0.11.1_nosd.uf2")
             .is_empty()
     );
+    for filename in [
+        "update-board_bootloader-0.12.0_s140_7.3.0 (2).hex",
+        "update-board_bootloader-0.11.1_nosd (2).uf2",
+        "update-board_bootloader-0.11.1_s140_7.3.0 (2).uf2",
+    ] {
+        assert!(catalog.match_filename(filename).is_empty(), "{filename}");
+    }
     assert!(
         Catalog::default()
             .match_filename("update-SlimeNRF_Holyiot_Receiver_bootloader-main_nosd.uf2")
@@ -133,6 +148,430 @@ fn explicit_application_aliases_keep_profile_role_category_and_container() {
             .preset_for_volume("SLIMENRF", Some("application"))
             .is_none()
     );
+}
+
+#[test]
+fn browser_download_suffix_matches_embedded_and_fallback_holyiot() {
+    for (catalog, filename) in [
+        (
+            Catalog::load_embedded().unwrap(),
+            "SlimeNRF_Holyiot_Dongle_Receiver_DataCollect_CDC (2).hex",
+        ),
+        (
+            Catalog::default(),
+            "SlimeNRF_Holyiot_Dongle_Receiver_DataCollect_CDC (2).hex",
+        ),
+        (
+            Catalog::default(),
+            r"C:\Downloads\SlimeNRF_Holyiot_Dongle_Receiver-1.2.3_DataCollect_CDC (123).HEX",
+        ),
+    ] {
+        let hints = catalog.match_filename(filename);
+        assert_eq!(hints.len(), 1, "{filename}: {hints:?}");
+        assert_eq!(hints[0].board_target, "holyiot_21017/nrf52840");
+        assert_eq!(hints[0].kind, Some(EsbOtaKind::Receiver));
+        assert_eq!(hints[0].variant, "DataCollect CDC");
+        assert!(!hints[0].bootloader && !hints[0].mcuboot);
+    }
+}
+
+#[test]
+fn browser_download_suffix_preserves_alias_identity_and_pins() {
+    let raw = br#"{"schema_version":1,"firmware_root":"missing","board_targets":{
+        "board":{"bootloader_board":"board","bootloader_mcu":"nrf52840",
+            "bootloader":"update-other_bootloader-0.11.1_nosd.uf2",
+            "targets":[
+                {"name":"custom/nrf52833/spi","esb_ota_kind":"receiver",
+                 "firmware_aliases":["Custom_nrf52833_SPI_Receiver_DataCollect_CDC.hex"]},
+                {"name":"pinned/board","esb_ota_kind":"tracker","firmware":"Pinned_Tracker.uf2"},
+                {"name":"named/board","esb_ota_kind":"receiver","firmware_aliases":["Named (2).hex"]}
+            ]}
+    }}"#;
+    let catalog = Catalog::from_bytes(raw, Path::new(".")).unwrap();
+    let filename = "Custom_nrf52833_SPI_Receiver-1.2.3_DataCollect_CDC (123).HEX";
+    let hints = catalog.match_filename(filename);
+    assert_eq!(hints.len(), 1, "{filename}: {hints:?}");
+    assert_eq!(hints[0].board_target, "custom/nrf52833/spi");
+    assert_eq!(hints[0].kind, Some(EsbOtaKind::Receiver));
+    assert_eq!(hints[0].variant, "DataCollect CDC");
+    let hints = catalog.match_filename("Pinned_Tracker_DataCollect_CDC (2).hex");
+    assert_eq!(hints.len(), 1);
+    assert_eq!(hints[0].board_target, "pinned/board");
+    assert_eq!(hints[0].kind, Some(EsbOtaKind::Tracker));
+    assert_eq!(hints[0].variant, "DataCollect CDC");
+    for filename in ["Named (2).hex", "Named (2)-1.2.3.hex", "Named (2) (3).hex"] {
+        let hints = catalog.match_filename(filename);
+        assert_eq!(hints.len(), 1, "{filename}: {hints:?}");
+        assert_eq!(hints[0].board_target, "named/board");
+    }
+    for filename in [
+        "Custom_nrf52833_SPI_Receiver_DataCollect_CDC (２).hex",
+        "Custom_nrf52833_SPI_Receiver_DataCollect_CDC(2).hex",
+        "Custom_nrf52833_SPI_Receiver_DataCollect_CDC (2) (3).hex",
+    ] {
+        let hints = catalog.match_filename(filename);
+        assert_eq!(hints.len(), 1, "{filename}: {hints:?}");
+        assert_eq!(hints[0].board_target, "custom/nrf52833/spi");
+    }
+    for filename in [
+        "update-other_bootloader-0.11.1_nosd (2).uf2",
+        "update-board_bootloader-0.11.1_nosd (2).uf2",
+    ] {
+        let hints = catalog.match_filename(filename);
+        assert_eq!(hints.len(), 3, "{filename}: {hints:?}");
+        assert!(hints.iter().all(|hint| hint.bootloader));
+    }
+    for filename in [
+        "Custom_nrf52840_SPI_Receiver_DataCollect_CDC (2).hex",
+        "Custom_nrf52833_I2C_Receiver_DataCollect_CDC (2).hex",
+        "Custom_nrf52833_SPI_Tracker_DataCollect_CDC (2).hex",
+        "Custom_nrf52833_SPI_Receiver_DataCollect_HID (2).hex",
+        "Custom_nrf52833_SPI_Receiver_DataCollect_CDC (2).uf2",
+        "Custom_nrf52833_SPI_Receiver_DataCollect_CDC ().hex",
+        "Custom_nrf52833_SPI_Receiver_DataCollect_CDC (x).hex",
+        "Custom_nrf52833_SPI_Receiver (2)_DataCollect_CDC.hex",
+    ] {
+        assert!(catalog.match_filename(filename).is_empty(), "{filename}");
+    }
+}
+
+#[test]
+fn copy_decorations_match_application_pins_aliases_upstream_and_bootloaders() {
+    let raw = br#"{"schema_version":1,"firmware_root":"missing","board_targets":{
+        "canonical":{"bootloader_board":"board_nrf52833","bootloader_mcu":"nrf52833","targets":[]},
+        "custom-boot":{"bootloader":"maintenance.uf2","targets":[]},
+        "other-boot":{"bootloader":"update-other_bootloader-0.11.1_nosd.uf2","targets":[]},
+        "pin":{"name":"pin/nrf52840","esb_ota_kind":"tracker","firmware":"Pinned_Tracker.uf2"},
+        "bin":{"name":"bin/nrf52840","esb_ota_kind":"receiver","esb_ota_mcuboot_firmware":"Pinned_Receiver_update.bin"},
+        "alias":{"name":"alias/nrf52833","esb_ota_kind":"tracker","firmware_aliases":["Custom_Tracker.uf2","Custom_Package.zip"]}
+    },"opendfu_targets":[{"name":"dfu/nrf52840","firmware":"DFUPackage.zip"}]}"#;
+    let catalog = Catalog::from_bytes(raw, Path::new(".")).unwrap();
+    for suffix in [
+        " (2)",
+        "(2)",
+        "[2]",
+        " [２３]",
+        "（２）",
+        " （2）",
+        " - Copy",
+        " COPY",
+        " copy 2",
+        " - cOpY （２）",
+        " - 副本",
+        " 副本",
+        " - 拷贝",
+        " 拷贝",
+        " - 拷贝 ３",
+        " (2) [３] - 副本 copy 4",
+    ] {
+        for (stem, extension, board, kind, variant, mcuboot, bootloader) in [
+            (
+                "Aero_Tracker-1.2.3",
+                "UF2",
+                "aero_tracker_uf2/nrf52840",
+                Some(EsbOtaKind::Tracker),
+                "Standard",
+                false,
+                false,
+            ),
+            (
+                "SlimeNRF_Holyiot_Receiver-1.2.3_DataCollect_CDC",
+                "HEX",
+                "holyiot_21017/nrf52840",
+                Some(EsbOtaKind::Receiver),
+                "DataCollect CDC",
+                false,
+                false,
+            ),
+            (
+                "SlimeNRF_Holyiot_Receiver_update-1.2.3",
+                "bin",
+                "holyiot_21017/nrf52840",
+                Some(EsbOtaKind::Receiver),
+                "Standard",
+                true,
+                false,
+            ),
+            (
+                "Pinned_Tracker_DataCollect_CDC",
+                "hex",
+                "pin/nrf52840",
+                Some(EsbOtaKind::Tracker),
+                "DataCollect CDC",
+                false,
+                false,
+            ),
+            (
+                "Pinned_Receiver_update",
+                "bin",
+                "bin/nrf52840",
+                Some(EsbOtaKind::Receiver),
+                "Standard",
+                true,
+                false,
+            ),
+            (
+                "Custom_Tracker-1.2.3",
+                "uf2",
+                "alias/nrf52833",
+                Some(EsbOtaKind::Tracker),
+                "Standard",
+                false,
+                false,
+            ),
+            (
+                "Custom_Package",
+                "zip",
+                "alias/nrf52833",
+                Some(EsbOtaKind::Tracker),
+                "Standard",
+                false,
+                false,
+            ),
+            (
+                "DFUPackage",
+                "zip",
+                "dfu/nrf52840",
+                Some(EsbOtaKind::Receiver),
+                "Standard",
+                false,
+                false,
+            ),
+            (
+                "update-board_nrf52833_bootloader-0.12.0_nosd",
+                "UF2",
+                "canonical",
+                None,
+                "Bootloader",
+                false,
+                true,
+            ),
+            (
+                "maintenance",
+                "UF2",
+                "custom-boot",
+                None,
+                "Bootloader",
+                false,
+                true,
+            ),
+            (
+                "update-other_bootloader-0.11.1_nosd",
+                "UF2",
+                "other-boot",
+                None,
+                "Bootloader",
+                false,
+                true,
+            ),
+        ] {
+            let filename = format!("{stem}{suffix}.{extension}");
+            let hints = catalog.match_filename(&filename);
+            assert_eq!(hints.len(), 1, "{filename}: {hints:?}");
+            assert_eq!(hints[0].board_target, board, "{filename}");
+            assert_eq!(hints[0].kind, kind, "{filename}");
+            assert_eq!(hints[0].variant, variant, "{filename}");
+            assert_eq!(hints[0].mcuboot, mcuboot, "{filename}");
+            assert_eq!(hints[0].bootloader, bootloader, "{filename}");
+        }
+    }
+}
+
+#[test]
+fn copy_decorations_preserve_literal_aliases_pins_and_ambiguity() {
+    let raw = r#"{"schema_version":1,"firmware_root":"missing","board_targets":{
+        "a":{"name":"a","firmware_aliases":["Literal [２] - 副本.hex"]},
+        "b":{"name":"b","firmware_aliases":["Literal [２].hex"]},
+        "c":{"name":"c","firmware_aliases":["Literal.hex"]},
+        "d":{"name":"d","firmware":"Pinned [2].uf2"},
+        "e":{"name":"e","firmware":"Pinned.uf2"},
+        "f":{"bootloader":"maintenance - Copy.uf2","targets":[]},
+        "g":{"bootloader":"maintenance.uf2","targets":[]},
+        "h":{"bootloader":"ambiguous - Copy.uf2","targets":[
+            {"name":"shared/board","firmware_aliases":["ambiguous.uf2"],"esb_ota_kind":"tracker"}
+        ]}
+    }}"#;
+    let catalog = Catalog::from_bytes(raw.as_bytes(), Path::new(".")).unwrap();
+    for filename in [
+        "Literal [２] - 副本.hex",
+        "Literal [２] - 副本 (3) copy 4.HEX",
+    ] {
+        let hints = catalog.match_filename(filename);
+        let boards: std::collections::BTreeSet<_> = hints
+            .iter()
+            .map(|hint| hint.board_target.as_str())
+            .collect();
+        assert_eq!(
+            boards,
+            ["a", "b", "c"]
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>(),
+            "{filename}"
+        );
+    }
+    for filename in ["Pinned [2].uf2", "Pinned [2] (3) - Copy.uf2"] {
+        let hints = catalog.match_filename(filename);
+        let boards: std::collections::BTreeSet<_> = hints
+            .iter()
+            .map(|hint| hint.board_target.as_str())
+            .collect();
+        assert_eq!(
+            boards,
+            ["d", "e"]
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>(),
+            "{filename}"
+        );
+    }
+    let hints = catalog.match_filename("Literal [２]-1.2.3.hex");
+    assert_eq!(hints.len(), 1);
+    assert_eq!(hints[0].board_target, "b");
+    for filename in ["maintenance - Copy.uf2", "maintenance - Copy (2).uf2"] {
+        let hints = catalog.match_filename(filename);
+        let boards: std::collections::BTreeSet<_> = hints
+            .iter()
+            .map(|hint| hint.board_target.as_str())
+            .collect();
+        assert_eq!(
+            boards,
+            ["f", "g"]
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>(),
+            "{filename}"
+        );
+        assert!(hints.iter().all(|hint| hint.bootloader));
+    }
+    let hints = catalog.match_filename("ambiguous - Copy (2).uf2");
+    assert_eq!(hints.len(), 2);
+    assert!(
+        hints
+            .iter()
+            .any(|hint| hint.bootloader && hint.kind.is_none())
+    );
+    assert!(
+        hints
+            .iter()
+            .any(|hint| !hint.bootloader && hint.kind == Some(EsbOtaKind::Tracker))
+    );
+    assert!(catalog.match_filename("Literal [２] - 副本.uf2").is_empty());
+}
+
+#[test]
+fn copy_decorations_do_not_guess_revisions_profiles_containers_or_updaters() {
+    let raw = br#"{"schema_version":1,"firmware_root":"missing","board_targets":{
+        "board":{"bootloader_board":"board_nrf52833","bootloader_mcu":"nrf52833",
+            "bootloader":"maintenance.uf2","targets":[]},
+        "alias":{"name":"custom/nrf52833","firmware_aliases":["Custom.uf2"]},
+        "pin":{"name":"pinned/nrf52833","firmware":"Pinned.uf2"}
+    }}"#;
+    let catalog = Catalog::from_bytes(raw, Path::new(".")).unwrap();
+    for suffix in [
+        "-2", "_2", " 2", "-Copy", " Copy2", " backup", " (x)", " ()", " [x]", " []", " （x）",
+        " [2x]", " (2", " ٢",
+    ] {
+        for stem in [
+            "Custom",
+            "Pinned",
+            "Aero_Tracker",
+            "maintenance",
+            "update-board_nrf52833_bootloader-0.11.1_nosd",
+        ] {
+            let filename = format!("{stem}{suffix}.uf2");
+            assert!(catalog.match_filename(&filename).is_empty(), "{filename}");
+        }
+    }
+    for filename in [
+        "Custom.uf2 (2)",
+        "Custom (2).uf2.crdownload",
+        "Pinned (2).bin",
+        "Pinned.flash",
+        "Pinned (2).flash",
+        "Custom_Tracker (2).uf2",
+        "Custom_nrf52840 (2).uf2",
+        "Custom (2)_DataCollect_CDC.uf2",
+        "maintenance (2).hex",
+        "Update-board_nrf52833_bootloader-0.11.1_nosd (2).uf2",
+        "update-board_nrf52840_bootloader-0.11.1_nosd (2).uf2",
+        "update-board_nrf52833_sense_bootloader-0.11.1_nosd (2).uf2",
+        "update-board_nrf52833_bootloader-0.11.1_s140_7.3.0 (2).uf2",
+        "update-board_nrf52833_bootloader-0.11.1_s140_7.3.0_nosd (2).uf2",
+        "update-board_nrf52833_bootloader-0.11.1_nosd (2).hex",
+        "update-board_nrf52833_bootloader-0.11.1_nosd (2).zip",
+    ] {
+        assert!(catalog.match_filename(filename).is_empty(), "{filename}");
+    }
+}
+
+#[test]
+fn copy_suffix_alias_validation_rejects_patterns_and_injection() {
+    for alias in [
+        "../Custom.uf2",
+        "Custom/path.uf2",
+        "Custom\\path.uf2",
+        "Custom:copy.uf2",
+        "Custom*.uf2",
+        "Custom?.uf2",
+        "Custom[abc].uf2",
+        "Custom[2x].uf2",
+        "Custom[2]extra.uf2",
+        "Custom[2]-1.2.3.uf2",
+        "Custom[2.uf2",
+        "Custom]\n.uf2",
+    ] {
+        let raw = format!(
+            r#"{{"schema_version":1,"firmware_root":"missing","board_targets":{{"board":{{"firmware_aliases":[{}]}}}}}}"#,
+            serde_json::to_string(alias).unwrap()
+        );
+        assert!(
+            Catalog::from_bytes(raw.as_bytes(), Path::new(".")).is_err(),
+            "{alias:?}"
+        );
+    }
+    for alias in ["Custom[2].uf2", "Custom [２] - Copy.uf2"] {
+        let raw = format!(
+            r#"{{"schema_version":1,"firmware_root":"missing","board_targets":{{"board":{{"firmware_aliases":[{}]}}}}}}"#,
+            serde_json::to_string(alias).unwrap()
+        );
+        let catalog = Catalog::from_bytes(raw.as_bytes(), Path::new(".")).unwrap();
+        let hints = catalog.match_filename(alias);
+        assert_eq!(hints.len(), 1, "{alias}: {hints:?}");
+        assert_eq!(hints[0].board_target, "board");
+    }
+}
+
+#[test]
+fn copied_inventory_resources_keep_original_names_and_bytes() {
+    let directory = tempfile::tempdir().unwrap();
+    let application = "Custom-2.0.0 [２] - Copy.uf2";
+    let bootloader = "update-board_bootloader-0.12.0_nosd - 副本.uf2";
+    for (filename, bytes) in [
+        (application, b"application".as_slice()),
+        (bootloader, b"bootloader".as_slice()),
+    ] {
+        std::fs::write(directory.path().join(filename), bytes).unwrap();
+    }
+    let raw = br#"{"schema_version":1,"firmware_root":".","board_targets":{
+        "board":{"bootloader_board":"board","bootloader_mcu":"nrf52840","targets":[
+            {"name":"custom/board","firmware_aliases":["Custom.uf2"]}
+        ]}
+    }}"#;
+    let catalog = Catalog::from_bytes(raw, directory.path()).unwrap();
+    let preset = &catalog.board_targets["board"];
+    let resources: Vec<_> = preset
+        .firmware_candidates()
+        .map(|(_, resource, _)| resource)
+        .collect();
+    assert_eq!(resources.len(), 2);
+    for (resource, filename, expected) in [
+        (resources[0], application, b"application".as_slice()),
+        (resources[1], bootloader, b"bootloader".as_slice()),
+    ] {
+        assert_eq!(resource.filename(), Some(filename));
+        let Resource::File(path) = resource else {
+            panic!("expected original file resource for {filename}");
+        };
+        assert_eq!(std::fs::read(path).unwrap(), expected);
+    }
 }
 
 #[test]
