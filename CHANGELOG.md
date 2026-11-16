@@ -11,6 +11,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Added
 
+- Assign several local OTA firmware files in one drop or multi-file selection across mixed tracker models and receivers. Only unique exact board/profile, role and format matches are applied; unmatched, conflicting or invalid files are reported without changing unrelated assignments or starting an update.
 - Optional minimal firmware confirmation: matching firmware can start without a redundant final confirmation. Unknown or conflicting filename-derived board, role or profile hints require explicit compatibility-risk confirmation; image validity, MCU/address limits, device identity and exclusive ownership remain enforced. The setting is off by default.
 
 ### Changed

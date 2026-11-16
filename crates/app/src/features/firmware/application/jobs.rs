@@ -486,9 +486,16 @@ impl Workbench {
             changed = true;
             if let Some((result, progress)) = self.flash.poll_job() {
                 let query_activity = self.flash.activity_kind == ActivityKind::Query;
+                let batch_cancelled =
+                    self.flash.ota_batch_inflight && self.flash.ota_batch_cancelled;
+                self.flash.ota_batch_inflight = false;
+                self.flash.ota_batch_cancelled = false;
                 self.release_flash_lease();
                 self.flash.finish_job_progress(progress);
                 match result {
+                    _ if batch_cancelled => self
+                        .flash
+                        .set_activity_error(tr("firmware.batch.cancelled")),
                     Err(error) => {
                         if query_activity {
                             self.flash.query_error = Some(error);
@@ -511,6 +518,9 @@ impl Workbench {
                     Ok(Payload::Volumes(volumes)) => self.flash.apply_volumes(volumes),
                     Ok(Payload::Images(destination, images)) => {
                         self.flash.apply_images(destination, images);
+                    }
+                    Ok(Payload::OtaBatch(prepared)) => {
+                        self.flash.apply_ota_batch(prepared);
                     }
                     Ok(
                         payload @ (Payload::Versions(..)

@@ -286,6 +286,9 @@ impl Workbench {
         if self.flash.shows_results(Mode::Esb) {
             content = content.child(self.flash_results(cx));
         }
+        if self.flash.ota_batch_result.is_some() {
+            content = content.child(self.flash_ota_batch_result(cx));
+        }
         content = if self.flash.ota_presentation != OtaPresentation::Configuring {
             content
         } else {
@@ -475,6 +478,7 @@ impl Workbench {
             None
         };
         let immediate = rendered_action.is_some();
+        let rendered_source_revision = self.flash.source_revision;
         div()
             .id("ota-step-next-floating")
             .absolute()
@@ -514,6 +518,7 @@ impl Workbench {
                         let result = if this.flash.ota_step == OtaStep::Mapping {
                             this.selected_flash_action().map(|action| {
                                 if immediate
+                                    && rendered_source_revision == this.flash.source_revision
                                     && this.preferences.minimal_firmware_confirmation
                                     && rendered_action
                                         .as_ref()

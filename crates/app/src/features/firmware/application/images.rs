@@ -305,7 +305,8 @@ impl Image {
 
 struct LocalFirmwareRequest {
     mode: Mode,
-    destination: ImageDestination,
+    destination: Option<ImageDestination>,
+    groups: Vec<ota_batch::OtaBatchGroup>,
 }
 
 pub(super) fn single_firmware_path(
@@ -332,17 +333,30 @@ impl Workbench {
             return;
         }
         let mode = self.flash_mode();
-        let Some(destination) = self.flash.destination(mode) else {
+        let destination = self.flash.destination(mode);
+        if let Some(destination) = &destination {
+            self.flash.explicit_image_intent(destination);
+        } else if mode != Mode::Esb || self.flash.group_generations.is_empty() {
             return;
+        }
+        // A picker may stay open while defaults or device observations arrive.
+        // Freeze every selected group now, without treating default completion as an edit.
+        let groups = if mode == Mode::Esb {
+            self.flash.ota_batch_scope()
+        } else {
+            Vec::new()
         };
-        self.flash.explicit_image_intent(&destination);
-        let request = LocalFirmwareRequest { mode, destination };
+        let request = LocalFirmwareRequest {
+            mode,
+            destination,
+            groups,
+        };
         self.flash.activity_origin = mode;
         self.flash.ble_activity = mode == Mode::Ble;
         let dialog = cx.prompt_for_paths(PathPromptOptions {
             files: true,
             directories: false,
-            multiple: false,
+            multiple: mode == Mode::Esb,
             prompt: Some(tr("firmware.image.choose_title").into()),
         });
         self.flash.chooser = Some(cx.spawn(async move |this, cx| {
@@ -376,16 +390,16 @@ impl Workbench {
             return;
         }
         let mode = self.flash_mode();
-        let Some(destination) = self.flash.destination(mode) else {
-            self.flash
-                .set_error(mode, tr("firmware.error.query_select_first"));
-            cx.notify();
-            return;
+        let request = LocalFirmwareRequest {
+            mode,
+            destination: self.flash.destination(mode),
+            groups: if mode == Mode::Esb {
+                self.flash.ota_batch_scope()
+            } else {
+                Vec::new()
+            },
         };
-        self.load_local_firmware(
-            LocalFirmwareRequest { mode, destination },
-            paths.paths().iter().cloned(),
-        );
+        self.load_local_firmware(request, paths.paths().iter().cloned());
         cx.notify();
     }
 
@@ -394,10 +408,41 @@ impl Workbench {
         request: LocalFirmwareRequest,
         paths: impl ExactSizeIterator<Item = PathBuf>,
     ) {
-        if self.shutting_down
-            || self.flash.busy()
-            || !self.flash.destination_exists(&request.destination)
-        {
+        if self.shutting_down || self.flash.busy() {
+            return;
+        }
+        if request.mode == Mode::Esb && paths.len() > 1 {
+            let mut groups = request.groups;
+            if groups.is_empty() {
+                self.flash
+                    .set_error(request.mode, tr("firmware.error.query_select_first"));
+                return;
+            }
+            self.flash.begin_ota_batch(&mut groups);
+            let paths = match ota_batch::distinct_batch_paths(paths) {
+                Ok(paths) => paths,
+                Err(error) => {
+                    self.flash.set_error(request.mode, error);
+                    return;
+                }
+            };
+            let catalog = self.flash.catalog.clone();
+            self.flash.ota_batch_inflight = true;
+            self.flash.ota_batch_cancelled = false;
+            self.start_flash_job_for(request.mode, ActivityKind::Preparation, move |cancel, _| {
+                ota_batch::prepare_ota_batch(paths, groups, catalog, cancel).map(Payload::OtaBatch)
+            });
+            if self.flash.job.is_none() {
+                self.flash.ota_batch_inflight = false;
+            }
+            return;
+        }
+        let Some(destination) = request.destination else {
+            self.flash
+                .set_error(request.mode, tr("firmware.error.query_select_first"));
+            return;
+        };
+        if !self.flash.destination_exists(&destination) {
             return;
         }
         let path = match single_firmware_path(paths) {
@@ -407,7 +452,7 @@ impl Workbench {
                 return;
             }
         };
-        self.flash.explicit_image_intent(&request.destination);
+        self.flash.explicit_image_intent(&destination);
         // Local selection only loads: revoke an old confirmation/auto-copy even
         // if this file later fails validation.
         self.flash.review = None;
@@ -416,8 +461,7 @@ impl Workbench {
         self.flash.auto = false;
         self.flash.auto_requested = false;
         self.start_flash_job_for(request.mode, ActivityKind::Preparation, move |cancel, _| {
-            load_local_image(path, cancel)
-                .map(|image| Payload::Images(request.destination, vec![image]))
+            load_local_image(path, cancel).map(|image| Payload::Images(destination, vec![image]))
         });
     }
 

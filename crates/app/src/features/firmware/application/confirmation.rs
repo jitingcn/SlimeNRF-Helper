@@ -107,6 +107,7 @@ impl Workbench {
         };
         let disabled = busy || readiness.is_err();
         let rendered_action = if immediate { readiness.ok() } else { None };
+        let rendered_source_revision = self.flash.source_revision;
         page = page.child(
             Button::new("flash-review")
                 .label(tr(if immediate {
@@ -127,6 +128,7 @@ impl Workbench {
                                     this.flash.catalog.as_ref(),
                                 ) == Compatibility::Matched;
                             if immediate
+                                && rendered_source_revision == this.flash.source_revision
                                 && matched
                                 && rendered_action
                                     .as_ref()

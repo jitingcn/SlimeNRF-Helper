@@ -48,6 +48,8 @@ mod image_state;
 mod images;
 #[path = "application/jobs.rs"]
 mod jobs;
+#[path = "application/ota_batch.rs"]
+mod ota_batch;
 #[path = "application/planning.rs"]
 mod planning;
 #[path = "application/progress.rs"]
@@ -72,6 +74,7 @@ use images::{
     configured_opendfu_options, firmware_filter_matches, firmware_page_matches, load_image,
     make_image, uf2_preset_matches,
 };
+use ota_batch::{OtaBatchPrepared, OtaBatchResult, OtaGroupEpoch};
 use planning::{ota_role, ota_supported, ota_update_guidance, target_label, validate_ota_image};
 #[cfg(test)]
 use planning::{plan_ota_groups, validate_live_ota_targets};
@@ -91,7 +94,11 @@ fn firmware_variant_label(variant: &str) -> std::borrow::Cow<'_, str> {
 }
 
 fn ota_role_label(target: &esb_ota::Target) -> String {
-    tr(if target.id == esb_ota::RECEIVER_ID {
+    ota_role_label_for_receiver(target.id == esb_ota::RECEIVER_ID)
+}
+
+fn ota_role_label_for_receiver(receiver: bool) -> String {
+    tr(if receiver {
         "common.device_role.receiver"
     } else {
         "common.device_role.tracker"
@@ -223,6 +230,7 @@ struct OtaDefault {
 pub(super) enum Payload {
     Catalog(Result<board_catalog::Catalog, String>, Vec<uf2::Uf2Volume>),
     Volumes(Vec<uf2::Uf2Volume>),
+    OtaBatch(OtaBatchPrepared),
     Images(ImageDestination, Vec<Image>),
     Versions(RemoteRequest, Vec<source::Version>),
     Latest(RemoteRequest, source::Version),
@@ -410,7 +418,12 @@ pub(super) struct FlashState {
     assignments: HashMap<String, Image>,
     active_group: Option<String>,
     group_generations: HashMap<String, u64>,
+    group_epochs: HashMap<String, OtaGroupEpoch>,
     ota_defaults: HashMap<String, OtaDefault>,
+    source_revision: u64,
+    ota_batch_result: Option<OtaBatchResult>,
+    ota_batch_inflight: bool,
+    ota_batch_cancelled: bool,
     next_group_generation: u64,
     ble: Vec<ble_ota::BleDevice>,
     selected_ble: BTreeSet<String>,
@@ -491,7 +504,12 @@ impl Default for FlashState {
             active_group: None,
             group_generations: HashMap::new(),
             ota_defaults: HashMap::new(),
+            group_epochs: HashMap::new(),
             next_group_generation: 0,
+            source_revision: 0,
+            ota_batch_result: None,
+            ota_batch_inflight: false,
+            ota_batch_cancelled: false,
             ble: vec![],
             selected_ble: BTreeSet::new(),
             image: None,
@@ -752,6 +770,9 @@ impl FlashState {
 
     fn cancel_activity(&mut self) {
         self.auto = false;
+        if self.ota_batch_inflight {
+            self.ota_batch_cancelled = true;
+        }
         if self.querying() {
             self.query_cancelled = true;
             self.esb_auto_query.queued = false;

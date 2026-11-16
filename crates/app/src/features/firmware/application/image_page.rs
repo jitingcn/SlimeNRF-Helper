@@ -395,7 +395,11 @@ impl Workbench {
                     .text_xs()
                     .text_color(cx.theme().muted_foreground)
                     .whitespace_normal()
-                    .child(tr("firmware.image.drop_hint")),
+                    .child(tr(if self.flash_mode() == Mode::Esb {
+                        "firmware.batch.drop_hint"
+                    } else {
+                        "firmware.image.drop_hint"
+                    })),
             )
             .into_any_element()
     }
@@ -416,7 +420,11 @@ impl Workbench {
             )
             .child(
                 Button::new("flash-local")
-                    .label(tr("firmware.action.choose_local"))
+                    .label(tr(if self.flash_mode() == Mode::Esb {
+                        "firmware.batch.choose_local"
+                    } else {
+                        "firmware.action.choose_local"
+                    }))
                     .disabled(self.flash.busy())
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.choose_firmware(cx);

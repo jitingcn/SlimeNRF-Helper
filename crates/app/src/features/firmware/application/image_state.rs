@@ -37,6 +37,7 @@ impl FlashState {
                 );
             }
         }
+        self.reconcile_group_epochs();
         let active = preferred
             .filter(|key| keys.contains(key))
             .or_else(|| self.active_group.clone().filter(|key| keys.contains(key)))
@@ -90,6 +91,11 @@ impl FlashState {
         {
             state.explicit = true;
             state.error = None;
+        }
+        if let ImageDestination::Ota { key, .. } = destination
+            && let Some(epoch) = self.group_epochs.get_mut(key)
+        {
+            epoch.revision += 1;
         }
     }
 
