@@ -151,10 +151,10 @@ Controls 场景提供可选择的合成卡片、短/长内容和动态详情；T
 
 1. 修改版本要求前，检查上游发布说明和清单中的 MSRV。保持普通依赖与测试依赖的 `gpui-kit` 版本要求一致。
 2. 同步更新[应用清单](../crates/app/Cargo.toml)与 [Cargo.lock](../Cargo.lock)，使用定向的 `cargo update -p PACKAGE --precise VERSION`，不要无范围限制地更新全部依赖。更新 GPUI 时检查已发布的 Kit 清单，并同步更新完整的 Kit、Fast 与 gpui-pre 系列。只通过 `gpui_kit` 导出使用同一套 GPUI 类型。
-   审查 [Kit 0.9.1](https://github.com/longbridge/gpui-kit/releases/tag/v0.9.1) 与 [Fast 0.1.14](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.14) 的变更，再核对锁定版本发布源码中的 API 签名，不只依赖发布说明里的名称。Fast 会复用未收到通知的视图，需检查状态所有者的通知、显式窗口刷新失效，以及自定义 `Element` 的布局、prepaint、paint 生命周期。保留终端鼠标释放丢失处理，升级验收前覆盖选择、主题与语言切换、缩放窗口和菜单焦点/滚动。
-3. 按平台运行[质量检查命令](#checks-and-editor)，覆盖完整固件和无固件两种模式。
-4. 运行原生应用，检查终端滚动、自动换行、文本选择、图表交互和远程固件加载。
-5. 根据两个平台锁定的依赖图刷新[许可证声明](#license-notices)。
+   审查 [Kit 0.10.0](https://github.com/longbridge/gpui-kit/releases/tag/v0.10.0) 与 [Fast 0.1.16](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.16) 的变更，再核对锁定版本发布源码中的 API 签名，不只依赖发布说明里的名称。Fast 现在为所有 `Element` 提供 `IntoElement`，应用不应再添加冲突实现。鼠标释放丢失后的选择恢复由 Base 负责，保留终端悬停、新拖选与 Copy 回归，不再安装原有兼容代码。检查自定义 `Element` 的布局、prepaint、paint 生命周期、状态所有者的通知、显式窗口刷新失效、主题与语言切换、窗口缩放和菜单焦点/滚动。
+3. 根据两个平台锁定的依赖图审查并刷新[许可证声明](#license-notices)，再运行质量检查。
+4. 按平台运行[质量检查命令](#checks-and-editor)，覆盖完整固件和无固件两种模式。
+5. 运行原生应用，检查终端滚动、自动换行、文本选择、图表交互和远程固件加载。
 
 应用向 reqwest 显式提供内置的 Mozilla 根证书。修改 TLS 依赖时保留这一策略，离线启动不能依赖系统证书库。HTTPS 仍然校验证书链和主机名。
 

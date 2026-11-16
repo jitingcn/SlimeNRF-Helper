@@ -9,6 +9,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- Update the GUI framework to GPUI Kit 0.10.0 and GPUI Fast 0.1.16, retaining gpui-pre 0.3.12. This incorporates upstream grapheme-aware input, IME positioning, text-selection, keyboard navigation, accessibility, tooltip and native-window fixes.
+- Internal: the terminal uses the framework's blanket element conversion and lost-mouse-release handling instead of duplicate application workarounds.
+
 ## [0.4.6] - 2026-11-11
 
 ### Changed

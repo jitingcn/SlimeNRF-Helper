@@ -151,10 +151,10 @@ For drawing or scrolling diagnosis, see the single-launch [Fast switches](#clean
 
 1. Review upstream release notes and the manifest's MSRV before changing version requirements. Keep the normal and test `gpui-kit` requirements identical.
 2. Update the [application manifest](../crates/app/Cargo.toml) and [Cargo.lock](../Cargo.lock) together with targeted `cargo update -p PACKAGE --precise VERSION` commands, not a blanket update. For GPUI updates, inspect the published Kit manifests and update the complete Kit, Fast, and gpui-pre families together. Keep a single GPUI type universe through `gpui_kit` exports.
-   Review the [Kit 0.9.1](https://github.com/longbridge/gpui-kit/releases/tag/v0.9.1) and [Fast 0.1.14](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.14) changes, then verify API signatures in the locked published sources rather than relying on release-note names alone. Fast can reuse views that were not notified: check owner notifications, explicit window-refresh invalidation, and custom `Element` layout/prepaint/paint lifecycles. Preserve terminal lost-mouse-release handling and exercise selection, theme/locale changes, resizing, and menu focus/scrolling before accepting the upgrade.
-3. Run the platform [quality commands](#checks-and-editor) in both full and no-firmware modes.
-4. Run the native application. Check terminal scrolling, wrapping, text selection, plot interaction, and remote firmware loading.
-5. Refresh the [license notices](#license-notices) from both locked target graphs.
+   Review the [Kit 0.10.0](https://github.com/longbridge/gpui-kit/releases/tag/v0.10.0) and [Fast 0.1.16](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.16) changes, then verify API signatures in the locked published sources rather than relying on release-note names alone. Fast now supplies `IntoElement` for every `Element`; do not add a conflicting application implementation. Base owns lost-mouse-release selection recovery; retain the terminal's hover/new-drag/Copy regressions rather than reinstalling its former workaround. Check custom `Element` layout/prepaint/paint lifecycles, owner notifications, explicit window-refresh invalidation, theme/locale changes, resizing, and menu focus/scrolling.
+3. Review and refresh the [license notices](#license-notices) from both locked target graphs before running the gates.
+4. Run the platform [quality commands](#checks-and-editor) in both full and no-firmware modes.
+5. Run the native application. Check terminal scrolling, wrapping, text selection, plot interaction, and remote firmware loading.
 
 The application explicitly supplies bundled Mozilla root certificates to reqwest. Preserve this policy when changing TLS dependencies. Offline startup must not depend on a system certificate store. HTTPS still verifies certificate chains and hostnames.
 
