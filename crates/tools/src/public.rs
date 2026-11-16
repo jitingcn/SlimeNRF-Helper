@@ -729,6 +729,21 @@ const REVIEWED_LINES: &[(&str, &str, &str)] = &[
         "2b45a5b35111e442b1db2fedcf72718a3948c3827cf339b6b7a3aa3b68dd817e",
     ),
     (
+        "crates/app/src/features/firmware/board_catalog/tests/version_matching.rs",
+        "private-absolute-path",
+        "d4af021ab41694bdcc8af268bc34cc47c0d00842a220cc8e5173a0b65f48e3c8",
+    ),
+    (
+        "crates/app/src/features/firmware/executor/tests.rs",
+        "private-absolute-path",
+        "229eab485d6668e95377b86b8d15186e71cb1117abf91121982557a63797f713",
+    ),
+    (
+        "crates/app/src/features/firmware/executor/tests.rs",
+        "private-absolute-path",
+        "f514feaa0190001966df50fdc8cb73e63fa8494518bd25ba36a90acc810fcecc",
+    ),
+    (
         "crates/app/src/features/firmware/bundled_resources/tests.rs",
         "private-absolute-path",
         "ddf69c2c4e85fcd02698314d3fc0fe7f142d9cccb30793083674970efa693e39",

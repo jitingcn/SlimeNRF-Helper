@@ -482,6 +482,53 @@ fn app_update_windows_fixture_paths_require_exact_complete_lines() {
 }
 
 #[test]
+fn firmware_fixture_paths_require_exact_complete_lines() {
+    let board = "crates/app/src/features/firmware/board_catalog/tests/version_matching.rs";
+    let executor = "crates/app/src/features/firmware/executor/tests.rs";
+    let drive = "C:";
+    let board_value = [
+        drive,
+        "Downloads",
+        "SlimeNRF_Holyiot_Dongle_Receiver-1.2.3_DataCollect_CDC (123).HEX",
+    ]
+    .join("\\");
+    let executor_value = format!("{drive}/escape.uf2");
+    let cases = [
+        (board, format!("r\"{board_value}\","), &board_value),
+        (
+            executor,
+            format!("(\"{executor_value}\", \"{executor_value}\"),"),
+            &executor_value,
+        ),
+        (executor, format!("\"{executor_value}\","), &executor_value),
+    ];
+    for (path, line, value) in cases {
+        assert!(scan_text(path, &format!("    {line}")).is_empty(), "{line}");
+        assert_eq!(
+            scan_text("other.rs", &line),
+            findings(&[("other.rs", 1, "private-absolute-path")]),
+            "{line}"
+        );
+        assert_eq!(
+            scan_text(path, &line.replace(drive, "D:")),
+            findings(&[(path, 1, "private-absolute-path")]),
+            "{line}"
+        );
+        let suffix = format!("{line} // {drive}\\private\\customer");
+        assert_eq!(
+            scan_text(path, &suffix),
+            findings(&[(path, 1, "private-absolute-path")]),
+            "{line}"
+        );
+        assert_eq!(
+            scan_text(path, value),
+            findings(&[(path, 1, "private-absolute-path")]),
+            "{line}"
+        );
+    }
+}
+
+#[test]
 fn reviewed_public_tool_path_requires_the_exact_complete_line() {
     let tool = ["C:", "Program Files", "LLVM", "bin", "libclang.dll"].join("\\");
     let line = format!("if (-not (Test-Path -LiteralPath '{tool}' -PathType Leaf)) {{");
