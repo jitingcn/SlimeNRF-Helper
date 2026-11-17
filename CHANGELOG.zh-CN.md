@@ -9,6 +9,8 @@
 
 ## [未发布]
 
+## [0.5.0] - 2026-11-17
+
 ### 新增
 
 - 无线 OTA 支持一次拖入或多选多份本地固件，自动映射混用的追踪器板型与接收器。仅采用板型配置、角色和格式均明确匹配的唯一文件；未匹配、冲突或无效文件会显示原因，不改动无关分配，也不开始更新。
@@ -182,7 +184,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.6...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.3...v0.4.4
