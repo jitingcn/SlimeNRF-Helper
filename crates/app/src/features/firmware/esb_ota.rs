@@ -355,6 +355,18 @@ impl<'a, T: Transport> Session<'a, T> {
         self.check_identity()?;
         self.io.write(report)
     }
+    fn write_begin(&mut self, id: u8, image: &FirmwareImage, board: &str) -> Result<(), String> {
+        let report = begin(id, image, board)?;
+        check_cancel(self.cancel)?;
+        self.check_identity()?;
+        // Even a short or failed HID write may have delivered BEGIN.
+        self.unfinished[if id == RECEIVER_ID {
+            SLOTS
+        } else {
+            id as usize
+        }] = true;
+        self.io.write(&report)
+    }
     fn records(&mut self, timeout_ms: i32) -> Result<([[u8; 16]; 4], usize), String> {
         check_cancel(self.cancel)?;
         self.check_identity()?;
@@ -379,6 +391,7 @@ impl<'a, T: Transport> Session<'a, T> {
                     .as_deref()
                     .is_some_and(|expected| expected != address)
                 {
+                    self.address_changed[slot] = true;
                     self.reassigned.get_or_insert(slot);
                 }
                 if self.addresses[slot].as_deref() != Some(address) {
@@ -510,6 +523,11 @@ impl<'a, T: Transport> Session<'a, T> {
         // Retire before the attempt: even a transport error must not cause a
         // second ABORT to refresh the receiver's tombstone.
         self.unfinished[slot] = false;
+        if id != RECEIVER_ID && self.address_changed[slot] {
+            return Err(format!(
+                "ABORT skipped: tracker slot {slot} no longer identifies the selected tracker"
+            ));
+        }
         let result = self.io.write(&command(ABORT, id));
         if id != RECEIVER_ID {
             self.next_begin_at = self.io.now() + ABORT_ADMISSION;
@@ -1251,14 +1269,7 @@ fn run_batch<T: Transport>(
     telemetry.publish(session.io.now(), progress);
     for &index in indices {
         let id = results[index].target.id;
-        check_cancel(session.cancel)?;
-        let report = begin(id, image, board)?;
-        session.unfinished[if id == RECEIVER_ID {
-            SLOTS
-        } else {
-            id as usize
-        }] = true;
-        session.write(&report)?;
+        session.write_begin(id, image, board)?;
         states.push(TransferState {
             index,
             id,
@@ -1423,12 +1434,11 @@ fn phase<T: Transport>(
         telemetry.publish(session.io.now(), progress);
         if session.io.now() >= retry {
             for state in states.iter().filter(|s| !done.contains(&s.id)) {
-                let report = if opcode == BEGIN {
-                    begin(state.id, image, board)?
+                if opcode == BEGIN {
+                    session.write_begin(state.id, image, board)?;
                 } else {
-                    command(opcode, state.id)
-                };
-                session.write(&report)?;
+                    session.write(&command(opcode, state.id))?;
+                }
             }
             retry = session.io.now() + Duration::from_secs(3);
         }

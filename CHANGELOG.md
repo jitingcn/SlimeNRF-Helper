@@ -19,6 +19,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Offer separate wired UF2 choices for original and new XIAO nRF52840 tracker wiring. Neither choice is assigned automatically over OTA because both builds report the same target.
 - Use the published 261120 filenames for Kawazu and Dawn Mini. Keep DawnRX-2 available for matching CI and local files, with no bundled default for this release.
 
+### Fixed
+
+- ESB OTA sends cleanup ABORT only to unfinished targets whose BEGIN write was attempted. It skips tracker slots whose RF identity changed and still cleans up unaffected trackers. Only an attempted tracker ABORT write delays later wireless batches; failed transfers are not retried.
+
 ## [0.5.0] - 2026-11-17
 
 ### Added

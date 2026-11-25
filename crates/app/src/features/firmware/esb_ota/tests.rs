@@ -145,6 +145,7 @@ struct Emulator {
     corrupt: Option<u8>,
     ready_failure: Option<u8>,
     changed_address: Option<u8>,
+    reassign_on_begin: Vec<u8>,
     silent_activate: bool,
     receiver_reboot: bool,
     reconnects: usize,
@@ -235,6 +236,7 @@ impl Emulator {
             corrupt: None,
             ready_failure: None,
             changed_address: None,
+            reassign_on_begin: Vec::new(),
             silent_activate: false,
             receiver_reboot: false,
             reconnects: 0,
@@ -307,6 +309,17 @@ impl Emulator {
             0xaa,
         ]);
         self.incoming.push_back(r);
+    }
+    fn queue_reassignment(&mut self, id: u8) {
+        self.changed_address = Some(id);
+        self.queue_address(id);
+        let changed = self.incoming.pop_back().unwrap();
+        self.changed_address = None;
+        self.queue_address(id);
+        let restored = self.incoming.pop_back().unwrap();
+        // Keep B then A together at the front of the next HID report.
+        self.incoming.push_front(restored);
+        self.incoming.push_front(changed);
     }
 }
 impl Transport for Emulator {
@@ -430,6 +443,9 @@ impl Transport for Emulator {
                     },
                 );
                 self.max_parallel = self.max_parallel.max(self.staging.len());
+                for slot in std::mem::take(&mut self.reassign_on_begin).into_iter().rev() {
+                    self.queue_reassignment(slot);
+                }
                 self.incoming.push_back(status(id, 1, 0, 0));
                 if self.begin_write_error == Some(id) {
                     return Err("HID write: injected ambiguous BEGIN failure".into());
@@ -549,16 +565,7 @@ impl Transport for Emulator {
                 && self.time >= self.reassign_not_before
                 && let Some(id) = self.reassign_on_query.take()
             {
-                self.changed_address = Some(id);
-                self.queue_address(id);
-                let changed = self.incoming.pop_back().unwrap();
-                // A transient reassignment must remain invalid even when
-                // the expected address is restored in the very same frame.
-                self.changed_address = None;
-                self.queue_address(id);
-                let restored = self.incoming.pop_back().unwrap();
-                self.incoming.push_front(restored);
-                self.incoming.push_front(changed);
+                self.queue_reassignment(id);
             }
         }
         let elapsed = if self.staging.is_empty() {
@@ -603,14 +610,7 @@ impl Transport for Emulator {
             && self.completed >= count
         {
             self.reassign_after_complete = None;
-            self.changed_address = Some(slot);
-            self.queue_address(slot);
-            let changed = self.incoming.pop_back().unwrap();
-            self.changed_address = None;
-            self.queue_address(slot);
-            let restored = self.incoming.pop_back().unwrap();
-            self.incoming.push_front(restored);
-            self.incoming.push_front(changed);
+            self.queue_reassignment(slot);
         }
         let full_fifo = self
             .full_fifo_after_queries
@@ -2093,6 +2093,22 @@ fn cancelled_cleanup_returns_promptly_and_new_session_waits_before_retry_query()
 }
 
 #[test]
+fn cancellation_at_begin_gate_never_sends_begin_or_abort() {
+    let cancel = AtomicBool::new(false);
+    let mut session = Session::new(Emulator::new(&[0]), &cancel);
+    session.records(1).unwrap();
+    session.pin(0, target(0).address.as_deref()).unwrap();
+    cancel.store(true, Ordering::Relaxed);
+
+    let error = session
+        .write_begin(0, &image(3), &info().board_target)
+        .unwrap_err();
+    assert!(error.contains("cancelled"), "{error}");
+    session.abort(0).unwrap();
+    assert!(session.io.writes.is_empty());
+}
+
+#[test]
 fn ambiguous_begin_and_abort_write_errors_are_preserved_without_duplicate_cleanup() {
     let cancel = AtomicBool::new(false);
     let mut io = Emulator::new(&[0, 1]);
@@ -2113,13 +2129,13 @@ fn ambiguous_begin_and_abort_write_errors_are_preserved_without_duplicate_cleanu
     assert_eq!(
         session
             .io
-            .abort_writes
+            .writes
             .iter()
-            .map(|(id, _)| *id)
+            .filter(|report| report[0] != QUERY)
+            .map(|report| (report[0], report[1]))
             .collect::<Vec<_>>(),
-        [0]
+        [(BEGIN, 0), (ABORT, 0)]
     );
-    assert!(!session.io.begin_writes.iter().any(|(id, _)| *id == 1));
 }
 
 #[test]
@@ -3315,7 +3331,9 @@ fn prepared_future_slot_change_during_transfer_never_receives_image_data() {
             .iter()
             .all(|outcome| matches!(outcome.outcome, UpdateOutcome::Completed))
     );
-    assert!(failure(&outcomes[2].outcome).contains("reassigned"));
+    let error = failure(&outcomes[2].outcome);
+    assert!(error.contains("reassigned"), "{error}");
+    assert!(error.contains("ABORT skipped"), "{error}");
     // A queued registration can first be observed in the BEGIN reply frame;
     // no data/activation may follow that contradiction.
     assert!(
@@ -3332,15 +3350,50 @@ fn prepared_future_slot_change_during_transfer_never_receives_image_data() {
         .position(|r| r[0] == BEGIN && r[1] == 2)
         .unwrap();
     assert!(!session.io.writes[begin + 1..].iter().any(|r| r[0] == DATA));
-    assert_eq!(
-        session
-            .io
-            .abort_writes
-            .iter()
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>(),
-        [2]
-    );
+    assert!(session.io.abort_writes.is_empty());
+}
+
+#[test]
+fn cleanup_skips_each_reassigned_slot_but_aborts_stable_started_peers() {
+    for changed in [&[0][..], &[0, 1]] {
+        let cancel = AtomicBool::new(false);
+        let mut io = Emulator::new(&[0, 1]);
+        // Both BEGIN writes arrive before the first reply is read. That frame
+        // restores each changed slot immediately after contradicting it.
+        io.reassign_on_begin = changed.to_vec();
+        let mut session = Session::new(io, &cancel);
+        let admission_before = session.next_begin_at;
+        let outcomes = flash_with(
+            &mut session,
+            &[target(0), target(1)],
+            &image(3),
+            &info().board_target,
+            &mut |_| {},
+        )
+        .unwrap();
+        for outcome in &outcomes {
+            let id = outcome.target.id;
+            let error = failure(&outcome.outcome);
+            assert!(error.contains("reassigned"), "{error}");
+            assert_eq!(error.contains("ABORT skipped"), changed.contains(&id), "{error}");
+        }
+        let mut expected = vec![(BEGIN, 0), (BEGIN, 1)];
+        if changed.len() == 1 {
+            expected.push((ABORT, 1));
+        } else {
+            assert_eq!(session.next_begin_at, admission_before);
+        }
+        assert_eq!(
+            session
+                .io
+                .writes
+                .iter()
+                .filter(|report| report[0] != QUERY)
+                .map(|report| (report[0], report[1]))
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
 }
 
 #[test]
