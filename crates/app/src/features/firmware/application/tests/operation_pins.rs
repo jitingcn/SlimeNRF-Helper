@@ -824,7 +824,7 @@ fn ble_download_copies_preserve_package_members_and_frozen_request(
             id: "synthetic-ble-device".into(),
             adapter_id: "synthetic-adapter".into(),
             name: "Synthetic Legacy DFU".into(),
-            address: "synthetic-address".into(),
+            address: Some("synthetic-address".into()),
         }];
         this.flash
             .selected_ble

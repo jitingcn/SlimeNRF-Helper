@@ -25,7 +25,7 @@
 
 - Windows EXE 文件名以 `windows-x64-no-firmware.exe` 结尾，使用 UPX 压缩。压缩可能引发安全软件误报或兼容性问题；不发布未压缩的备用版本。本地 Cargo 构建仍保留未压缩的原始可执行文件。
 - Linux AppImage 以 Ubuntu 22.04 和 glibc 2.35 为构建基线，并非完全静态包。运行仍需兼容的宿主图形栈、字体、桌面与设备服务，以及 USB、HID 和串口权限。
-- macOS 尚未单独验收。
+- macOS 为 Apple 芯片和 Intel Mac 分别提供 [Actions 预览 DMG](docs/USER_GUIDE.zh-CN.md#macos-preview)，供协作者测试，不作为 Release 附件发布。硬件兼容性尚未验证。
 
 CI 包内置默认配置，但不包含固件载荷。完整构建包含随包固件。无固件构建可使用本地文件、远程下载或显式选择的外部配置。
 

@@ -133,6 +133,9 @@ impl Fixture {
             .expect("create Git fixture");
         let root = temporary.path().join("application");
         fs::create_dir(&root).expect("create Git fixture root");
+        // Match the physical worktree path reported by Git, including under macOS's /var.
+        #[cfg(unix)]
+        let root = root.canonicalize().expect("resolve Git fixture root");
         let hook = root.join(".githooks/pre-commit");
         let installer = root.join("scripts/install-hooks.ps1");
         let fixture = Self {

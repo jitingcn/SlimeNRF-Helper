@@ -140,10 +140,11 @@ Controls 场景提供可选择的合成卡片、短/长内容和动态详情；T
 <a id="native-ui-smoke"></a>
 ## 原生 UI smoke
 
-按上述平台说明（以及 [Linux 前置条件](#linux)）构建实际应用，选择预期的固件模式，记录二进制身份、平台、窗口大小、操作和观察结果。根据变更覆盖窄窗口、放大文字及中英文；检查实际渲染和交互，而不只是进程启动。分别报告测试、原生桌面、私有虚拟显示/WSL 和实体硬件证据，以及未覆盖的部分。只操作自己启动的进程和窗口，正常退出，不终止其他实例。
+按平台说明（[Windows](#windows)、[Linux](#linux)、[macOS](#macos)）构建实际应用，或直接使用待测的打包产物。记录二进制身份、固件模式、平台、窗口大小、操作和观察结果。根据变更覆盖窄窗口、放大文字及中英文；检查实际渲染和交互，而不只是进程启动。分别报告测试、原生桌面、私有虚拟显示/WSL 和实体硬件证据，以及未覆盖的部分。只操作自己启动的进程和窗口，正常退出，不终止其他实例。
 
 - **Windows：**启动自己的进程，取得 PID 和实际主窗口 HWND；采集或窗口内输入前确认 HWND 属于该 PID。使用 Windows.Graphics.Capture 等窗口级采集并检查图像。不要仅凭标题选窗或发送全局输入。仅修改 `APPDATA` 不能保证 Windows KnownFolder 偏好隔离；保护真实偏好，不要用旧备份覆盖。
 - **Linux：**隔离运行使用私有显示及私有 XDG 配置/状态目录，并准备可用的 Vulkan ICD、字体和用户 D-Bus。只清理自己启动的显示、总线和应用进程，观察实际渲染器和窗口。测试原生文件选择器时，在同一私有总线与显示上运行真实 portal 和兼容后端，并操作实际选择流程。私有 Xvfb、WSLg 和原生桌面验收应分别报告；它们都不能证明 USB、BLE 或刷写功能。
+- **macOS：**从实际的预览 DMG 安装 App，先按[无硬件检查步骤](USER_GUIDE.zh-CN.md#macos-preview-checks)观察窗口、输入、系统文件选择器和正常退出，再决定是否检查设备发现。分别报告 Apple 芯片和 Intel 的结果；检查包内容不能代替界面和实体设备验证。
 
 私有 Linux 运行除构建依赖外还需安装 Xvfb、`xvfb-run`、`dbus-run-session`、Vulkan ICD 和字体。为 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_STATE_HOME` 和权限为 0700 的 `XDG_RUNTIME_DIR` 创建新的私有目录并导出变量，在新的 `dbus-run-session` 和 `xvfb-run` 下启动应用。覆盖文件选择器时还须安装 `xdg-desktop-portal` 与兼容桌面后端，确保服务使用同一会话总线和显示；结束自己启动的会话前检查真实对话框。模拟实现不能充当原生选择器证据。
 
@@ -154,7 +155,7 @@ Controls 场景提供可选择的合成卡片、短/长内容和动态详情；T
 1. 修改版本要求前，检查上游发布说明和清单中的 MSRV。保持普通依赖与测试依赖的 `gpui-kit` 版本要求一致。
 2. 同步更新[应用清单](../crates/app/Cargo.toml)与 [Cargo.lock](../Cargo.lock)，使用定向的 `cargo update -p PACKAGE --precise VERSION`，不要无范围限制地更新全部依赖。更新 GPUI 时检查已发布的 Kit 清单，并同步更新完整的 Kit、Fast 与 gpui-pre 系列。只通过 `gpui_kit` 导出使用同一套 GPUI 类型。
    审查 [Kit 0.11.0](https://github.com/longbridge/gpui-kit/releases/tag/v0.11.0) 和 [Fast 0.1.19](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.19) 的发布说明（配套 gpui-pre 0.3.14），并核对锁定版本发布源码中的 API 签名。保留 Kit 默认启用的 `x11` feature，以支持 Linux X11。两个后端均为所有 `Element` 实现 `IntoElement`。按画布当前原点构建缓存的 `Path`；缓存不再平移构建好的路径。鼠标释放事件丢失后的选区恢复由 Base 负责，保留终端悬停、重新拖选和 Copy 回归测试。检查自定义 `Element` 的布局、prepaint 和 paint、状态所有者的通知和显式刷新、主题和语言切换、滚动或缩放时的图表位置，以及菜单焦点和滚动。
-3. 根据两个平台锁定的依赖图审查并刷新[许可证声明](#license-notices)，再运行质量检查。
+3. 根据四个锁定目标的依赖图审查并刷新[许可证声明](#license-notices)，再运行质量检查。
 4. 按平台运行[质量检查命令](#checks-and-editor)，覆盖完整固件和无固件两种模式。
 5. 运行原生应用，检查终端滚动、自动换行、文本选择、图表交互和远程固件加载。
 
@@ -227,11 +228,13 @@ cargo run --locked -p slimenrf-tools -- notices --refresh-inputs --check
 
 Cargo 输入、vendor 源码或许可材料变更时：
 
-1. 审查变更输入。workspace 成员或依赖变更时，即使第三方版本不变，也用以下命令获取两个锁定目标依赖图。从 `slimenrf-helper` 沿 normal 和 build 边追踪，排除 dev 边。将 build 和 proc-macro 路径标为编译工具，保留已审查清单与生成器说明的保守并集和 feature 合并。
+1. 审查变更输入。workspace 成员或依赖变更时，即使第三方版本不变，也用以下命令获取四个锁定目标的依赖图。若 Cargo 缓存缺少对应归档，先按锁定版本下载；获取依赖图不需要安装目标 SDK。从 `slimenrf-helper` 沿 normal 和 build 边追踪，排除 dev 边。将 build 和 proc-macro 路径标为编译工具，保留已审查清单与生成器说明的保守并集和 feature 合并。
 
    ```bash
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-pc-windows-msvc
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-unknown-linux-gnu
+   cargo metadata --locked --offline --format-version 1 --filter-platform aarch64-apple-darwin
+   cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-apple-darwin
    ```
 
 2. 审查每个新增或变更的包及来源。按需更新冻结依赖图、包与其他材料条目、源码获取说明和输入哈希。保留已有原始来源字节，在输入结构中添加经审查的精确许可证与 NOTICE 字节及其来源、编码、字节长度和哈希。不要只替换哈希来消除输入过期错误。
@@ -350,6 +353,21 @@ SDK 构建通过同一个 Rust 库从暂存的已跟踪输入离线生成内嵌�
 
 SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架构>`，可用 `SLIMENRF_FLATPAK_CACHE` 改位置，`SLIMENRF_FLATPAK_JOBS` 改并行（默认 2）。不与原生缓存混用。磁盘不足优先换宽裕 Linux 文件系统；OSTree 的保留空间可使 df 仍有空间时拒绝导出，不自动降保护或清别人的缓存。WSLg 排查单次 X11 可用 `flatpak run --nosocket=wayland --socket=x11 io.github.jitingcn.SlimeNRFHelper`，不保存全局 override。
 
+<a id="macos"></a>
+## macOS 预览版开发
+
+在运行 macOS 15.0 或更新版本的 Apple 芯片或 Intel Mac 上，使用仓库固定的 Rust 工具链，以及当前选定的 Command Line Tools 或 Xcode 提供的 Apple SDK 和 Clang。参见 [GPUI Kit 前置条件](https://gpui-kit.com/docs/installation)。打包需要 CMake 和 `jq`；[质量检查](#checks-and-editor)另需 cargo-nextest。预览包内嵌 GPUI Fast 的 Metal 源码，渲染器启动时再编译，不需要单独下载 Metal Toolchain。
+
+```bash
+bash ./build.sh run --no-firmware
+bash ./quality.sh --no-firmware
+bash ./scripts/package-macos.sh
+```
+
+打包脚本默认生成宿主机架构的无固件 Release 包。若要在对应架构的 Mac 上显式指定目标，先运行 `rustup target add aarch64-apple-darwin`（Apple 芯片）或 `rustup target add x86_64-apple-darwin`（Intel），再分别运行 `bash ./scripts/package-macos.sh arm64` 或 `bash ./scripts/package-macos.sh x64`。如需替换已有产物，显式传 `--force`。`dist/` 中的压缩只读 DMG 包含 `SlimeNRF Helper.app` 和供拖拽安装的**应用程序**链接。许可证文件位于 App 包内的 `Contents/Resources/licenses/`。每个 DMG 只包含一种原生架构，不提供通用包。`package.sh` 仍用于 Linux 打包。
+
+App 的 bundle ID 为 `io.github.jitingcn.SlimeNRFHelper`。App 使用本地临时签名（ad hoc）；App 与磁盘映像均没有 Developer ID 签名，也未公证。按[预览版安装步骤](USER_GUIDE.zh-CN.md#macos-preview)测试安装后的 App，需要时处理单 App 门禁提示。本地 `cargo run` 不能验证下载包的首次启动行为。
+
 ## CI 与发布门槛
 
 [Native no-firmware CI](../.github/workflows/ci.yml)在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括发布准备测试），并检查公开边界和冻结的版权输入。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。Windows 还运行工具测试以覆盖原生 hook；两者打包前都运行维护的质量入口。
@@ -357,6 +375,10 @@ SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架�
 源码和发布作业使用相同的显式 Rust 缓存 key，沿用已有源码作业的前缀，不再分别追加作业 ID。编译器、环境和依赖哈希仍然启用。GitHub 的缓存作用域限制仍然生效：标签构建可以恢复默认分支的缓存，但相同 key 不会让其他标签的缓存全局可见。Windows 与 Linux 应用构建继续使用独立的缓存 key。
 
 Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage。两个文件均不含固件，文件名包含 Cargo 版本，并作为 Actions artifact 保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。
+
+独立的 [macOS preview 工作流](../.github/workflows/macos-preview.yml)在分支 push、PR 和手动触发时运行，标签推送不触发。`macos-26` 与 `macos-26-intel` runner 分别构建 `macOS arm64 / no firmware` 和 `macOS x64 / no firmware`。每种架构打包前独立运行 `bash quality.sh --no-firmware`，再用 `cargo nextest run --locked -p slimenrf-tools` 单独测试 CLI。
+
+打包脚本校验并以只读方式挂载 DMG，检查其中的 Mach-O 架构、链接的最低系统版本（macOS 15.0）、系统库链接、包元数据、临时签名、许可证文件和**应用程序**链接，再卸载映像。通过后直接上传带版本号的 DMG，保留 14 天。作业不启动 GUI，也不验证实体设备；不影响 Windows/Linux 的发布门槛，也不向 Releases 发布附件。
 
 推送 `v<版本号>` 标签后，还会在三个前置作业全部成功后运行发布作业。标签必须匹配主应用的稳定 Cargo 版本和英文 `CHANGELOG.md` 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
 
@@ -388,7 +410,7 @@ CI 成功只证明配置的检查与产物上传已完成。本地构建、WSLg 
 
 `./build.ps1 -Action clean` 和 `bash ./build.sh clean` 清理所选 target 的全部 profile 与嵌套缓存；Debug/Release 不缩小范围。可分别传 `-CargoArguments '--dry-run'` 或 `--cargo-arguments --dry-run` 预览，或显式 `--target-dir`。不删除 dist、配置、固件、全局 Cargo 下载或 Rust 工具链；先退出自己从 target 启动的程序，不例行 clean。
 
-Fast 绘制或滚动排查可仅在单次启动设置 `GPUI_VIEW_RETENTION=0` 或 `GPUI_SCROLL_LAYERS=0`，结束清除；它们是诊断开关，不切换 GUI 后端，也不作为默认配置。软件 Vulkan 仅作兼容排查，不保证性能。[Fast 0.1.13 的 Apple 渲染器](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.13)要求 macOS 12 或更新版本，原生构建需要 macOS SDK 26。其他本机依赖按上游安装说明配置，macOS 仍需单独验证；Linux package 入口不生成 macOS 包。
+Fast 绘制或滚动排查可仅在单次启动设置 `GPUI_VIEW_RETENTION=0` 或 `GPUI_SCROLL_LAYERS=0`，结束清除；它们是诊断开关，不切换 GUI 后端，也不作为默认配置。软件 Vulkan 仅作兼容排查，不保证性能。
 
 ## 上游 bootloader fixture
 

@@ -16,6 +16,13 @@ fn main() {
     // rust-i18n 4.2.4 reads catalogs in its macro without tracking those inputs.
     // Watching the directory also covers newly added and removed catalog files.
     println!("cargo:rerun-if-changed=../../locales");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        let source = "src/discovery/macos_usb_configuration.c";
+        println!("cargo:rerun-if-changed={source}");
+        cc::Build::new()
+            .file(source)
+            .compile("macos_usb_configuration");
+    }
     if let Err(error) = build_version::emit_build_version() {
         panic!("Cannot determine SlimeNRF display version: {error}");
     }

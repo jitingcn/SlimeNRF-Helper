@@ -5,12 +5,18 @@ use crate::{
 use slimenrf_firmware_image::image::{
     MAX_CONTAINER_SIZE, Uf2ContentError, Uf2ImagePurpose, inspect_uf2, validate_uf2_content,
 };
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 use std::collections::BTreeSet;
+#[cfg(target_os = "macos")]
+use std::ffi::CString;
+#[cfg(not(target_os = "macos"))]
+use std::fs::{self, OpenOptions};
+#[cfg(any(not(target_os = "macos"), test))]
+use std::path::Path;
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::File,
     io::{self, Read, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -20,6 +26,8 @@ mod authorization_tests;
 mod completion_tests;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
 
 /// Host-side copy completion is separate from verification of the running firmware.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -44,34 +52,84 @@ pub struct Uf2Volume {
     pub label: String,
     pub board_id: Option<String>,
     pub identity: String,
+    #[cfg(not(target_os = "macos"))]
     info_filename: String,
     #[cfg(target_os = "linux")]
     linux_identity: linux::Identity,
+    #[cfg(target_os = "macos")]
+    info_filename: CString,
+    #[cfg(target_os = "macos")]
+    macos_identity: macos::Identity,
+    #[cfg(target_os = "macos")]
+    marker_checksum: u32,
 }
 
-fn read_bounded(path: &Path, maximum: usize) -> Result<Vec<u8>, String> {
-    let file = File::open(path).map_err(|e| format!("Cannot open {}: {e}", path.display()))?;
+struct Marker {
+    board_id: Option<String>,
+    checksum: u32,
+}
+
+impl Marker {
+    fn from_info(file: File, name: impl std::fmt::Display) -> Result<Self, String> {
+        let bytes = read_bounded(file, name, 64 * 1024)?;
+        let info = std::str::from_utf8(&bytes).map_err(|_| "UF2 information file is not UTF-8")?;
+        let board_id = info.lines().find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            (key.trim().eq_ignore_ascii_case("Board-ID") && !value.trim().is_empty())
+                .then(|| value.trim().to_owned())
+        });
+        Ok(Self {
+            board_id,
+            checksum: crc32fast::hash(&bytes),
+        })
+    }
+
+    fn from_current(file: io::Result<File>, info_filename: &str) -> Result<Self, String> {
+        // Reboot validates the whole CURRENT.UF2 image; identity uses its first block.
+        let mut block = [0; 512];
+        file.and_then(|mut file| file.read_exact(&mut block))
+            .map_err(|e| format!("No readable {info_filename} or CURRENT.UF2 marker: {e}"))?;
+        Ok(Self {
+            board_id: None,
+            checksum: crc32fast::hash(&block),
+        })
+    }
+}
+
+fn read_bounded(
+    file: File,
+    name: impl std::fmt::Display,
+    maximum: usize,
+) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     file.take(maximum as u64 + 1)
         .read_to_end(&mut bytes)
-        .map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
+        .map_err(|e| format!("Cannot read {name}: {e}"))?;
     if bytes.len() > maximum {
-        return Err(format!("{} exceeds its size limit", path.display()));
+        return Err(format!("{name} exceeds its size limit"));
     }
     Ok(bytes)
 }
 
-/// Freeze a mounted UF2 volume. Temporary directories with marker files are also
-/// accepted so the complete copy/identity path can be tested without hardware.
+/// Freeze an explicit volume or a local directory used by the copy-path tests.
+#[cfg(any(not(target_os = "macos"), test))]
 pub fn inspect_volume(mount: &Path, info_filename: &str) -> Result<Uf2Volume, String> {
-    inspect(
-        mount,
-        info_filename,
-        #[cfg(target_os = "linux")]
-        None,
-    )
+    #[cfg(target_os = "macos")]
+    {
+        macos::inspect_fixture(mount, info_filename)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        inspect(
+            mount,
+            info_filename,
+            #[cfg(target_os = "linux")]
+            None,
+        )
+    }
 }
 
+#[cfg(not(target_os = "macos"))]
 fn inspect(
     mount: &Path,
     info_filename: &str,
@@ -88,25 +146,13 @@ fn inspect(
     #[cfg(target_os = "linux")]
     let linux_identity = linux::Identity::inspect(&mount, &metadata, expected)?;
     let info_path = mount.join(info_filename);
-    let (marker, info) = if info_path.is_file() {
-        let bytes = read_bounded(&info_path, 64 * 1024)?;
-        let text =
-            String::from_utf8(bytes.clone()).map_err(|_| "UF2 information file is not UTF-8")?;
-        (bytes, text)
+    let marker = if info_path.is_file() {
+        let file = File::open(&info_path)
+            .map_err(|e| format!("Cannot open {}: {e}", info_path.display()))?;
+        Marker::from_info(file, info_path.display())?
     } else {
-        // CURRENT.UF2 may be large. A stable first block is enough to fingerprint
-        // the marker; reboot separately validates the whole container.
-        let mut marker = vec![0; 512];
-        File::open(mount.join("CURRENT.UF2"))
-            .and_then(|mut f| f.read_exact(&mut marker))
-            .map_err(|e| format!("No readable {info_filename} or CURRENT.UF2 marker: {e}"))?;
-        (marker, String::new())
+        Marker::from_current(File::open(mount.join("CURRENT.UF2")), info_filename)?
     };
-    let board_id = info.lines().find_map(|line| {
-        let (key, value) = line.split_once(':')?;
-        (key.trim().eq_ignore_ascii_case("Board-ID") && !value.trim().is_empty())
-            .then(|| value.trim().to_owned())
-    });
     #[cfg(target_os = "linux")]
     let (label, native_identity) = linux_identity.volume_identity();
     #[cfg(not(target_os = "linux"))]
@@ -115,12 +161,12 @@ fn inspect(
         "{}|{}|{:08x}",
         mount.display(),
         native_identity,
-        crc32fast::hash(&marker)
+        marker.checksum
     );
     Ok(Uf2Volume {
         mount,
         label,
-        board_id,
+        board_id: marker.board_id,
         identity,
         info_filename: info_filename.into(),
         #[cfg(target_os = "linux")]
@@ -187,7 +233,7 @@ fn volume_identity(mount: &Path, metadata: &fs::Metadata) -> Result<(String, Str
         ),
     ))
 }
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
 fn volume_identity(mount: &Path, metadata: &fs::Metadata) -> Result<(String, String), String> {
     use std::os::unix::fs::MetadataExt;
     Ok((
@@ -212,13 +258,17 @@ pub fn scan_with_info(info_filename: &str) -> Result<Vec<Uf2Volume>, String> {
     {
         linux::scan(info_filename)
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        macos::scan(info_filename)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         scan_mount_candidates(info_filename)
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn scan_mount_candidates(info_filename: &str) -> Result<Vec<Uf2Volume>, String> {
     let mut seen = BTreeSet::new();
     let mut volumes = Vec::new();
@@ -255,7 +305,7 @@ fn mount_candidates() -> Result<Vec<PathBuf>, String> {
     }
     Ok(paths)
 }
-#[cfg(all(unix, not(target_os = "linux")))]
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "macos"))))]
 fn mount_candidates() -> Result<Vec<PathBuf>, String> {
     let mut paths = Vec::new();
     // Other Unix platforms retain their directory-based discovery separately.
@@ -296,6 +346,12 @@ fn cancelled(cancel: &AtomicBool) -> Result<(), String> {
         Ok(())
     }
 }
+#[cfg(target_os = "macos")]
+pub fn revalidate(volume: &Uf2Volume) -> Result<(), String> {
+    macos::revalidate(volume)
+}
+
+#[cfg(not(target_os = "macos"))]
 pub fn revalidate(volume: &Uf2Volume) -> Result<(), String> {
     let current = inspect(
         &volume.mount,
@@ -380,25 +436,33 @@ fn copy_to_volume<W: CopyFile>(
     if !valid_filename(name) || !name.to_ascii_lowercase().ends_with(".uf2") {
         return Err("UF2 destination must be a plain .uf2 filename".into());
     }
-    if name.eq_ignore_ascii_case("CURRENT.UF2") || name.eq_ignore_ascii_case(&volume.info_filename)
-    {
+    #[cfg(target_os = "macos")]
+    let is_info_filename = volume
+        .info_filename
+        .as_bytes()
+        .eq_ignore_ascii_case(name.as_bytes());
+    #[cfg(not(target_os = "macos"))]
+    let is_info_filename = volume.info_filename.eq_ignore_ascii_case(name);
+    if name.eq_ignore_ascii_case("CURRENT.UF2") || is_info_filename {
         return Err("Refusing to overwrite a UF2 identity/source marker".into());
     }
     revalidate(volume)?;
     cancelled(cancel)?;
-    let path = volume.mount.join(name);
     // Never truncate an existing file or follow a destination symlink. Re-enter
     // bootloader mode after a partial write instead of blindly replaying it.
+    #[cfg(target_os = "macos")]
+    let file = macos::create_destination(volume, name);
+    #[cfg(not(target_os = "macos"))]
     let file = OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&path)
-        .map_err(|e| {
-            format!(
-                "Cannot create {} (re-enter bootloader mode if this file already exists): {e}",
-                path.display()
-            )
-        })?;
+        .open(volume.mount.join(name));
+    let file = file.map_err(|e| {
+        format!(
+            "Cannot create {} (re-enter bootloader mode if this file already exists): {e}",
+            volume.mount.join(name).display()
+        )
+    })?;
     let mut file = wrap(file);
     let total = bytes.len() as u64;
     let mut completed = 0;
@@ -499,12 +563,18 @@ fn reboot_with<W: CopyFile>(
     cancelled(cancel)?;
     revalidate(volume)?;
     let source = volume.mount.join("CURRENT.UF2");
-    let metadata = fs::symlink_metadata(&source)
-        .map_err(|e| format!("Cannot inspect {}: {e}", source.display()))?;
-    if !metadata.file_type().is_file() {
-        return Err("CURRENT.UF2 must be a regular file on the selected UF2 volume".into());
-    }
-    let current = read_bounded(&source, MAX_CONTAINER_SIZE)?;
+    #[cfg(target_os = "macos")]
+    let file = macos::open_current(volume)?;
+    #[cfg(not(target_os = "macos"))]
+    let file = {
+        let metadata = fs::symlink_metadata(&source)
+            .map_err(|e| format!("Cannot inspect {}: {e}", source.display()))?;
+        if !metadata.file_type().is_file() {
+            return Err("CURRENT.UF2 must be a regular file on the selected UF2 volume".into());
+        }
+        File::open(&source).map_err(|e| format!("Cannot open {}: {e}", source.display()))?
+    };
+    let current = read_bounded(file, source.display(), MAX_CONTAINER_SIZE)?;
     revalidate(volume)?;
     cancelled(cancel)?;
     // CURRENT is supplied by this frozen device, and its family may be a USB

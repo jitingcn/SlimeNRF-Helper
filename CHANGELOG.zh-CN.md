@@ -11,6 +11,7 @@
 
 ### 新增
 
+- 新增面向 Apple 芯片和 Intel Mac 的实验性无固件 DMG，通过 GitHub Actions 提供给协作者测试，不作为 Release 附件发布。
 - 为 261120 的 Aero Tracker Ultra 应用固件添加精确的有线 UF2 板型与 OTA 目标映射。
 - 本地 Windows 含固件包可在窗口标题和「关于」显示内置应用固件的标签，不改变应用更新使用的版本号。
 

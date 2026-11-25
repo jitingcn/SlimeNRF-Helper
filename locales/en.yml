@@ -1,6 +1,15 @@
 app:
   error:
     open_window: "Cannot open SlimeNRF Helper: %{error}"
+  menu:
+    quit: "Quit SlimeNRF Helper"
+    edit: "Edit"
+    undo: "Undo"
+    redo: "Redo"
+    cut: "Cut"
+    copy: "Copy"
+    paste: "Paste"
+    select_all: "Select All"
   navigation:
     accelerometer_calibration: "Accel. calib."
     accelerometer_calibration_unavailable: "Accelerometer calibration — not implemented yet"

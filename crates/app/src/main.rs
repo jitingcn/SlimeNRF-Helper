@@ -14,6 +14,7 @@ mod features;
 mod file_export;
 mod hid_log;
 mod i18n;
+mod native_hid;
 mod receiver_events;
 mod rssi_scan;
 mod serial_port;

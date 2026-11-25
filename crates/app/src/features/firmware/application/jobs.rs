@@ -288,7 +288,7 @@ impl Workbench {
                         for device in devices {
                             self.flash
                                 .result_notes
-                                .insert(device.address.clone(), note.clone());
+                                .insert(device.result_key(), note.clone());
                         }
                     }
                 }

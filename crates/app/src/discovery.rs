@@ -4,17 +4,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use hidapi::{DeviceInfo, HidApi};
+use hidapi::DeviceInfo;
 use parking_lot::Mutex;
+#[cfg(not(target_os = "macos"))]
 use serialport::SerialPortType;
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 use crate::domain::InterfaceDescription;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 use crate::domain::UsbInterface;
 use crate::domain::{Inventory, ReceiverEndpoint, SerialEndpoint, SerialPortKind, TrackerLink};
 use crate::hid_log::decode::BatteryTemperature;
 use crate::i18n::tr;
+use crate::native_hid;
 
 mod events;
 use crate::receiver_events::{EventWatchStatus, Watch};
@@ -27,6 +29,12 @@ mod windows_serial_names;
 
 #[cfg(target_os = "linux")]
 mod linux_serial_metadata;
+
+#[cfg(target_os = "macos")]
+mod macos_serial;
+
+#[cfg(any(target_os = "macos", test))]
+mod macos_usb_cdc;
 
 const RECEIVER_VID: u16 = 0x1209;
 const RECEIVER_PID: u16 = 0x7690;
@@ -71,6 +79,13 @@ impl SerialNotifications {
 }
 
 /// Enumerate enriched serial identities without opening serial or HID handles.
+#[cfg(target_os = "macos")]
+pub(crate) fn serial_endpoints() -> Result<Vec<SerialEndpoint>, String> {
+    macos_serial::endpoints().map_err(serial_enumeration_error)
+}
+
+/// Enumerate enriched serial identities without opening serial or HID handles.
+#[cfg(not(target_os = "macos"))]
 pub(crate) fn serial_endpoints() -> Result<Vec<SerialEndpoint>, String> {
     serialport::available_ports()
         .map(|ports| {
@@ -137,10 +152,7 @@ pub(crate) fn serial_endpoints() -> Result<Vec<SerialEndpoint>, String> {
                         .or(kind_description.as_deref());
                     #[cfg(windows)]
                     let description = windows_names.description(&port.port_name).or(description);
-                    let label = description
-                        .filter(|value| !value.trim().is_empty())
-                        .map(|value| format!("{} — {}", port.port_name, value.trim()))
-                        .unwrap_or_else(|| port.port_name.clone());
+                    let label = serial_label(&port.port_name, description);
                     SerialEndpoint {
                         port_name: port.port_name,
                         label,
@@ -157,9 +169,21 @@ pub(crate) fn serial_endpoints() -> Result<Vec<SerialEndpoint>, String> {
             endpoints.sort_by(|left, right| left.port_name.cmp(&right.port_name));
             endpoints
         })
-        .map_err(|error| {
-            rust_i18n::t!("devices.discovery.error.serial_enumeration", error = error).to_string()
-        })
+        .map_err(serial_enumeration_error)
+}
+
+fn serial_label(port_name: &str, description: Option<&str>) -> String {
+    description
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map_or_else(
+            || port_name.to_owned(),
+            |value| format!("{port_name} — {value}"),
+        )
+}
+
+fn serial_enumeration_error(error: impl std::fmt::Display) -> String {
+    rust_i18n::t!("devices.discovery.error.serial_enumeration", error = error).to_string()
 }
 
 /// Enumerate endpoints only. No serial or HID handle is opened, and no command
@@ -167,7 +191,7 @@ pub(crate) fn serial_endpoints() -> Result<Vec<SerialEndpoint>, String> {
 pub fn scan() -> Result<Inventory, String> {
     let ports = serial_endpoints();
 
-    let receivers = HidApi::new()
+    let receivers = native_hid::enumerate()
         .map(|api| {
             let mut endpoints: Vec<_> = api
                 .device_list()
@@ -1031,7 +1055,7 @@ fn read_receiver(
     if receiver.path.contains(&0) {
         return Err(tr("devices.receiver.error.invalid_path"));
     }
-    let api = HidApi::new().map_err(|error| {
+    let api = native_hid::enumerate().map_err(|error| {
         rust_i18n::t!("devices.discovery.error.hid_enumeration", error = error).to_string()
     })?;
     with_receiver_handle(
@@ -1050,7 +1074,7 @@ fn read_receiver(
             )
         }),
         |device| {
-            device.open_device(&api).map_err(|error| {
+            native_hid::open_path(&api, device.path()).map_err(|error| {
                 rust_i18n::t!(
                     "devices.receiver.error.open",
                     receiver = receiver.label,

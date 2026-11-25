@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use crate::domain::ReceiverEndpoint;
 use crate::hid_log::decode::{CommandAck, EventSource, TrackerEvent};
 use crate::hid_log::{Source, TracedHid};
+use crate::native_hid;
 use crate::receiver_events::{EventWatchStatus, Watch};
 
 use super::{
@@ -42,9 +43,8 @@ impl NativeWirelessIo {
         }
         let path =
             CString::new(receiver.path.as_slice()).map_err(|_| "Invalid receiver HID path")?;
-        let api = hidapi::HidApi::new().map_err(|error| error.to_string())?;
-        let device = api
-            .open_path(&path)
+        let api = native_hid::enumerate().map_err(|error| error.to_string())?;
+        let device = native_hid::open_path(&api, &path)
             .map_err(|error| format!("Cannot open receiver HID: {error}"))?;
         Ok(Self {
             device: TracedHid::new(device, Source::main(receiver)),

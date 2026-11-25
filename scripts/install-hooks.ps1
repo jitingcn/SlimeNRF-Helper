@@ -20,7 +20,7 @@ try {
             (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -eq
             (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash) {
             if ($env:OS -ne 'Windows_NT') {
-                & chmod +x -- $destination
+                & chmod +x $destination
                 if ($LASTEXITCODE -ne 0) { throw "Cannot mark hook executable: $destination" }
             }
             Write-Host "Identical pre-commit hook already exists: $destination"
@@ -38,7 +38,7 @@ try {
         $stream.Dispose()
     }
     if ($env:OS -ne 'Windows_NT') {
-        & chmod +x -- $destination
+        & chmod +x $destination
         if ($LASTEXITCODE -ne 0) { throw "Cannot mark hook executable: $destination" }
     }
     Write-Host "Installed pre-commit hook: $destination"

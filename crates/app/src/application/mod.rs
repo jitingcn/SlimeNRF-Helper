@@ -207,11 +207,18 @@ impl Workbench {
         let (firmware_search, firmware_search_subscription) =
             search_input("firmware.remote.search.placeholder", window, cx);
         cx.on_app_quit(|this, cx| {
-            // A committed platform quit cannot keep GPUI alive indefinitely.
-            // Start retained cleanup without blocking the UI; run() joins its
-            // independent thread after the event loop returns.
-            drop(this.shutdown_cleanup(cx));
-            async {}
+            let cleanup = this.shutdown_cleanup(cx);
+            #[cfg(target_os = "macos")]
+            {
+                // AppKit can exit directly after GPUI's termination grace period.
+                cleanup
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                // The host can join its retained worker after the event loop returns.
+                drop(cleanup);
+                async {}
+            }
         })
         .detach();
         let serial_timer = cx.background_executor().clone();

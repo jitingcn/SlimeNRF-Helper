@@ -163,10 +163,7 @@ impl From<firmware_update::ResultIdentity> for ResultTarget {
             }
             ResultIdentity::Serial(port) => Self::generic(port.clone(), port),
             ResultIdentity::Esb(target) => Self::ota(&target),
-            ResultIdentity::Ble(device) => {
-                let label = format!("{} · {}", device.name, device.address);
-                Self::generic(device.address, label)
-            }
+            ResultIdentity::Ble(device) => Self::generic(device.result_key(), device.label()),
         }
     }
 }

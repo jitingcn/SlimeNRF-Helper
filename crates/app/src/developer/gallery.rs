@@ -84,6 +84,8 @@ pub(crate) fn run() {
             eprintln!("{}", rust_i18n::t!("app.error.open_window", error = error));
             cx.quit();
         }
+        #[cfg(target_os = "macos")]
+        super::bootstrap::set_macos_menus(cx);
         cx.activate(true);
     });
 }

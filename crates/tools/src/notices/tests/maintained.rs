@@ -60,6 +60,25 @@ fn all_reviewed_source_texts_survive_rendering() {
     let loaded = load_inputs(&root, false).expect("load maintained reviewed inventory");
     let output = render(&root, &loaded).expect("render maintained reviewed inventory");
     std::str::from_utf8(&output).expect("rendered inventory is UTF-8");
+    let targets: BTreeSet<_> = loaded.manifest["graphs"]
+        .as_array()
+        .expect("reviewed target graphs")
+        .iter()
+        .map(|graph| graph["target"].as_str().expect("target triple"))
+        .collect();
+    assert_eq!(
+        targets,
+        BTreeSet::from([
+            "aarch64-apple-darwin",
+            "x86_64-apple-darwin",
+            "x86_64-pc-windows-msvc",
+            "x86_64-unknown-linux-gnu",
+        ])
+    );
+    assert!(contains_bytes(
+        &output,
+        b"Captured roles: aarch64-apple-darwin: code_candidate; x86_64-apple-darwin: code_candidate\n"
+    ));
     for (key, original) in &loaded.sources {
         let encoding = loaded.manifest["sources"][key.as_str()]["encoding"]
             .as_str()
@@ -107,13 +126,15 @@ fn all_reviewed_source_texts_survive_rendering() {
         .collect();
     assert!(material_names.contains("Microsoft rendering code MIT notice"));
     assert!(material_names.contains("shadcn theme palette MIT notice"));
+    assert!(material_names.contains("display-link-derived Core Video glue MIT notice"));
+    assert!(material_names.contains("Ghostty-derived macOS text-input setup MIT notice"));
     let mpl = loaded.manifest["mpl_source"]
         .as_array()
         .expect("reviewed MPL sources");
     let packages = loaded.manifest["packages"]
         .as_array()
         .expect("reviewed packages");
-    for name in ["serialport", "option-ext"] {
+    for name in ["serialport", "option-ext", "cbindgen"] {
         let item = mpl
             .iter()
             .find(|item| item["name"] == name)

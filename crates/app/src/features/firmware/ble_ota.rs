@@ -24,22 +24,31 @@ use uuid::Uuid;
 
 use crate::update::Progress;
 
-/// One native backend per application. On Linux btleplug's manager starts a
-/// persistent D-Bus driver, so constructing one per operation leaks drivers until
-/// runtime shutdown even after the manager itself is dropped.
+/// Retain the native BLE driver for the lifetime of the application's I/O runtime.
 #[derive(Default)]
 pub(crate) struct Backend {
+    #[cfg(not(target_os = "macos"))]
     manager: tokio::sync::OnceCell<Manager>,
+    #[cfg(target_os = "macos")]
+    adapter: tokio::sync::Mutex<CoreBluetoothAdapter>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Default)]
+enum CoreBluetoothAdapter {
+    #[default]
+    Idle,
+    Starting(tokio::task::JoinHandle<btleplug::Result<Vec<Adapter>>>),
+    Ready(Adapter),
 }
 
 impl Backend {
+    #[cfg(not(target_os = "macos"))]
     async fn manager(&self, cancel: &AtomicBool) -> Result<&Manager, String> {
         bounded(cancel, IO_TIMEOUT, "Open Bluetooth manager", async {
             self.manager
                 .get_or_try_init(|| async {
-                    // Locked desktop backends fail before creating a driver or
-                    // return success in the same poll as driver creation. OnceCell
-                    // publishes that success before another cancellation tick.
+                    // On Linux, keep the D-Bus driver owned by its manager.
                     Manager::new()
                         .await
                         .map_err(|error| format!("Open Bluetooth manager: {error}"))
@@ -47,6 +56,40 @@ impl Backend {
                 .await
         })
         .await
+    }
+
+    #[cfg(target_os = "macos")]
+    async fn core_bluetooth_adapter(&self, cancel: &AtomicBool) -> Result<Adapter, String> {
+        cancelled(cancel)?;
+        let mut slot = self.adapter.lock().await;
+        if matches!(*slot, CoreBluetoothAdapter::Idle) {
+            cancelled(cancel)?;
+            // btleplug creates a native thread before waiting for the first
+            // state callback, which can depend on the user's permission prompt.
+            // Cancellation must not start another driver on the next scan.
+            *slot = CoreBluetoothAdapter::Starting(tokio::spawn(async {
+                Manager::new().await?.adapters().await
+            }));
+        }
+        let CoreBluetoothAdapter::Starting(starting) = &mut *slot else {
+            return match &*slot {
+                CoreBluetoothAdapter::Ready(adapter) => Ok(adapter.clone()),
+                _ => unreachable!("CoreBluetooth initialization was started above"),
+            };
+        };
+        let result = bounded(cancel, IO_TIMEOUT, "Open CoreBluetooth adapter", async {
+            Ok(starting.await)
+        })
+        .await?;
+        *slot = CoreBluetoothAdapter::Idle;
+        let adapter = result
+            .map_err(|error| format!("Start CoreBluetooth adapter: {error}"))?
+            .map_err(|error| format!("Open CoreBluetooth adapter: {error}"))?
+            .into_iter()
+            .next()
+            .ok_or("No CoreBluetooth adapter found")?;
+        *slot = CoreBluetoothAdapter::Ready(adapter.clone());
+        Ok(adapter)
     }
 }
 
@@ -64,7 +107,19 @@ pub struct BleDevice {
     pub id: String,
     pub adapter_id: String,
     pub name: String,
-    pub address: String,
+    /// CoreBluetooth does not expose Bluetooth hardware addresses.
+    pub address: Option<String>,
+}
+
+impl BleDevice {
+    pub(crate) fn label(&self) -> String {
+        let identity = self.address.as_deref().unwrap_or(&self.id);
+        format!("{} · {identity}", self.name)
+    }
+
+    pub(crate) fn result_key(&self) -> String {
+        format!("ble:{:?}:{:?}", self.adapter_id, self.id)
+    }
 }
 
 fn cancelled(cancel: &AtomicBool) -> Result<(), String> {
@@ -117,16 +172,48 @@ fn report(
     progress(Progress::bytes(message, completed as u64, total as u64));
 }
 
-async fn adapters(backend: &Backend, cancel: &AtomicBool) -> Result<Vec<Adapter>, String> {
-    let manager = backend.manager(cancel).await?;
-    let adapters = ble(cancel, "List Bluetooth adapters", manager.adapters()).await?;
-    if adapters.is_empty() {
-        return Err("No Bluetooth adapter found; enable Bluetooth and check OS permissions".into());
+async fn adapters(
+    backend: &Backend,
+    cancel: &AtomicBool,
+) -> Result<impl Iterator<Item = Adapter> + Send, String> {
+    #[cfg(target_os = "macos")]
+    {
+        Ok(std::iter::once(
+            backend.core_bluetooth_adapter(cancel).await?,
+        ))
     }
-    Ok(adapters)
+    #[cfg(not(target_os = "macos"))]
+    {
+        let manager = backend.manager(cancel).await?;
+        let adapters = ble(cancel, "List Bluetooth adapters", manager.adapters()).await?;
+        if adapters.is_empty() {
+            return Err(
+                "No Bluetooth adapter found; enable Bluetooth and check OS permissions".into(),
+            );
+        }
+        Ok(adapters.into_iter())
+    }
 }
 
 async fn scan_adapter(adapter: &Adapter, cancel: &AtomicBool) -> Result<Vec<Peripheral>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use btleplug::api::CentralState;
+
+        match ble(cancel, "Read Bluetooth state", adapter.adapter_state()).await? {
+            CentralState::PoweredOn => {}
+            CentralState::PoweredOff => return Err("Bluetooth is turned off".into()),
+            _ => return Err("Bluetooth is unavailable; check macOS Bluetooth access".into()),
+        }
+        // A reusable CoreBluetooth adapter retains old advertisements.
+        // Admit only peripherals observed during this scan.
+        ble(
+            cancel,
+            "Clear previous BLE scan",
+            adapter.clear_peripherals(),
+        )
+        .await?;
+    }
     let result = async {
         ble(
             cancel,
@@ -191,7 +278,10 @@ pub async fn scan(
                         id: peripheral.id().to_string(),
                         adapter_id: adapter_id.clone(),
                         name,
-                        address: peripheral.address().to_string(),
+                        #[cfg(target_os = "macos")]
+                        address: None,
+                        #[cfg(not(target_os = "macos"))]
+                        address: Some(peripheral.address().to_string()),
                     });
                 }
             }

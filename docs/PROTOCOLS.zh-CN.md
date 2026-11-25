@@ -41,6 +41,8 @@ FoxSnackLiteV3 固件使用 `foxsnacklitev3_uf2/nrf52840`，对应 bootloader �
 
 Linux UF2 只接纳真实可写 FAT 块设备与 UF2 标记，卷标按 `/dev/disk/by-label` 对应块设备号获取，不把目录名当卷标。写前复核挂载实例与 device identity；同路径换盘、重挂载或 mount incarnation 变化使旧授权失效。全局 mountinfo 可以包含合法伪文件系统 root，只有 UF2 候选才要求原生块设备与绝对路径条件；不能让无关 namespace 挂载破坏全部枚举。
 
+在 macOS 上，UF2 发现将系统挂载表与 Disk Arbitration 的卷和物理 USB 介质记录匹配。只有带 UF2 标记的可写本地 FAT 或 exFAT 卷才符合条件；`/Volumes` 下的普通目录和挂载的磁盘映像均不符合。卷标取自 Disk Arbitration。选中卷时保存介质的 I/O Registry 条目 ID 并持有挂载根目录句柄。复制前重新核对所选卷，再相对于该句柄打开目标文件，避免把固件写入后来占用同一路径的其他磁盘。
+
 UF2 复制区分主机 I/O 已完成和 `CopyOutcome::ConfirmationPending`。只有全部字节已被接受、取消检查已通过，且 `flush` 或 `sync_all` 返回设备消失错误时，才进入待确认状态。接受的错误码为 Windows 433、1167，以及 Linux 和 macOS 的 `ENODEV`、`ENXIO`。部分写入失败、零字节写入和其他存储错误仍判定为失败。`UpdateOutcome::Uf2CopyUnconfirmed` 保留已接受字节数、收尾阶段、系统错误码和诊断。复制完成和复制待确认都不证明固件已启动。
 
 OpenDFU 根据原生 USB 接口描述识别引导程序，仅在该描述缺失或不可用时回退到原始 USB 产品名称。显示标签、制造商名称和 VID/PID 本身不构成引导程序身份。有歧义或冲突的接口描述会拒绝识别。每次打开原生串口前，包含接口元数据的串口枚举会复核已冻结的端口与 USB 身份。端口消失、重复别名、枚举失败或身份替换会停止操作。更换 COM 口须显式选择。

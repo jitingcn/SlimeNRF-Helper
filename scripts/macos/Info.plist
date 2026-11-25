@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>SlimeNRF Helper</string>
+    <key>CFBundleExecutable</key>
+    <string>slimenrf-helper</string>
+    <key>CFBundleIdentifier</key>
+    <string>io.github.jitingcn.SlimeNRFHelper</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>SlimeNRF Helper</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>15.0</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>SlimeNRF Helper uses Bluetooth to find SlimeNRF devices and update their firmware.</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>SlimeNRF Helper reads UF2 bootloader information and copies firmware to removable drives when you confirm an update.</string>
+</dict>
+</plist>

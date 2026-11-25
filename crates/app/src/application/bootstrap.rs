@@ -49,6 +49,26 @@ impl AssetSource for AppAssets {
     }
 }
 
+#[cfg(target_os = "macos")]
+pub(super) fn set_macos_menus(cx: &gpui::App) {
+    use crate::i18n::tr;
+    use gpui::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
+    use gpui::{Menu, MenuItem, OsAction};
+
+    cx.set_menus([
+        Menu::new("SlimeNRF Helper").items([MenuItem::action(tr("app.menu.quit"), Quit)]),
+        Menu::new(tr("app.menu.edit")).items([
+            MenuItem::os_action(tr("app.menu.undo"), Undo, OsAction::Undo),
+            MenuItem::os_action(tr("app.menu.redo"), Redo, OsAction::Redo),
+            MenuItem::separator(),
+            MenuItem::os_action(tr("app.menu.cut"), Cut, OsAction::Cut),
+            MenuItem::os_action(tr("app.menu.copy"), Copy, OsAction::Copy),
+            MenuItem::os_action(tr("app.menu.paste"), Paste, OsAction::Paste),
+            MenuItem::os_action(tr("app.menu.select_all"), SelectAll, OsAction::SelectAll),
+        ]),
+    ]);
+}
+
 pub(crate) fn run(async_io: Executor) {
     // The host retains cleanup even if thread creation fails or GPUI exits early.
     let shutdown_host = Arc::new(ShutdownHost::default());
@@ -112,6 +132,8 @@ pub(crate) fn run(async_io: Executor) {
             eprintln!("{}", rust_i18n::t!("app.error.open_window", error = error));
             cx.quit();
         }
+        #[cfg(target_os = "macos")]
+        set_macos_menus(cx);
         cx.activate(true);
     });
     shutdown_host.finish();

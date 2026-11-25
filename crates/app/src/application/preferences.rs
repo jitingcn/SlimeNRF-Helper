@@ -89,6 +89,8 @@ impl Workbench {
         }
         theme::apply(&self.preferences, cx);
         if language_changed {
+            #[cfg(target_os = "macos")]
+            super::bootstrap::set_macos_menus(cx);
             self.refresh_pending_status();
             self.refresh_input_placeholders(window, cx);
             self.refresh_temperature_locale(cx);

@@ -247,10 +247,30 @@ fn execution_identities_are_presented_by_the_ui() {
             id: "native-device".into(),
             adapter_id: "adapter".into(),
             name: "Tracker".into(),
-            address: "AA:BB".into(),
+            address: Some("AA:BB".into()),
         },
     ));
-    assert_eq!(ble.key, "AA:BB");
+    assert_eq!(ble.key, r#"ble:"adapter":"native-device""#);
+    assert_eq!(ble.identity, "Tracker · AA:BB");
+    let mac_results = [
+        "480D7173-8003-4D12-89A8-07648FDED660",
+        "580D7173-8003-4D12-89A8-07648FDED660",
+    ]
+    .map(|id| {
+        ResultTarget::from(ResultIdentity::Ble(
+            crate::features::firmware::ble_ota::BleDevice {
+                id: id.into(),
+                adapter_id: "CoreBluetooth".into(),
+                name: "Tracker".into(),
+                address: None,
+            },
+        ))
+    });
+    assert_eq!(
+        mac_results[0].identity,
+        "Tracker · 480D7173-8003-4D12-89A8-07648FDED660"
+    );
+    assert_ne!(mac_results[0].key, mac_results[1].key);
     let device = target("a", 1, "board");
 
     let query = OtaQueries::from(QueryResults {

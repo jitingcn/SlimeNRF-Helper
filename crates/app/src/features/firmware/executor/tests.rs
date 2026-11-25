@@ -359,7 +359,7 @@ fn cancelled_async_ble_sequence_reports_each_frozen_device_without_hardware() {
             id: id.into(),
             adapter_id: "adapter".into(),
             name: format!("DFU {id}"),
-            address: format!("address-{id}"),
+            address: Some(format!("address-{id}")),
         })
         .to_vec();
     let bytes: Arc<[u8]> = Arc::from([1, 2, 3, 4]);
@@ -405,7 +405,7 @@ fn ble_devices() -> Vec<ble_ota::BleDevice> {
             id: id.into(),
             adapter_id: "adapter".into(),
             name: format!("DFU {id}"),
-            address: format!("address-{id}"),
+            address: Some(format!("address-{id}")),
         })
         .to_vec()
 }

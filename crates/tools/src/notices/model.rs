@@ -640,7 +640,9 @@ fn validate_coverage(
         return Err("Duplicate package entry".to_owned());
     }
     let mut graph_ids = BTreeSet::new();
+    let mut graphs = BTreeMap::new();
     for graph in array(manifest, "graphs")? {
+        let target = string(graph, "target")?;
         let mut graph_packages = BTreeSet::new();
         for identity in array(graph, "packages")? {
             let identity = identity
@@ -650,6 +652,9 @@ fn validate_coverage(
                 return Err(format!("Duplicate package ID in target graph: {identity}"));
             }
             graph_ids.insert(identity);
+        }
+        if graphs.insert(target, graph_packages).is_some() {
+            return Err(format!("Duplicate target graph: {target}"));
         }
     }
     if package_ids != graph_ids {
@@ -697,6 +702,19 @@ fn validate_coverage(
     for (item, identity) in packages.iter().zip(&identities) {
         let name = string(item, "name")?;
         let version = string(item, "version")?;
+        let roles = object(item, "target_roles")?;
+        let mismatched = graphs
+            .iter()
+            .any(|(target, ids)| ids.contains(identity.as_str()) != roles.contains_key(*target));
+        if mismatched
+            || roles
+                .keys()
+                .any(|target| !graphs.contains_key(target.as_str()))
+        {
+            return Err(format!(
+                "Package roles differ from frozen target graphs: {identity}"
+            ));
+        }
         let notices = array(item, "notices")?;
         if string(item, "license")?.is_empty() || notices.is_empty() {
             return Err(format!("Unhandled package license or notice: {identity}"));

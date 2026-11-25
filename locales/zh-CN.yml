@@ -1,6 +1,15 @@
 app:
   error:
     open_window: "无法打开 SlimeNRF Helper：%{error}"
+  menu:
+    quit: "退出 SlimeNRF Helper"
+    edit: "编辑"
+    undo: "撤销"
+    redo: "重做"
+    cut: "剪切"
+    copy: "复制"
+    paste: "粘贴"
+    select_all: "全选"
   navigation:
     accelerometer_calibration: "加速度计校准"
     accelerometer_calibration_unavailable: "加速度计校准 — 尚未实现"

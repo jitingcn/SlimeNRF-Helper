@@ -155,6 +155,27 @@ fn missing_graph_package_is_rejected() {
 }
 
 #[test]
+fn duplicate_target_graph_is_rejected() {
+    let mut fixture = Fixture::new();
+    fixture.document["graphs"][1]["target"] = json!("windows");
+    fixture.save();
+    assert_load_error_unchanged(&fixture, false, "Duplicate target graph: windows");
+}
+
+#[test]
+fn roles_must_match_each_target_not_just_the_union() {
+    let mut fixture = Fixture::new();
+    fixture.document["graphs"][1]["packages"] = json!([]);
+    fixture.save();
+    assert_load_error_unchanged(&fixture, false, "Package roles differ");
+
+    fixture.document["graphs"][1]["packages"] = json!(["example@1.2.3"]);
+    fixture.document["packages"][0]["target_roles"] = json!({"windows": ["code_candidate"]});
+    fixture.save();
+    assert_load_error_unchanged(&fixture, false, "Package roles differ");
+}
+
+#[test]
 fn extra_and_duplicate_packages_are_rejected() {
     let mut fixture = Fixture::new();
     let package = fixture.document["packages"][0].clone();

@@ -7,7 +7,7 @@
 <a id="installation"></a>
 ## Install and start the application
 
-1. Open the project's [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) page.
+1. For Windows and Linux, open the project's [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) page. For Mac, use the [macOS preview](#macos-preview) below.
 2. Select a version. Choose a **Pre-release** if you want a test version.
 3. Under **Assets**, download the package for your platform.
 
@@ -29,6 +29,34 @@ If FUSE is unavailable, start the application with this command:
 ```
 
 The no-firmware package includes the default configuration but no firmware payloads. For updates, use local files, remote downloads, or an explicitly supplied external configuration. For Linux services, device permissions, and UF2 mount requirements, see [Linux device and runtime requirements](#linux-devices). For source builds, see [Development and packaging](DEVELOPMENT.md).
+
+<a id="macos-preview"></a>
+### Try a macOS preview
+
+The experimental no-firmware preview targets macOS 15.0 or later. It is available only as a GitHub Actions artifact, not through Releases or in-app installation.
+
+1. In **Apple menu → About This Mac**, check the chip or processor. Choose `arm64` for a Mac with an Apple chip and `x64` for a Mac with an Intel processor. Test the matching native build rather than running the Intel build on Apple Silicon via Rosetta.
+2. Sign in to GitHub and open [Actions → macOS preview](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/macos-preview.yml). Select the successful run for the commit you are testing. On its **Summary** page, find **Artifacts** and download `slimenrf-helper-<version>-macos-arm64-no-firmware.dmg` or `slimenrf-helper-<version>-macos-x64-no-firmware.dmg`. The downloads are retained for 14 days, subject to repository policy.
+3. Open the DMG in Finder, drag **SlimeNRF Helper** to **Applications**, then eject the disk image. With SlimeNRF USB devices disconnected and test trackers turned off, open the installed `SlimeNRF Helper.app` from **Applications**, not from the disk image.
+4. The preview app is ad hoc signed, without an Apple Developer ID signature or notarization. If Gatekeeper reports an unverified developer or that Apple cannot check the app, confirm that you trust the exact Actions run and DMG download before making an exception. After the first blocked launch, go to **System Settings → Privacy & Security → Open Anyway** and confirm **Open** for this app only. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Do not disable Gatekeeper, change the global app security policy, or override a malware or damaged-app warning. If the per-app option is unavailable, report the block.
+
+<a id="macos-preview-checks"></a>
+#### Start without hardware
+
+Check that the window opens and responds to resizing, browse **Home → Connect your devices**, then open **Settings → About** and **View licenses and notices**. In **VQF replay**, select **Import** and cancel the native file chooser without picking a file. Quit with **Command–Q**. Do not send commands, subscribe to HID events, start capture or calibration, or run any update.
+
+#### Optional discovery checks
+
+Only use your own test devices. Do these checks separately from the first launch and report the results separately.
+
+- **USB/HID:** Plug in one known receiver with a data cable and use **Device setup → Refresh devices**. Compare the result with **System Information → USB** and observe the passive receiver status on **Home**. Unplug the device and check that it disappears. On an Apple Silicon laptop, macOS may ask you to approve the specific USB accessory.
+- **Serial:** In **Device setup**, note whether the expected USB serial ports appear and whether console and raw-data entries are distinguished. macOS discovery uses `/dev/cu.*` callout ports, not `/dev/tty.*` aliases. Without an exact USB interface match, the receiver's serial function stays unavailable for commands and capture. Report that result rather than choosing a port by name. Do not connect a terminal or send a command.
+- **UF2:** Use a test device already in UF2 bootloader mode. A mounted, local, writable FAT volume on the USB device with `INFO_UF2.TXT` or `CURRENT.UF2` can be discovered; an ordinary folder or mounted disk image cannot substitute. Open **Firmware update → USB drive (UF2) → Refresh volumes**. Check the volume label, path, and Board-ID where shown, and whether the entry disappears after detaching. Do not select a firmware file, use **Enter bootloader** or **Exit DFU**, or copy anything to the volume.
+- **BLE:** Start a separate run without a USB receiver so the ESB page cannot query it. In **Settings → Devices**, enable **Advanced features** if needed, then open **Wireless update → Legacy BLE OTA** and select **Scan BLE DFU devices**. macOS may ask for Bluetooth access. Report whether scanning starts and whether it lists a test device already advertising in Legacy DFU mode. macOS shows a CoreBluetooth UUID rather than a Bluetooth MAC address. Stop at the scan results; do not connect or start an update.
+
+For UF2 discovery, macOS may request **System Settings → Privacy & Security → Files & Folders → SlimeNRF Helper → Removable Volumes**. That permission is separate from **Privacy & Security → Bluetooth** for BLE scanning. Allow only the needed access for this app, or report that the permission was denied. Do not grant Full Disk Access or run the app as root.
+
+Send the Actions run URL and commit ID, DMG filename, macOS version and build (`sw_vers`), CPU or chip model, and the version shown in **Settings → About** if the app launched. Include what you did, what you observed, the text of any warning or error, and which checks you skipped. Remove device serial numbers, RF addresses, Bluetooth UUIDs, and private paths from screenshots and logs. Launch and discovery results do not verify firmware writes or physical device support.
 
 <a id="first-use"></a>
 ## Use the application for the first time

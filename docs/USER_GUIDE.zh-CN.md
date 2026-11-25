@@ -7,7 +7,7 @@
 <a id="installation"></a>
 ## 安装与启动
 
-1. 打开项目的 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 页面。
+1. Windows 和 Linux 用户请打开项目的 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 页面。Mac 用户请使用下方的 [macOS 预览版](#macos-preview)。
 2. 选择版本。需要测试版时，选择标记为 **Pre-release** 的版本。
 3. 在 **Assets** 下载对应平台的包。
 
@@ -29,6 +29,34 @@ chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
 ```
 
 无固件包内置默认配置，但不包含固件载荷。更新时使用本地文件、远程下载或显式外部配置。Linux 的服务、设备权限与 UF2 挂载条件见 [Linux 设备与运行条件](#linux-devices)。源码构建见[开发与打包](DEVELOPMENT.zh-CN.md)。
+
+<a id="macos-preview"></a>
+### 试用 macOS 预览版
+
+实验性无固件预览面向 macOS 15.0 及以上版本，只能从 GitHub Actions 下载，不作为 Release 附件提供，也不能通过应用内更新安装。
+
+1. 在**苹果菜单 → 关于本机**中查看芯片或处理器。Apple 芯片选 `arm64`，Intel 处理器选 `x64`。请测试与本机架构匹配的版本，不要在 Apple 芯片的 Mac 上用 Rosetta 运行 Intel 版来代替原生测试。
+2. 登录 GitHub，打开 [Actions → macOS preview](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/macos-preview.yml)，选择待测提交对应的成功运行记录。在 **Summary** 页的 **Artifacts** 中下载 `slimenrf-helper-<版本>-macos-arm64-no-firmware.dmg` 或 `slimenrf-helper-<版本>-macos-x64-no-firmware.dmg`。产物保留 14 天，受仓库策略限制。
+3. 在访达中打开 DMG，将 **SlimeNRF Helper** 拖入**应用程序**，再推出磁盘映像。拔下 SlimeNRF USB 设备并关闭测试用追踪器，从**应用程序**打开已安装的 `SlimeNRF Helper.app`，不要从磁盘映像直接启动。
+4. 预览 App 只有临时签名（ad hoc），没有 Apple Developer ID 签名，也未公证。如果门禁提示开发者无法验证，或 Apple 无法检查 App，请先确认该次 Actions 运行和 DMG 下载来源可信。首次打开被拦截后，进入**系统设置 → 隐私与安全性 → 仍要打开**，只为这个 App 确认**打开**。参见 [Apple 的说明](https://support.apple.com/zh-cn/102445)。不要关闭门禁、修改全局安全策略，或绕过恶意软件或 App 损坏提示。如果系统未提供单 App 例外选项，请报告拦截情况。
+
+<a id="macos-preview-checks"></a>
+#### 不接设备，先检查启动
+
+确认窗口能打开并响应大小调整，浏览**首页 → 连接设备**，打开**设置 → 关于**和**查看许可证与声明**。在 **VQF 回放**中点击**导入**，打开系统文件选择器后直接取消，不选文件。用 **Command–Q** 退出。不要发送命令、订阅 HID 事件、开始采集或校准，也不要执行任何更新。
+
+#### 可选：只检查设备发现
+
+只使用自己的测试设备。这些检查与首次启动分开进行，结果也分别报告。
+
+- **USB/HID：**用数据线接入一个已知接收器，点击**设备设置 → 刷新设备**，对照 macOS **系统信息 → USB**，并在**首页**查看被动监听得到的接收器状态。拔下后检查条目是否消失。使用 Apple 芯片的 Mac 笔记本可能会要求单独允许该 USB 配件连接。
+- **串口：**在**设备设置**中查看预期的 USB 串口是否出现、控制台和原始数据端口是否分开显示。macOS 仅枚举 `/dev/cu.*` 端口，不使用 `/dev/tty.*` 别名。无法精确匹配 USB 接口时，接收器串口不可用于命令或采集。请报告这一结果，不要按端口名称猜测。不要连接终端或发送命令。
+- **UF2：**使用已处于 UF2 引导模式的测试设备。可发现该 USB 设备上已挂载、可写且含 `INFO_UF2.TXT` 或 `CURRENT.UF2` 的本地 FAT 卷；普通文件夹和挂载的磁盘映像不能替代。打开**固件更新 → USB 磁盘（UF2）→ 刷新卷**，查看卷标、路径和界面显示的 Board-ID，检查断开后条目是否消失。不要选择固件、点击**进入刷机模式**或**退出 DFU**，也不要向卷复制文件。
+- **BLE：**拔下 USB 接收器后重新启动应用，以免 ESB 页面查询接收器。按需在**设置 → 设备**中开启**高级功能**，进入**无线更新 → Legacy BLE OTA**，点击**扫描 BLE DFU 设备**。macOS 可能会请求蓝牙权限。记录能否开始扫描、列表中是否出现已在广播 Legacy DFU 的测试设备。macOS 显示 CoreBluetooth UUID，而非蓝牙 MAC 地址。看到扫描结果即可，不连接、不更新。
+
+检查 UF2 时，macOS 可能要求为本应用开启**系统设置 → 隐私与安全性 → 文件和文件夹 → SlimeNRF Helper → 可移动宗卷**，与 BLE 扫描所需的**隐私与安全性 → 蓝牙**权限分开。仅为本应用允许本次检查所需的访问；若未授权，请在反馈中说明。不要授予完全磁盘访问权限，也不要以 root 身份运行。
+
+反馈时请附 Actions 运行链接和提交 ID、DMG 文件名、macOS 版本和构建号（`sw_vers`）、CPU 或芯片型号；能启动时也请附上**设置 → 关于**中显示的版本。写明操作、观察结果、警告或错误原文，以及未做的检查。分享截图或日志前，去掉设备序列号、RF 地址、蓝牙 UUID 和私有路径。启动和发现结果不能证明固件写入成功或实体设备已通过验收。
 
 <a id="first-use"></a>
 ## 首次使用

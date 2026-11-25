@@ -2,7 +2,7 @@
 use crate::domain::{
     Inventory, ReceiverEndpoint, SerialEndpoint, SerialRole, receiver_serial_ports,
 };
-use hidapi::HidApi;
+use crate::native_hid;
 
 const VID: u16 = 0x1209;
 const PID: u16 = 0x7690;
@@ -102,7 +102,7 @@ fn same_endpoint(a: &SerialEndpoint, b: &SerialEndpoint, role: SerialRole) -> bo
 /// Read-only enumeration. A unique USB serial is required; labels/order never establish identity.
 pub fn discover_sources() -> Result<Vec<CaptureSource>, String> {
     let inventory = crate::discovery::scan()?;
-    let api = HidApi::new().map_err(|e| e.to_string())?;
+    let api = native_hid::enumerate().map_err(|e| e.to_string())?;
     let mut sources = Vec::new();
     for receiver in &inventory.receivers {
         let Some(serial) = receiver

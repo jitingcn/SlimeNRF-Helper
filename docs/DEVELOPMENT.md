@@ -140,10 +140,11 @@ The gallery branches before `AppRuntime` and never constructs `Workbench`, loads
 <a id="native-ui-smoke"></a>
 ## Native UI smoke
 
-Build the actual application using the platform instructions above (and the [Linux prerequisites](#linux)); choose the intended firmware mode and record the binary identity, platform, window size, actions, and observed results. Exercise the affected path at narrow sizes, enlarged text and in both languages where relevant. Inspect the rendered result and interaction, not just process startup. Keep tests, native desktop, private virtual-display/WSL, and physical hardware evidence separate; report what was not exercised. Use only owned processes and windows, exit them normally, and never terminate an unrelated instance.
+Build the actual application using the platform instructions ([Windows](#windows), [Linux](#linux), [macOS](#macos)), or use the exact packaged build under test. Record its identity, firmware mode, platform, window size, actions, and observed results. Exercise the affected path at narrow sizes, enlarged text and in both languages where relevant. Inspect the rendered result and interaction, not just process startup. Keep tests, native desktop, private virtual-display/WSL, and physical hardware evidence separate; report what was not exercised. Use only owned processes and windows, exit them normally, and never terminate an unrelated instance.
 
 - **Windows:** launch your own process and identify its PID and actual main HWND; verify the HWND belongs to that PID before capture or window-local input. Use a window-local capture such as Windows.Graphics.Capture and inspect the image. Do not select a window by title alone or send global input. Changing `APPDATA` alone does not guarantee isolation of Windows KnownFolder preferences. Preserve real preferences; do not overwrite them with a stale backup.
 - **Linux:** use a private display and private XDG configuration/state directories for an isolated run, with a working Vulkan ICD, fonts and a user D-Bus. Own and clean up only the display, bus and application processes you started. Observe the actual renderer and window. For a native file chooser, run a real portal and compatible backend on the same private bus and display and exercise the actual chooser. A private Xvfb result is distinct from WSLg and native desktop acceptance; none proves USB, BLE or flashing.
+- **macOS:** install the app from the actual preview DMG and follow the [hardware-free preview checks](USER_GUIDE.md#macos-preview-checks) before optional discovery. Observe the window, input, native file chooser, and normal quit. Report Apple Silicon and Intel results separately; package inspection does not test GUI or hardware.
 
 For a private Linux run, install Xvfb, `xvfb-run`, `dbus-run-session`, a Vulkan ICD and fonts in addition to build prerequisites. Create fresh private directories for `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` and a mode-0700 `XDG_RUNTIME_DIR`; export them and launch the application under a new `dbus-run-session` and `xvfb-run`. For chooser coverage, install `xdg-desktop-portal` and a compatible desktop backend, and ensure their services use that same session bus and display. Inspect the actual dialog before closing the owned session. A mock is not native chooser evidence.
 
@@ -154,7 +155,7 @@ For drawing or scrolling diagnosis, see the single-launch [Fast switches](#clean
 1. Review upstream release notes and the manifest's MSRV before changing version requirements. Keep the normal and test `gpui-kit` requirements identical.
 2. Update the [application manifest](../crates/app/Cargo.toml) and [Cargo.lock](../Cargo.lock) together with targeted `cargo update -p PACKAGE --precise VERSION` commands, not a blanket update. For GPUI updates, inspect the published Kit manifests and update the complete Kit, Fast, and gpui-pre families together. Keep a single GPUI type universe through `gpui_kit` exports.
    Review [Kit 0.11.0](https://github.com/longbridge/gpui-kit/releases/tag/v0.11.0) and [Fast 0.1.19](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.19), paired with gpui-pre 0.3.14, and verify API signatures in the locked published sources. Keep Kit's default `x11` feature for Linux X11 support. Both backends supply `IntoElement` for every `Element`. Build cached `Path`s at the current canvas origin; the cache no longer translates finished paths. Base owns selection recovery after a lost mouse release; keep the terminal hover, new-drag, and Copy regressions. Check custom `Element` layout, prepaint, and paint, owner notifications and explicit refresh, theme and locale changes, plot placement when scrolling or resizing, and menu focus and scrolling.
-3. Review and refresh the [license notices](#license-notices) from both locked target graphs before running the gates.
+3. Review and refresh the [license notices](#license-notices) from all four locked target graphs before running the gates.
 4. Run the platform [quality commands](#checks-and-editor) in both full and no-firmware modes.
 5. Run the native application. Check terminal scrolling, wrapping, text selection, plot interaction, and remote firmware loading.
 
@@ -227,11 +228,13 @@ The semantic fingerprint excludes profile settings; workspace membership and dep
 
 When Cargo inputs, vendored sources, or license materials change:
 
-1. Review the changed inputs. For workspace membership or dependency changes, capture both locked target graphs with the commands below, even if third-party versions are unchanged. Follow normal and build edges from `slimenrf-helper`, excluding dev edges. Mark build and proc-macro paths as compile tools, and preserve the conservative union and feature unification described in the reviewed inventory and renderer.
+1. Review the changed inputs. For workspace membership or dependency changes, capture the four locked target graphs below even if third-party versions are unchanged. Fetch the locked archives first if they are missing from Cargo's cache; capturing these graphs does not require the target SDKs. Follow normal and build edges from `slimenrf-helper`, excluding dev edges. Mark build and proc-macro paths as compile tools, and preserve the conservative union and feature unification described in the reviewed inventory and renderer.
 
    ```bash
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-pc-windows-msvc
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-unknown-linux-gnu
+   cargo metadata --locked --offline --format-version 1 --filter-platform aarch64-apple-darwin
+   cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-apple-darwin
    ```
 
 2. Review each added or changed package and source. Update the frozen graphs, package and material entries, source-availability instructions, and input hashes as needed. Preserve existing original source bytes. Add reviewed exact license and NOTICE bytes with their origins, encoding, byte length, and hashes in the input schema. Do not fix a stale-input error by blindly replacing hashes.
@@ -350,6 +353,21 @@ This is a broad-permission compatibility package, not a strict sandbox. To suppo
 
 The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<architecture>`. Change its location with `SLIMENRF_FLATPAK_CACHE` and parallelism with `SLIMENRF_FLATPAK_JOBS`, which defaults to 2. Do not mix it with native caches. If disk space is low, first move the cache to a Linux filesystem with more space. OSTree's reserved space can reject exports even when df reports free space. Do not automatically reduce this protection or clear other people's caches. For a single WSLg X11 diagnostic run, use `flatpak run --nosocket=wayland --socket=x11 io.github.jitingcn.SlimeNRFHelper`. Do not save a global override.
 
+<a id="macos"></a>
+## macOS preview development
+
+Use a native Apple Silicon or Intel Mac with macOS 15.0 or later, the pinned Rust toolchain, and an Apple SDK and Clang from the selected Command Line Tools or Xcode. See [GPUI Kit's prerequisites](https://gpui-kit.com/docs/installation). Install CMake and `jq` for packaging and cargo-nextest for the [quality checks](#checks-and-editor). The preview embeds GPUI Fast's Metal source; the renderer compiles it at launch, so the preview build does not need a separate Metal Toolchain download.
+
+```bash
+bash ./build.sh run --no-firmware
+bash ./quality.sh --no-firmware
+bash ./scripts/package-macos.sh
+```
+
+The packager builds the no-firmware Release app for the host architecture by default. To pass the architecture explicitly on the matching Mac, install the Rust target with `rustup target add aarch64-apple-darwin` (Apple Silicon) or `rustup target add x86_64-apple-darwin` (Intel), then run `bash ./scripts/package-macos.sh arm64` or `bash ./scripts/package-macos.sh x64` respectively. An explicit `--force` allows replacement of an existing output. The compressed read-only DMG in `dist/` contains `SlimeNRF Helper.app` and an **Applications** link for drag installation. The app's license files are in `Contents/Resources/licenses/`. Each DMG contains one native architecture; there is no universal bundle. `package.sh` remains the Linux packager.
+
+The bundle ID is `io.github.jitingcn.SlimeNRFHelper`. The app uses a local ad hoc signature; neither the app nor the disk image has a Developer ID signature or notarization. Follow the [preview installation steps](USER_GUIDE.md#macos-preview) to test the installed app, including any per-app Gatekeeper prompt. A local Cargo run does not demonstrate the downloaded bundle's first-launch behavior.
+
 ## CI and release acceptance
 
 [Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including release preparation tests, and checks publication boundaries and frozen notice inputs. After it passes, the `windows-2022` and `ubuntu-22.04` x64 jobs run independently. Windows also runs the tools tests for native hook coverage; both run the maintained quality entry points before packaging.
@@ -357,6 +375,10 @@ The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatp
 The source and release jobs share an explicit Rust cache key, preserving the existing source-job prefix instead of adding separate job IDs. Compiler, environment, and dependency hashes remain enabled. GitHub's cache scope rules still apply; tag builds can restore the default branch's cache, but matching keys do not make caches from other tags globally accessible. Windows and Linux application builds retain separate cache keys.
 
 Windows uploads one UPX-compressed executable under the normal filename. Linux uploads an AppImage. Both omit firmware, use the Cargo version in their filenames, and remain available as Actions artifacts for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets.
+
+The separate [macOS preview workflow](../.github/workflows/macos-preview.yml) runs on branch pushes, pull requests, and manual dispatch, not tag pushes. The `macos-26` and `macos-26-intel` runners build `macOS arm64 / no firmware` and `macOS x64 / no firmware`, respectively. Each independently runs `bash quality.sh --no-firmware` and the separate `cargo nextest run --locked -p slimenrf-tools` CLI tests before packaging.
+
+The packager verifies the DMG, attaches it read-only, checks the mounted app's Mach-O architecture, linked deployment target (macOS 15.0), system library linkage, metadata, ad hoc signature, license files, and the **Applications** link, then detaches it. Each passing job uploads its versioned DMG directly for 14 days. These jobs neither launch the GUI nor verify physical devices. They do not gate the Windows/Linux release workflow and never publish artifacts to Releases.
 
 A `v<version>` tag push also runs the release job after all three prerequisite jobs succeed. The tag must match the application's stable Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md); SemVer prerelease versions are rejected. Release notes use that entry and link to the Chinese changelog at the same commit.
 
@@ -388,7 +410,7 @@ Successful CI confirms only the configured checks and uploaded artifacts. Local 
 
 `./build.ps1 -Action clean` and `bash ./build.sh clean` remove all profiles and nested caches in the selected target. Debug and Release options do not narrow the scope. Preview with `-CargoArguments '--dry-run'` or `--cargo-arguments --dry-run`, respectively, or specify `--target-dir` explicitly. These commands do not delete dist, configuration, firmware, global Cargo downloads, or Rust toolchains. First, exit your own programs launched from target. Do not clean routinely.
 
-To diagnose Fast drawing or scrolling, set `GPUI_VIEW_RETENTION=0` or `GPUI_SCROLL_LAYERS=0` for a single launch, then clear the setting. These diagnostic switches do not change the GUI backend and are not defaults. Software Vulkan is only for compatibility diagnosis, not a performance guarantee. The [Fast 0.1.13 Apple renderer](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.13) requires macOS 12 or newer and macOS SDK 26 for native builds. Configure the other native dependencies according to upstream installation instructions and validate macOS separately. The Linux package entry point does not generate macOS packages.
+To diagnose Fast drawing or scrolling, set `GPUI_VIEW_RETENTION=0` or `GPUI_SCROLL_LAYERS=0` for a single launch, then clear the setting. These diagnostic switches do not change the GUI backend and are not defaults. Software Vulkan is only for compatibility diagnosis, not a performance guarantee.
 
 ## Use upstream bootloader fixtures
 

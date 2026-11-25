@@ -55,6 +55,9 @@ impl Fixture {
         let temporary = tempfile::tempdir().expect("create isolated fixture");
         let root = temporary.path().join("application");
         fs::create_dir(&root).expect("create fixture application");
+        // The audit rejects symlinked ancestors; Darwin's temporary directory can be under /var.
+        #[cfg(unix)]
+        let root = root.canonicalize().expect("resolve fixture application");
         let fixture = Self {
             _temporary: temporary,
             root,

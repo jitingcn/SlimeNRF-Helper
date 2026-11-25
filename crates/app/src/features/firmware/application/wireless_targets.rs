@@ -708,7 +708,7 @@ impl Workbench {
             "ble-target-{:?}-{:?}",
             device.adapter_id, id
         )))
-        .label(format!("{} · {}", device.name, device.address))
+        .label(device.label())
         .checked(self.flash.selected_ble.contains(&id))
         .disabled(busy)
         .on_click(cx.listener(move |this, checked: &bool, _, cx| {

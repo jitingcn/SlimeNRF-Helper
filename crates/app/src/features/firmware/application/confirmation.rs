@@ -308,10 +308,7 @@ impl Workbench {
             }
             Action::Ble(devices, _) => {
                 for device in devices {
-                    targets = targets.child(flash_target_text(format!(
-                        "{} · {}",
-                        device.name, device.address
-                    )));
+                    targets = targets.child(flash_target_text(device.label()));
                 }
             }
             Action::QueryGroups(_) => {}
