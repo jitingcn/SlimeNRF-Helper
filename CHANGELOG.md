@@ -16,6 +16,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Changed
 
+- Source builds now require Rust 1.100. Native development, CI, and Flatpak builds use Rust 1.100.0.
+- Update the desktop UI to GPUI Kit 0.11.0 and GPUI Fast 0.1.19. Text fields now end IME composition when they lose focus, and Tab can focus the first control when none is selected.
 - Offer separate wired UF2 choices for original and new XIAO nRF52840 tracker wiring. Neither choice is assigned automatically over OTA because both builds report the same target.
 - Use the published 261120 filenames for Kawazu and Dawn Mini. Keep DawnRX-2 available for matching CI and local files, with no bundled default for this release.
 

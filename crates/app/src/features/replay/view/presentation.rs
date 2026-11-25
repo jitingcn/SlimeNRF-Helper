@@ -827,11 +827,12 @@ fn signal_path(
     points: &[PlotPoint],
     range: (f64, f64),
     domain: (f32, f32),
-    width: f32,
-    height: f32,
+    bounds: Bounds<Pixels>,
     reconstructed: bool,
     stepped: bool,
-) -> Option<Path<Pixels>> {
+) -> Option<Path> {
+    let width = f32::from(bounds.size.width);
+    let height = f32::from(bounds.size.height);
     let map = |point: &PlotPoint| {
         gpui::point(
             px(((point.time - range.0) / (range.1 - range.0).max(1e-9)) as f32 * width),
@@ -875,15 +876,17 @@ fn signal_path(
         }
         previous = Some(point);
     }
+    path.translate(bounds.origin);
     path.build().ok()
 }
 fn clipping_path(
     points: &[PlotPoint],
     range: (f64, f64),
     domain: (f32, f32),
-    width: f32,
-    height: f32,
-) -> Option<Path<Pixels>> {
+    bounds: Bounds<Pixels>,
+) -> Option<Path> {
+    let width = f32::from(bounds.size.width);
+    let height = f32::from(bounds.size.height);
     let mut path = PathBuilder::stroke(px(1.));
     for point in points {
         if (domain.0..=domain.1).contains(&point.value) {
@@ -899,6 +902,7 @@ fn clipping_path(
         path.line_to(gpui::point(x, y));
         path.line_to(gpui::point(x + px(2.), inside));
     }
+    path.translate(bounds.origin);
     path.build().ok()
 }
 
@@ -1030,8 +1034,7 @@ pub(super) fn plot_canvas(
                                     points,
                                     range,
                                     domain,
-                                    width,
-                                    height,
+                                    bounds,
                                     reconstructed,
                                     chart.state(),
                                 )
@@ -1046,7 +1049,7 @@ pub(super) fn plot_canvas(
                         if data.clipped(full) > 0
                             && let Some(path) =
                                 caches.slot(channel * 3 + 2).get(key, bounds.origin, || {
-                                    clipping_path(points, range, domain, width, height)
+                                    clipping_path(points, range, domain, bounds)
                                 })
                         {
                             window.paint_path(path, chart.color(channel, dark));

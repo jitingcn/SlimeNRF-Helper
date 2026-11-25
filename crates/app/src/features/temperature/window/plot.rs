@@ -2,8 +2,8 @@ use crate::i18n::tr;
 use gpui_kit::base::plot::{PathCaches, ShapeKey};
 use gpui_kit::component::ActiveTheme;
 use gpui_kit::{
-    AnyElement, App, ContentMask, Hsla, InteractiveElement, IntoElement, ParentElement, Path,
-    PathBuilder, Pixels, Styled, canvas, div, point, px, relative, rems, rgb,
+    AnyElement, App, Bounds, ContentMask, Hsla, InteractiveElement, IntoElement, ParentElement,
+    Path, PathBuilder, Pixels, Styled, canvas, div, point, px, relative, rems, rgb,
 };
 use slimenrf_recording::thermal_dump::{AxisAnalysis, ThermalDumpAnalysis};
 use std::{
@@ -481,9 +481,10 @@ fn native_path(
     geometry: &Geometry,
     axis: &AxisAnalysis,
     layer: usize,
-    width: f32,
-    height: f32,
-) -> Option<Path<Pixels>> {
+    bounds: Bounds<Pixels>,
+) -> Option<Path> {
+    let width = f32::from(bounds.size.width);
+    let height = f32::from(bounds.size.height);
     let mut path = if layer == 0 || layer == 8 {
         PathBuilder::fill()
     } else {
@@ -536,6 +537,7 @@ fn native_path(
             }
         },
     );
+    path.translate(bounds.origin);
     path.build().ok()
 }
 
@@ -640,6 +642,7 @@ pub(super) fn chart(data: Arc<ChartData>, cx: &App) -> AnyElement {
                             grid.move_to(point(px(0.), px(y)));
                             grid.line_to(point(px(width), px(y)));
                         }
+                        grid.translate(bounds.origin);
                         grid.build().ok()
                     }) {
                         let mut grid_ink = border;
@@ -652,8 +655,7 @@ pub(super) fn chart(data: Arc<ChartData>, cx: &App) -> AnyElement {
                                 &painted.geometry,
                                 &painted.analysis.axes[axis],
                                 layer,
-                                width,
-                                height,
+                                bounds,
                             )
                         }) {
                             let mut ink: Hsla = rgb(color(layer, dark)).into();

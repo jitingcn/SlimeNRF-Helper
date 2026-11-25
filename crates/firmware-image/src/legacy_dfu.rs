@@ -245,8 +245,7 @@ pub fn parse_package(name: &str, bytes: &[u8]) -> Result<Package, Error> {
     })?;
     let mut names = HashSet::new();
     for i in 0..archive.len() {
-        let file = archive
-            .by_index(i)
+        let file = crate::zip_envelope::open_member(&mut archive, i)
             .map_err(|source| Error::new(zip_error_kind(&source), ErrorDetail::ZipIndex(source)))?;
         let name = file
             .name()
@@ -499,6 +498,32 @@ mod tests {
                 .kind(),
             io::ErrorKind::InvalidData
         );
+    }
+
+    #[test]
+    fn rejects_unsupported_compression_in_unused_members() {
+        let manifest =
+            br#"{"manifest":{"application":{"bin_file":"app.bin","dat_file":"application.dat"}}}"#;
+        let mut bytes = archive(&[
+            ("manifest.json", manifest),
+            ("app.bin", &[1, 2, 3, 4]),
+            ("application.dat", &init()),
+            ("unused.txt", b"ignored"),
+        ]);
+        assert!(parse_package("legacy.zip", &bytes).is_ok());
+
+        crate::zip_envelope::set_member_compression(&mut bytes, "unused.txt", u16::MAX);
+        let error = parse_package("legacy.zip", &bytes).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Unsupported);
+        assert!(matches!(
+            error
+                .source()
+                .unwrap()
+                .downcast_ref::<zip::result::ZipError>(),
+            Some(zip::result::ZipError::CompressionMethodNotSupported(
+                u16::MAX
+            ))
+        ));
     }
 
     #[test]

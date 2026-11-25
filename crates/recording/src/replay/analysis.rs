@@ -63,15 +63,19 @@ pub fn select_rest_references(
     let mut a = None;
     let mut b = None;
     let mut start = None;
-    // An extra sentinel closes a run ending at the recording boundary.
-    for i in 0..=n {
+    // A non-rest sentinel closes a run ending at the recording boundary.
+    let states = result
+        .frames
+        .iter()
+        .map(|frame| (frame.segment, frame.rest));
+    for (i, (segment, rest)) in states.chain([(0, false)]).enumerate() {
         if i % 256 == 0 && cancel.load(Ordering::Relaxed) {
             return Err(AutoReferenceError::Cancelled);
         }
-        if i < n && result.frames[i].segment != 0 {
+        if segment != 0 {
             return Err(AutoReferenceError::IndependentSegments);
         }
-        if i < n && result.frames[i].rest {
+        if rest {
             start.get_or_insert(i);
         } else if let Some(s) = start.take() {
             let a_end = ((i as f64) * dt).min(60.);

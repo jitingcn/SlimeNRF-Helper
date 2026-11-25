@@ -15,7 +15,7 @@ function Initialize-SlimeNRFCargoEnvironment {
 
 function Assert-SlimeNRFNextest {
     if (-not (Get-Command cargo-nextest -CommandType Application -ErrorAction SilentlyContinue)) {
-        throw 'cargo-nextest is required. Install it with: cargo install --locked cargo-nextest --version 0.9.150'
+        throw 'cargo-nextest is required. Install it with: cargo install --locked cargo-nextest --version 0.9.152'
     }
 }
 

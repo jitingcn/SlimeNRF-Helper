@@ -198,8 +198,7 @@ pub(super) fn bounded_archive<'a>(
     let mut expanded = 0u64;
     for index in 0..archive.len() {
         cancelled(cancel)?;
-        let file = archive
-            .by_index(index)
+        let file = slimenrf_firmware_image::zip_envelope::open_member(&mut archive, index)
             .map_err(|e| format!("Cannot read firmware ZIP member: {e}"))?;
         let name = file
             .name()

@@ -12,9 +12,9 @@
 
 ## 工具链与构建模式
 
-原生开发使用 [rust-toolchain.toml](../rust-toolchain.toml) 固定的 stable Rust（含 rustfmt、Clippy、rust-analyzer、rust-src），rustup 在本目录自动选择，不需改变全局默认。[Cargo.toml](../Cargo.toml) 中的 workspace 最低 Rust 版本跟随固定编译器的次版本；开发和 CI 验证固定的补丁版本，不代表验证了兼容下限之上的每个编译器版本。各成员继承共享的作者、仓库和主页信息，同时保留各自的描述。依赖版本以 [Cargo.lock](../Cargo.lock) 为准，GUI 通过同源 `gpui_kit` 导出使用官方 Fast feature。
+原生开发使用 [rust-toolchain.toml](../rust-toolchain.toml) 固定的 stable Rust（含 rustfmt、Clippy、rust-analyzer、rust-src），rustup 在本目录自动选择，不需改变全局默认。[Cargo.toml](../Cargo.toml) 中的 workspace 最低 Rust 版本跟随固定编译器的次版本；开发和 CI 验证固定的补丁版本，不代表验证了兼容下限之上的每个编译器版本。各成员继承共享的作者和仓库信息，同时保留各自的描述。依赖版本以 [Cargo.lock](../Cargo.lock) 为准，GUI 通过同源 `gpui_kit` 导出使用官方 Fast feature。
 
-脚本 test 操作和非纯格式质量检查需要安装 cargo-nextest：`cargo install --locked cargo-nextest --version 0.9.150`。脚本不会自动安装；build、check、纯格式和显式的纯 doctest 操作不需要它。
+脚本 test 操作和非纯格式质量检查需要安装 cargo-nextest：`cargo install --locked cargo-nextest --version 0.9.152`。脚本不会自动安装；build、check、纯格式和显式的纯 doctest 操作不需要它。
 
 应用构建、脚本、直接 Cargo 检查与测试、编辑器分析、打包、CI 和独立 oracle 均不需要 Python。构建脚本和打包共用同一个 Rust 版权材料生成器；维护工具通过独立的 `slimenrf-tools` 包运行。下文各流程所需的原生及外部输入仍不可省略。
 
@@ -153,7 +153,7 @@ Controls 场景提供可选择的合成卡片、短/长内容和动态详情；T
 
 1. 修改版本要求前，检查上游发布说明和清单中的 MSRV。保持普通依赖与测试依赖的 `gpui-kit` 版本要求一致。
 2. 同步更新[应用清单](../crates/app/Cargo.toml)与 [Cargo.lock](../Cargo.lock)，使用定向的 `cargo update -p PACKAGE --precise VERSION`，不要无范围限制地更新全部依赖。更新 GPUI 时检查已发布的 Kit 清单，并同步更新完整的 Kit、Fast 与 gpui-pre 系列。只通过 `gpui_kit` 导出使用同一套 GPUI 类型。
-   审查 [Kit 0.10.0](https://github.com/longbridge/gpui-kit/releases/tag/v0.10.0) 与 [Fast 0.1.16](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.16) 的变更，再核对锁定版本发布源码中的 API 签名，不只依赖发布说明里的名称。Fast 现在为所有 `Element` 提供 `IntoElement`，应用不应再添加冲突实现。鼠标释放丢失后的选择恢复由 Base 负责，保留终端悬停、新拖选与 Copy 回归，不再安装原有兼容代码。检查自定义 `Element` 的布局、prepaint、paint 生命周期、状态所有者的通知、显式窗口刷新失效、主题与语言切换、窗口缩放和菜单焦点/滚动。
+   审查 [Kit 0.11.0](https://github.com/longbridge/gpui-kit/releases/tag/v0.11.0) 和 [Fast 0.1.19](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.19) 的发布说明（配套 gpui-pre 0.3.14），并核对锁定版本发布源码中的 API 签名。保留 Kit 默认启用的 `x11` feature，以支持 Linux X11。两个后端均为所有 `Element` 实现 `IntoElement`。按画布当前原点构建缓存的 `Path`；缓存不再平移构建好的路径。鼠标释放事件丢失后的选区恢复由 Base 负责，保留终端悬停、重新拖选和 Copy 回归测试。检查自定义 `Element` 的布局、prepaint 和 paint、状态所有者的通知和显式刷新、主题和语言切换、滚动或缩放时的图表位置，以及菜单焦点和滚动。
 3. 根据两个平台锁定的依赖图审查并刷新[许可证声明](#license-notices)，再运行质量检查。
 4. 按平台运行[质量检查命令](#checks-and-editor)，覆盖完整固件和无固件两种模式。
 5. 运行原生应用，检查终端滚动、自动换行、文本选择、图表交互和远程固件加载。

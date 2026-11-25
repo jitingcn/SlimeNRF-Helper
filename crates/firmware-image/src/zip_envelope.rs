@@ -3,7 +3,10 @@
 //! This exposes the workspace's locked `zip` archive type; each consumer must
 //! still apply its own member, path, and expanded-size policy.
 
-use std::{fmt, io::Cursor};
+use std::{
+    fmt,
+    io::{Cursor, Read, Seek},
+};
 
 use zip::{
     read::{ArchiveOffset, Config},
@@ -320,6 +323,40 @@ pub fn open(bytes: &[u8], limits: Limits) -> Result<zip::ZipArchive<Cursor<&[u8]
         ));
     }
     Ok(archive)
+}
+
+/// Opens a firmware ZIP member without reading its payload.
+///
+/// # Errors
+/// Returns the ZIP reader's member-open error or the unavailable compression method ID.
+pub fn open_member<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    index: usize,
+) -> Result<zip::read::ZipFile<'_, R>, ZipError> {
+    let member = archive.by_index(index)?;
+    // ZIP initializes decoders lazily, but admission also checks unread members.
+    #[expect(
+        deprecated,
+        reason = "zip stores unavailable method IDs in this variant"
+    )]
+    if let zip::CompressionMethod::Unsupported(id) = member.compression() {
+        return Err(ZipError::CompressionMethodNotSupported(id));
+    }
+    Ok(member)
+}
+
+#[cfg(test)]
+pub(crate) fn set_member_compression(bytes: &mut [u8], name: &str, method: u16) {
+    let (local, central) = {
+        let mut archive = zip::ZipArchive::new(Cursor::new(&*bytes)).unwrap();
+        let member = archive.by_name(name).unwrap();
+        (
+            member.header_start() as usize,
+            member.central_header_start() as usize,
+        )
+    };
+    bytes[local + 8..local + 10].copy_from_slice(&method.to_le_bytes());
+    bytes[central + 10..central + 12].copy_from_slice(&method.to_le_bytes());
 }
 
 #[cfg(test)]

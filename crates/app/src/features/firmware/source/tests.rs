@@ -592,6 +592,27 @@ fn zip_envelope_and_link_metadata_fail_before_member_allocation() {
 }
 
 #[test]
+fn archive_rejects_unsupported_compression_in_unused_members() {
+    let cancel = AtomicBool::new(false);
+    let mut bytes = zip(&[("app.hex", b"image"), ("unused.txt", b"ignored")]);
+    let (local, central) = {
+        let mut archive = bounded_archive(&bytes, &cancel).unwrap();
+        let member = archive.by_name("unused.txt").unwrap();
+        (
+            member.header_start() as usize,
+            member.central_header_start() as usize,
+        )
+    };
+    bytes[local + 8..local + 10].copy_from_slice(&u16::MAX.to_le_bytes());
+    bytes[central + 10..central + 12].copy_from_slice(&u16::MAX.to_le_bytes());
+
+    assert_eq!(
+        bounded_archive(&bytes, &cancel).unwrap_err(),
+        "Cannot read firmware ZIP member: compression method not supported: 65535"
+    );
+}
+
+#[test]
 fn release_dfu_zip_is_retained_but_unsafe_package_is_rejected() {
     run(async {
         for (bytes, valid) in [

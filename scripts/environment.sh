@@ -14,7 +14,7 @@ slimenrf_initialize_cargo() {
 
 slimenrf_require_nextest() {
     if ! command -v cargo-nextest >/dev/null 2>&1; then
-        printf '%s\n' 'cargo-nextest is required. Install it with: cargo install --locked cargo-nextest --version 0.9.150' >&2
+        printf '%s\n' 'cargo-nextest is required. Install it with: cargo install --locked cargo-nextest --version 0.9.152' >&2
         return 1
     fi
 }

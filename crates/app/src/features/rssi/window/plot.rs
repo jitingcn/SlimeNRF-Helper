@@ -5,8 +5,8 @@ use crate::{
 use gpui_kit::base::plot::{PathCaches, ShapeKey};
 use gpui_kit::component::{ActiveTheme, tooltip::Tooltip};
 use gpui_kit::{
-    AnyElement, App, ContentMask, Hsla, IntoElement, Path, PathBuilder, Pixels, SharedString,
-    canvas, div, point, prelude::*, px, relative, rems,
+    AnyElement, App, Bounds, ContentMask, Hsla, IntoElement, Path, PathBuilder, Pixels,
+    SharedString, canvas, div, point, prelude::*, px, relative, rems,
 };
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
@@ -170,7 +170,9 @@ impl ChartData {
         }
     }
 
-    fn path(&self, layer: usize, width: f32, height: f32, rem: f32) -> Option<Path<Pixels>> {
+    fn path(&self, layer: usize, bounds: Bounds<Pixels>, rem: f32) -> Option<Path> {
+        let width = f32::from(bounds.size.width);
+        let height = f32::from(bounds.size.height);
         let slot_width = BAR_CHANNEL_WIDTH * self.x_scale * width;
         let missing_stroke = (slot_width * 0.35).min(1.);
         let mut path = if layer == 1 {
@@ -243,6 +245,7 @@ impl ChartData {
             }
             _ => unreachable!(),
         }
+        path.translate(bounds.origin);
         path.build().ok()
     }
 }
@@ -344,9 +347,10 @@ pub(super) fn chart(data: Arc<ChartData>, cx: &App) -> AnyElement {
                         if layer == 4 && painted.missing.is_empty() {
                             continue;
                         }
-                        if let Some(path) = caches.slot(layer).get(key, bounds.origin, || {
-                            painted.path(layer, width, height, rem)
-                        }) {
+                        if let Some(path) = caches
+                            .slot(layer)
+                            .get(key, bounds.origin, || painted.path(layer, bounds, rem))
+                        {
                             let mut ink = inks[layer];
                             if layer == 0 {
                                 ink.a *= 0.55;
@@ -508,6 +512,7 @@ pub(super) fn chart(data: Arc<ChartData>, cx: &App) -> AnyElement {
 mod tests {
     use super::*;
     use crate::rssi_scan::Sample;
+    use gpui_kit::{PaintedPath, PathCurve, PathTile, Point, ScaledPixels, black, size};
 
     fn data(samples: Vec<Sample>, range: (u8, u8)) -> ChartData {
         ChartData::new(Arc::new(ScanReport {
@@ -522,17 +527,68 @@ mod tests {
         }))
     }
 
-    fn path_contains(path: &Path<Pixels>, x: f32, y: f32) -> bool {
-        path.vertices.as_chunks::<3>().0.iter().any(|triangle| {
-            let side = |a: usize, b: usize| {
-                let a = triangle[a].xy_position;
-                let b = triangle[b].xy_position;
-                (f32::from(b.x) - f32::from(a.x)) * (y - f32::from(a.y))
-                    - (f32::from(b.y) - f32::from(a.y)) * (x - f32::from(a.x))
+    fn viewport(width: f32, height: f32) -> Bounds<Pixels> {
+        Bounds::new(Default::default(), size(px(width), px(height)))
+    }
+
+    struct PathProbe {
+        bounds: Bounds<ScaledPixels>,
+        even_odd: bool,
+        curves: Vec<PathCurve>,
+        tiles: Vec<PathTile>,
+    }
+
+    impl PathProbe {
+        fn new(data: &ChartData, layer: usize, bounds: Bounds<Pixels>, rem: f32) -> Self {
+            let path = data.path(layer, bounds, rem).expect("valid chart path");
+            let rendered = PaintedPath::new(path, 1., ContentMask { bounds }, black().into());
+            let (mut paints, mut curves, mut tiles) = (Vec::new(), Vec::new(), Vec::new());
+            rendered.append_to(&mut paints, &mut curves, &mut tiles);
+            let paint = paints[0];
+            assert!(
+                !tiles.is_empty(),
+                "chart path should paint inside the viewport"
+            );
+            Self {
+                bounds: paint.bounds,
+                even_odd: paint.even_odd.as_bool(),
+                curves,
+                tiles,
+            }
+        }
+
+        // Test point coverage from the renderer's straight contours, independent of antialiasing.
+        fn contains(&self, x: f32, y: f32) -> bool {
+            let Some(tile) = self.tiles.iter().find(|tile| {
+                (tile.top_left.x..tile.bottom_right.x).contains(&x)
+                    && (tile.top_left.y..tile.bottom_right.y).contains(&y)
+            }) else {
+                return false;
             };
-            let sides = [side(0, 1), side(1, 2), side(2, 0)];
-            sides.iter().all(|value| *value >= 0.) || sides.iter().all(|value| *value <= 0.)
-        })
+            // Unlisted contours can cross between the tile's reference ray and the probe
+            // only where they meet a listed endpoint, with opposite winding.
+            let changes_backdrop = |endpoint: Point<f32>| {
+                endpoint.x <= tile.reference.x && tile.reference.y < endpoint.y && endpoint.y <= y
+            };
+            let start = tile.curve_start as usize;
+            let mut winding = tile.backdrop;
+            for curve in &self.curves[start..start + tile.curve_count as usize] {
+                let crosses = (curve.p0.y..curve.p1.y).contains(&y) && {
+                    assert_eq!(curve.a, point(0., 0.), "RSSI contours are straight lines");
+                    let t = (y - curve.p0.y) / (curve.p1.y - curve.p0.y);
+                    curve.p0.x + t * (curve.p1.x - curve.p0.x) < x
+                };
+                let step = if curve.sign < 0. { -1 } else { 1 };
+                winding += step
+                    * (i32::from(crosses) + i32::from(changes_backdrop(curve.p1))
+                        - i32::from(changes_backdrop(curve.p0)));
+            }
+            if self.even_odd {
+                winding % 2 != 0
+            } else {
+                winding != 0
+            }
+        }
     }
 
     #[test]
@@ -557,41 +613,40 @@ mod tests {
         assert_eq!(data.missing, [1, 3, 4, 5, 6, 7]);
         assert!(data.has_missing());
         assert_eq!(data.report.samples.len(), 3);
-        let marks = data.path(4, 900., 260., 16.).expect("unsampled marks");
-        assert!(!marks.vertices.is_empty());
-        assert!(marks.bounds.top() >= px(260. - 16.));
-        assert!(marks.bounds.bottom() <= px(260.));
-        assert!(marks.bounds.size.height <= px(16. * 2. * MISSING_MARK_HALF_REM + 1.));
-        let mark_y = f32::from(marks.bounds.center().y);
+        let viewport = viewport(900., 260.);
+        let marks = PathProbe::new(&data, 4, viewport, 16.);
+        assert!(marks.bounds.top().0 >= 260. - 16.);
+        assert!(marks.bounds.bottom().0 <= 260.);
+        assert!(marks.bounds.size.height.0 <= 16. * 2. * MISSING_MARK_HALF_REM + 1.);
+        let mark_y = marks.bounds.center().y.0;
         for &channel in &data.missing {
             let x = data.channel_fraction(channel) * 900.;
-            assert!(
-                path_contains(&marks, x, mark_y),
-                "missing channel {channel}"
-            );
-            assert!(!path_contains(&marks, x, 130.), "mark has no RSSI height");
+            assert!(marks.contains(x, mark_y), "missing channel {channel}");
+            assert!(!marks.contains(x, 130.), "mark has no RSSI height");
         }
         for channel in [0, 2, 8] {
             let x = data.channel_fraction(channel) * 900.;
-            assert!(
-                !path_contains(&marks, x, mark_y),
-                "measured channel {channel}"
-            );
+            assert!(!marks.contains(x, mark_y), "measured channel {channel}");
         }
-        assert!(!path_contains(&marks, 100., mark_y), "ordinary slot gap");
-        for vertex in &marks.vertices {
-            let x = f32::from(vertex.xy_position.x);
+        assert!(!marks.contains(100., mark_y), "ordinary slot gap");
+        // Fast snaps the rendered outline to its 1/256-pixel grid.
+        let tolerance = 1. / 256.;
+        for x in marks
+            .curves
+            .iter()
+            .flat_map(|curve| [curve.p0.x, curve.p1.x])
+        {
             assert!(
                 data.missing.iter().any(|&channel| {
                     let (left, width) = data.channel_slot(channel);
-                    x >= left * 900. - 0.001 && x <= (left + width) * 900. + 0.001
+                    x >= left * 900. - tolerance && x <= (left + width) * 900. + tolerance
                 }),
                 "mark must stay within a missing slot: {x}"
             );
         }
-        let zoomed = data.path(4, 900., 260., 20.).expect("zoomed missing marks");
+        let zoomed = PathProbe::new(&data, 4, viewport, 20.);
         assert!(zoomed.bounds.size.height > marks.bounds.size.height);
-        assert!(zoomed.bounds.size.height <= px(20. * 2. * MISSING_MARK_HALF_REM + 1.));
+        assert!(zoomed.bounds.size.height.0 <= 20. * 2. * MISSING_MARK_HALF_REM + 1.);
     }
 
     #[test]
@@ -623,11 +678,8 @@ mod tests {
 
         let dense = data(vec![first], (0, 255));
         assert_eq!(dense.missing.len(), 255);
-        let marks = dense
-            .path(4, 400., 4000., 16.)
-            .expect("dense missing marks");
-        assert!(!marks.vertices.is_empty());
-        assert!(marks.bounds.top() >= px(4000. - 16.));
+        let marks = PathProbe::new(&dense, 4, viewport(400., 4000.), 16.);
+        assert!(marks.bounds.top().0 >= 4000. - 16.);
     }
 
     #[test]
@@ -795,8 +847,10 @@ mod tests {
             ],
             (0, 8),
         );
-        let path = data.path(1, 900., 260., 16.).expect("filled bar path");
-        let contains = |x, y| path_contains(&path, x, y);
+        let bounds = Bounds::new(point(px(53.), px(31.)), size(px(900.), px(260.)));
+        let path = PathProbe::new(&data, 1, bounds, 16.);
+        let contains =
+            |x, y| path.contains(bounds.origin.x.as_f32() + x, bounds.origin.y.as_f32() + y);
         for sample in &data.report.samples {
             let bar = data.bar(sample);
             let x = (bar.left + bar.width / 2.) * 900.;
@@ -830,14 +884,10 @@ mod tests {
             }],
             (0, 88),
         );
-        let bars = data.path(1, 890., 260., 16.).expect("measured path");
-        let current = data.path(2, 890., 260., 16.).expect("current marker");
-        let recommended = data
-            .path(3, 890., 260., 16.)
-            .expect("recommendation marker");
-        assert!(!bars.vertices.is_empty());
-        assert!(!current.vertices.is_empty());
-        assert!(!recommended.vertices.is_empty());
+        let viewport = viewport(890., 260.);
+        let bars = PathProbe::new(&data, 1, viewport, 16.);
+        let current = PathProbe::new(&data, 2, viewport, 16.);
+        let recommended = PathProbe::new(&data, 3, viewport, 16.);
         assert!(
             current.bounds.origin.x > bars.bounds.origin.x + bars.bounds.size.width,
             "current marker must remain visible without a measured bar"

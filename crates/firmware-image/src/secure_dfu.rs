@@ -527,8 +527,7 @@ pub fn parse_images(name: &str, bytes: &[u8], options: &Options) -> Result<Vec<I
     )?;
     let mut seen = HashSet::new();
     for i in 0..archive.len() {
-        let member = archive
-            .by_index(i)
+        let member = crate::zip_envelope::open_member(&mut archive, i)
             .map_err(|e| Error::zip("Invalid DFU ZIP member".into(), e))?;
         let name = member
             .name()
@@ -882,6 +881,34 @@ mod tests {
             .downcast_ref::<std::io::Error>()
             .unwrap();
         assert_eq!(io_error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn rejects_unsupported_compression_in_unused_members() {
+        let options = Options::default();
+        let firmware = [1, 2, 3, 4];
+        let init = generate_init(&firmware, &options);
+        let bytes = package(&firmware, &init, "app.bin");
+        let mut writer = zip::ZipWriter::new_append(Cursor::new(bytes)).unwrap();
+        writer
+            .start_file("unused.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(b"ignored").unwrap();
+        let mut bytes = writer.finish().unwrap().into_inner();
+        assert!(parse_images("secure.zip", &bytes, &options).is_ok());
+
+        crate::zip_envelope::set_member_compression(&mut bytes, "unused.txt", u16::MAX);
+        let error = parse_images("secure.zip", &bytes, &options).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Unsupported);
+        assert!(matches!(
+            error
+                .source()
+                .unwrap()
+                .downcast_ref::<zip::result::ZipError>(),
+            Some(zip::result::ZipError::CompressionMethodNotSupported(
+                u16::MAX
+            ))
+        ));
     }
 
     #[test]

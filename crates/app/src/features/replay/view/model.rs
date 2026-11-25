@@ -505,17 +505,15 @@ impl ModelView {
 }
 
 fn fill_polygon(points: &[Point<Pixels>], color: Hsla, window: &mut Window) {
-    // Native filled paths, no Lyon tessellation, CPU raster buffer or GPU readback.
-    // GPUI consumes each path's vertex allocation; geometry/cache above remain fixed-size.
-    let mut path = gpui::Path::new(points[0]);
-    path.vertices.reserve_exact((points.len() - 2) * 3);
-    for i in 1..points.len() - 1 {
-        path.push_triangle(
-            (points[0], points[i], points[i + 1]),
-            (point(0., 1.), point(0., 1.), point(0., 1.)),
-        );
+    let mut path = PathBuilder::fill();
+    path.move_to(points[0]);
+    for &point in &points[1..] {
+        path.line_to(point);
     }
-    window.paint_path(path, color);
+    path.close();
+    if let Ok(path) = path.build() {
+        window.paint_path(path, color);
+    }
 }
 
 fn register_input(owner: WeakEntity<ModelView>, hitbox: Hitbox, window: &mut Window) {

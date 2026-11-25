@@ -6,7 +6,6 @@ rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 authors.workspace = true
 description = "Receiver-oriented SlimeNRF desktop workbench"
 
@@ -21,10 +20,10 @@ embed-firmware = []
 slimenrf-firmware-image = { path = "../firmware-image" }
 slimenrf-recording = { path = "../recording" }
 slimenrf-terminal-core = { path = "../terminal-core" }
-gpui-kit = { version = "=0.10.0", features = ["gpui-fast"] }
+gpui-kit = { version = "=0.11.0", features = ["gpui-fast"] }
 serialport = { version = "4.8", features = ["usbportinfo-interface"] }
 hidapi = { version = "2.6", default-features = false, features = ["windows-native", "linux-native"] }
-parking_lot = "0.12"
+parking_lot = "0.13"
 directories = "6"
 rust-i18n = "4.2"
 sys-locale = "0.3"
@@ -44,10 +43,10 @@ tokio = { version = "1", features = ["rt", "time", "sync", "net"] }
 futures-util = "0.3"
 uuid = "1"
 glam = "0.34"
-unicode-width = { version = "=0.2.2", default-features = false }
+unicode-width = { version = "=0.2.3", default-features = false }
 
 [dev-dependencies]
-gpui-kit = { version = "=0.10.0", features = ["gpui-fast", "test-support"] }
+gpui-kit = { version = "=0.11.0", features = ["gpui-fast", "test-support"] }
 
 [build-dependencies]
 slimenrf-tools = { path = "../tools", default-features = false }

@@ -443,7 +443,10 @@ impl Transport for Emulator {
                     },
                 );
                 self.max_parallel = self.max_parallel.max(self.staging.len());
-                for slot in std::mem::take(&mut self.reassign_on_begin).into_iter().rev() {
+                for slot in std::mem::take(&mut self.reassign_on_begin)
+                    .into_iter()
+                    .rev()
+                {
                     self.queue_reassignment(slot);
                 }
                 self.incoming.push_back(status(id, 1, 0, 0));
@@ -3375,7 +3378,11 @@ fn cleanup_skips_each_reassigned_slot_but_aborts_stable_started_peers() {
             let id = outcome.target.id;
             let error = failure(&outcome.outcome);
             assert!(error.contains("reassigned"), "{error}");
-            assert_eq!(error.contains("ABORT skipped"), changed.contains(&id), "{error}");
+            assert_eq!(
+                error.contains("ABORT skipped"),
+                changed.contains(&id),
+                "{error}"
+            );
         }
         let mut expected = vec![(BEGIN, 0), (BEGIN, 1)];
         if changed.len() == 1 {
