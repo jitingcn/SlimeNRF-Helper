@@ -1,10 +1,12 @@
 param(
     [switch]$Force,
     [switch]$NoFirmware,
-    [string]$OfficialReleaseTag
+    [string]$OfficialReleaseTag,
+    [string]$FirmwareTag
 )
 
 $hasOfficialReleaseTag = $PSBoundParameters.ContainsKey('OfficialReleaseTag')
+$hasFirmwareTag = $PSBoundParameters.ContainsKey('FirmwareTag')
 $originalErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = 'Stop'
 $originalEnvironment = [Environment]::GetEnvironmentVariables('Process')
@@ -14,6 +16,16 @@ try {
     $upxScript = Join-Path $PSScriptRoot 'scripts\package-upx.ps1'
     # A release marker is an explicit packaging input, never an inherited default.
     [Environment]::SetEnvironmentVariable('SLIMENRF_OFFICIAL_RELEASE', $null, 'Process')
+    [Environment]::SetEnvironmentVariable('SLIMENRF_FIRMWARE_TAG', $null, 'Process')
+    if ($hasFirmwareTag) {
+        if ($NoFirmware -or $hasOfficialReleaseTag) {
+            throw 'FirmwareTag requires a local package with embedded firmware.'
+        }
+        if ([string]::IsNullOrWhiteSpace($FirmwareTag)) {
+            throw 'FirmwareTag must be a nonempty firmware release tag.'
+        }
+        $env:SLIMENRF_FIRMWARE_TAG = $FirmwareTag
+    }
     if ($hasOfficialReleaseTag) {
         if ([string]::IsNullOrWhiteSpace($OfficialReleaseTag)) {
             throw 'OfficialReleaseTag must be a nonempty release tag.'

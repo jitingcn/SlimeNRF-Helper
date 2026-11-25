@@ -26,6 +26,8 @@ Cargo automatically chooses build parallelism from the available CPUs; set `CARG
 
 When the exact Git tag `v<Cargo version>` points to HEAD, a clean checkout displays only the Cargo version, such as `0.2.0` or `0.2.0-rc.1`. Both lightweight and annotated tags are supported; GitHub's prerelease designation does not add a hash. Other development checkouts display `0.2.0+abcdef0`. Local tracked changes retain `0.2.0+abcdef0.dirty`, even on a matching tag; ignored and untracked files do not make it dirty. CI ignores worktree dirtiness and prefers the actual checkout HEAD. Without Git metadata, a source archive displays the base version, or a validated GitHub Actions SHA suffix if available. This display identity does not change release tags, asset names, or update comparisons.
 
+For a local full build, `SLIMENRF_FIRMWARE_TAG` replaces the Git suffix with `+fw.<tag>` in the window title and About version. Set it only with an explicit `SLIMENRF_FIRMWARE_ROOT` containing the verified release files. The tag must be valid SemVer build metadata: nonempty dot-separated identifiers made of ASCII letters, digits, and hyphens. The label records the application firmware release chosen by the packager; it is not inferred or verified by Cargo. Leave the variable unset for no-firmware and official app builds.
+
 For incremental builds, Cargo watches individual Git metadata and tracked inputs rather than the entire checkout. Watches also cover creation, movement, deletion, and packing of the matching release tag. A deleted tracked input can cause the build script to rerun while it remains absent; after restoration, unchanged builds can be fresh again.
 
 <a id="windows"></a>
@@ -255,6 +257,8 @@ Keep MPL-2.0 covered source available separately as the notice document instruct
 ```powershell
 ./package.ps1 -NoFirmware
 ```
+
+To label a local firmware package, set `SLIMENRF_FIRMWARE_ROOT` to the populated staging directory, then run `./package.ps1 -FirmwareTag 261120`. For app version `0.5.0` this displays `0.5.0+fw.261120` and leaves the executable filename and update version unchanged. `-FirmwareTag` cannot be combined with `-NoFirmware` or `-OfficialReleaseTag`. Follow the [bundled firmware packaging skill](../.agents/skills/slimenrf-helper-bundled-firmware/SKILL.md) to stage and verify the release.
 
 `package.ps1` invokes the internal [UPX helper](../scripts/package-upx.ps1) with explicit mandatory `-InputPath` and `-OutputPath`. The helper pins the tool version and hash and uses `--best --lzma --strip-relocs=0` without `--exact`. Before publication, it runs UPX's integrity check and decompresses to a separate temporary file. Decompression may produce different executable bytes; the Cargo-built input remains unchanged.
 

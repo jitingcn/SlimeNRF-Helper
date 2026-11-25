@@ -12,6 +12,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Added
 
 - Map the 261120 Aero Tracker Ultra application to its exact UF2 Board-ID and OTA target.
+- Local Windows firmware packages can show the bundled application firmware tag in the window title and About without changing the app's update version.
 
 ### Changed
 

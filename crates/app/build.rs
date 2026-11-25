@@ -16,7 +16,9 @@ fn main() {
     // rust-i18n 4.2.4 reads catalogs in its macro without tracking those inputs.
     // Watching the directory also covers newly added and removed catalog files.
     println!("cargo:rerun-if-changed=../../locales");
-    build_version::emit_build_version();
+    if let Err(error) = build_version::emit_build_version() {
+        panic!("Cannot determine SlimeNRF display version: {error}");
+    }
     if let Err(error) = official_release::emit_official_release() {
         panic!("Cannot mark SlimeNRF official release: {error}");
     }

@@ -691,7 +691,8 @@ fn assert_incremental_version(fixture: &GitFixture, expected: &str, expected_run
         .env_remove("RUSTC_WRAPPER")
         .env_remove("RUSTC_WORKSPACE_WRAPPER")
         .env("GITHUB_ACTIONS", "false")
-        .env_remove("GITHUB_SHA");
+        .env_remove("GITHUB_SHA")
+        .env_remove("SLIMENRF_FIRMWARE_TAG");
     isolate_git_environment(&mut command, fixture.directory.path());
     // Keep rustup's real home while isolating Git's configuration and variables.
     for key in ["HOME", "USERPROFILE", "XDG_CONFIG_HOME"] {
@@ -749,7 +750,7 @@ fn incremental_cargo_build_tracks_tag_creation_packing_moves_and_deletion() {
          let root = std::path::PathBuf::from(std::env::var_os(\"CARGO_MANIFEST_DIR\").unwrap()).join(\"../..\");\n\
          let mut log = std::fs::OpenOptions::new().create(true).append(true).open(root.join(\"version-runs\")).unwrap();\n\
          writeln!(log, \"run\").unwrap();\n\
-         build_version::emit_build_version();\n\
+         build_version::emit_build_version().unwrap();\n\
          }}\n"
     );
     fs::write(app.join("build.rs"), build_script).expect("write incremental fixture build script");
@@ -919,6 +920,28 @@ fn emit_in_child(
     actions: Option<&str>,
     sha: Option<&str>,
 ) -> String {
+    let output = emit_output(manifest, cwd, home, actions, sha, &[]);
+    let stdout = String::from_utf8(output.stdout).expect("emitter output is UTF-8");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "version emitter child failed: stdout={stdout} stderr={stderr}"
+    );
+    assert!(
+        stdout.contains("build-version-emitter-child"),
+        "version emitter child did not execute: stdout={stdout} stderr={stderr}"
+    );
+    stdout
+}
+
+fn emit_output(
+    manifest: &Path,
+    cwd: &Path,
+    home: &Path,
+    actions: Option<&str>,
+    sha: Option<&str>,
+    options: &[(&str, &str)],
+) -> std::process::Output {
     let mut command = Command::new(env::current_exe().expect("find test executable"));
     command
         .arg("--exact")
@@ -932,7 +955,11 @@ fn emit_in_child(
         .env("CARGO_MANIFEST_DIR", manifest)
         .env("CARGO_PKG_VERSION", "1.2.3")
         .env_remove("GITHUB_ACTIONS")
-        .env_remove("GITHUB_SHA");
+        .env_remove("GITHUB_SHA")
+        .env_remove("SLIMENRF_FIRMWARE_TAG")
+        .env_remove("SLIMENRF_FIRMWARE_ROOT")
+        .env_remove("CARGO_FEATURE_EMBED_FIRMWARE")
+        .envs(options.iter().copied());
     isolate_git_environment(&mut command, home);
     if let Some(actions) = actions {
         command.env("GITHUB_ACTIONS", actions);
@@ -940,18 +967,7 @@ fn emit_in_child(
     if let Some(sha) = sha {
         command.env("GITHUB_SHA", sha);
     }
-    let output = command.output().expect("run version emitter child");
-    let stdout = String::from_utf8(output.stdout).expect("emitter output is UTF-8");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        output.status.success(),
-        "version emitter child failed: stdout={stdout} stderr={stderr}"
-    );
-    assert!(
-        stdout.contains("build-version-emitter-child"),
-        "version emitter child did not execute: stdout={stdout} stderr={stderr}"
-    );
-    stdout
+    command.output().expect("run version emitter child")
 }
 
 fn directives<'a>(stdout: &'a str, prefix: &str) -> Vec<&'a str> {
@@ -969,7 +985,12 @@ fn assert_emitted(stdout: &str, expected: &str) {
     );
     assert_eq!(
         directives(stdout, "cargo:rerun-if-env-changed="),
-        ["GITHUB_ACTIONS", "GITHUB_SHA", "PATH"],
+        [
+            "SLIMENRF_FIRMWARE_TAG",
+            "GITHUB_ACTIONS",
+            "GITHUB_SHA",
+            "PATH"
+        ],
         "emitter output: {stdout}"
     );
 }
@@ -978,7 +999,7 @@ fn assert_emitted(stdout: &str, expected: &str) {
 fn emits_cargo_directives_in_a_child_process() {
     if env::var_os(EMIT_CHILD).is_some() {
         println!("build-version-emitter-child");
-        super::emit_build_version();
+        super::emit_build_version().unwrap();
         return;
     }
 
@@ -1016,6 +1037,37 @@ fn emits_cargo_directives_in_a_child_process() {
     );
     assert_emitted(&stdout, "1.2.3");
     assert!(!stdout.contains("cargo:rustc-env=INJECTED=1"));
+    let tag = ("SLIMENRF_FIRMWARE_TAG", "261120");
+    let embed = ("CARGO_FEATURE_EMBED_FIRMWARE", "1");
+    let root = ("SLIMENRF_FIRMWARE_ROOT", "firmware-fixture");
+    let output = emit_output(
+        &manifest,
+        &cwd,
+        directory.path(),
+        Some("true"),
+        Some(&fallback),
+        &[tag, embed, root],
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert_emitted(
+        &String::from_utf8(output.stdout).unwrap(),
+        "1.2.3+fw.261120",
+    );
+    for (options, error) in [
+        (&[tag, root][..], "requires embedded firmware"),
+        (
+            &[tag, embed][..],
+            "requires an explicit SLIMENRF_FIRMWARE_ROOT",
+        ),
+        (
+            &[("SLIMENRF_FIRMWARE_TAG", "a\nb"), embed, root][..],
+            "SemVer-compatible tag",
+        ),
+    ] {
+        let output = emit_output(&manifest, &cwd, directory.path(), None, None, options);
+        assert!(!output.status.success(), "{options:?}: {output:?}");
+        assert!(String::from_utf8_lossy(&output.stderr).contains(error));
+    }
 
     let Some(fixture) = GitFixture::new() else {
         return;

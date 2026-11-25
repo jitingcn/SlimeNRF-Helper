@@ -12,12 +12,35 @@ struct BuildVersion {
     watched: BTreeSet<PathBuf>,
 }
 
-pub(super) fn emit_build_version() {
+pub(super) fn emit_build_version() -> Result<(), &'static str> {
+    println!("cargo:rerun-if-env-changed=SLIMENRF_FIRMWARE_TAG");
     println!("cargo:rerun-if-env-changed=GITHUB_ACTIONS");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     println!("cargo:rerun-if-env-changed=PATH");
 
     let version = env::var("CARGO_PKG_VERSION").unwrap_or_default();
+    if let Some(tag) = env::var_os("SLIMENRF_FIRMWARE_TAG") {
+        if env::var_os("CARGO_FEATURE_EMBED_FIRMWARE").is_none() {
+            return Err("SLIMENRF_FIRMWARE_TAG requires embedded firmware");
+        }
+        if env::var_os("SLIMENRF_FIRMWARE_ROOT").is_none_or(|root| root.is_empty()) {
+            return Err("SLIMENRF_FIRMWARE_TAG requires an explicit SLIMENRF_FIRMWARE_ROOT");
+        }
+        let tag = tag
+            .to_str()
+            .filter(|tag| {
+                tag.split('.').all(|part| {
+                    !part.is_empty()
+                        && part
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                })
+            })
+            .ok_or("SLIMENRF_FIRMWARE_TAG must be a nonempty, SemVer-compatible tag")?;
+        let separator = build_metadata_separator(&version);
+        println!("cargo:rustc-env=SLIMENRF_BUILD_DISPLAY_VERSION={version}{separator}fw.{tag}");
+        return Ok(());
+    }
     let in_actions = env::var("GITHUB_ACTIONS").as_deref() == Ok("true");
     let actions_sha = env::var("GITHUB_SHA").ok();
     let snapshot = env::var_os("CARGO_MANIFEST_DIR").map_or_else(
@@ -47,15 +70,20 @@ pub(super) fn emit_build_version() {
         "cargo:rustc-env=SLIMENRF_BUILD_DISPLAY_VERSION={}",
         snapshot.display
     );
+    Ok(())
 }
 
 fn display_version(base: &str, sha: Option<&str>, dirty: bool) -> String {
     let Some(sha) = sha.and_then(short_sha) else {
         return base.to_owned();
     };
-    let separator = if base.contains('+') { '.' } else { '+' };
+    let separator = build_metadata_separator(base);
     let dirty = if dirty { ".dirty" } else { "" };
     format!("{base}{separator}{sha}{dirty}")
+}
+
+fn build_metadata_separator(base: &str) -> char {
+    if base.contains('+') { '.' } else { '+' }
 }
 
 fn valid_sha(sha: &str) -> bool {

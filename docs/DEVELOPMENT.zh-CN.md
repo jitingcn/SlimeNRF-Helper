@@ -26,6 +26,8 @@ Cargo 默认根据可用 CPU 自动选择构建并发数，可用 `CARGO_BUILD_J
 
 当精确的 Git 标签 `v<Cargo 版本号>` 指向 HEAD 时，干净 checkout 只显示 Cargo 版本，如 `0.2.0` 或 `0.2.0-rc.1`。轻量标签和附注标签均支持；GitHub 的预发布标记不会额外添加 hash。其他开发 checkout 显示 `0.2.0+abcdef0`。本地已跟踪文件存在变更时，即使匹配发布标签，也保留 `0.2.0+abcdef0.dirty`；被忽略和未跟踪的文件不会使其变为 dirty。CI 忽略工作区 dirty 状态，优先使用实际 checkout 的 HEAD。无法取得 Git 元数据时，源码归档显示基础版本，若有经过校验的 GitHub Actions SHA 则添加该 SHA 后缀。此显示标识不改变发布标签、产物文件名或更新版本比较。
 
+本地含固件构建可用 `SLIMENRF_FIRMWARE_TAG` 将窗口标题和「关于」中的版本后缀改为 `+fw.<tag>`。设置时必须通过 `SLIMENRF_FIRMWARE_ROOT` 明确选用已核验的固件目录。标签须符合 SemVer 构建元数据格式：由点分隔的非空字段组成，每个字段只用 ASCII 字母、数字或连字符。该标签记录打包者选用的应用固件版本，Cargo 不会自行推断或核对版本。无固件构建和官方应用发布不设置该变量。
+
 增量构建时，Cargo 逐项跟踪 Git 元数据和已跟踪的输入，而不是监视整个 checkout，也会跟踪匹配发布标签的创建、移动、删除和打包。已删除的已跟踪输入在缺失期间可能使构建脚本反复运行；恢复后，未变化的构建可再次保持 fresh。
 
 <a id="windows"></a>
@@ -255,6 +257,8 @@ Cargo 逐项跟踪生成器、冻结输入及仓库来源文件。生成文档�
 ```powershell
 ./package.ps1 -NoFirmware
 ```
+
+给本地含固件包标注版本时，先将 `SLIMENRF_FIRMWARE_ROOT` 设为已准备好的暂存目录，再运行 `./package.ps1 -FirmwareTag 261120`。应用版本为 `0.5.0` 时显示 `0.5.0+fw.261120`，不改变可执行文件名或应用更新版本。`-FirmwareTag` 不能与 `-NoFirmware` 或 `-OfficialReleaseTag` 同用。固件准备与验收见[含固件打包 Skill](../.agents/skills/slimenrf-helper-bundled-firmware/SKILL.md)。
 
 `package.ps1` 以明确的必填 `-InputPath` 和 `-OutputPath` 调用内部 [UPX 辅助脚本](../scripts/package-upx.ps1)。该脚本固定工具版本与哈希，使用 `--best --lzma --strip-relocs=0`，不使用 `--exact`。发布前先运行 UPX 完整性检查，再解压到独立临时文件。解压后的可执行文件可能与原文件字节不同；Cargo 构建的输入保持不变。
 

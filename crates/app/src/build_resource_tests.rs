@@ -311,10 +311,22 @@ fn official_release_marker_requires_the_tagged_packaging_context() {
 
 #[cfg(target_os = "windows")]
 #[test]
-fn windows_packager_requires_an_explicit_release_tag() {
-    for (tag, expected) in [
-        (None, "<unset>|custom.yaml"),
-        (Some("v0.1.1"), "release:v0.1.1|custom.yaml"),
+fn windows_packager_accepts_only_explicit_compatible_tags() {
+    for (args, expected) in [
+        (&["-NoFirmware"][..], Some("<unset>|<unset>|custom.yaml")),
+        (
+            &["-NoFirmware", "-OfficialReleaseTag", "v0.1.1"][..],
+            Some("release:v0.1.1|<unset>|custom.yaml"),
+        ),
+        (
+            &["-FirmwareTag", "261120"][..],
+            Some("<unset>|261120|custom.yaml"),
+        ),
+        (&["-NoFirmware", "-FirmwareTag", "261120"][..], None),
+        (
+            &["-OfficialReleaseTag", "v0.1.1", "-FirmwareTag", "261120"][..],
+            None,
+        ),
     ] {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
@@ -332,9 +344,11 @@ $script:WindowsTarget = 'x86_64-pc-windows-msvc'
 function Initialize-SlimeNRFBuildEnvironment {}
 function Invoke-SlimeNRFCargo {
     param([string]$Action, [switch]$NoFirmware)
-    $marker = [Environment]::GetEnvironmentVariable('SLIMENRF_OFFICIAL_RELEASE', 'Process')
-    if ($null -eq $marker) { $marker = '<unset>' }
-    [IO.File]::WriteAllText($env:SLIMENRF_TEST_PACKAGE_CAPTURE, "$marker|$env:SLIMENRF_CONFIG_PATH")
+    $marker = $env:SLIMENRF_OFFICIAL_RELEASE
+    if (!$marker) { $marker = '<unset>' }
+    $firmwareTag = $env:SLIMENRF_FIRMWARE_TAG
+    if (!$firmwareTag) { $firmwareTag = '<unset>' }
+    [IO.File]::WriteAllText($env:SLIMENRF_TEST_PACKAGE_CAPTURE, "$marker|$firmwareTag|$env:SLIMENRF_CONFIG_PATH")
     $script:CargoExitCode = 0
 }
 function Restore-SlimeNRFBuildEnvironment { param($Environment, $Directory) }
@@ -361,16 +375,22 @@ $global:LASTEXITCODE = 0
         command
             .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
             .arg(root.join("package.ps1"))
-            .arg("-NoFirmware")
+            .args(args)
             .env("SLIMENRF_TEST_PACKAGE_CAPTURE", &capture)
             .env("SLIMENRF_TEST_PACKAGE_TARGET", root.join("target"))
             .env("SLIMENRF_OFFICIAL_RELEASE", "prerelease:v9.9.9")
+            .env("SLIMENRF_FIRMWARE_TAG", "inherited")
             .env("SLIMENRF_CONFIG_PATH", "custom.yaml");
-        if let Some(tag) = tag {
-            command.args(["-OfficialReleaseTag", tag]);
-        }
         let output = command.output().unwrap();
-        assert!(output.status.success(), "tag={tag:?}: {output:?}");
-        assert_eq!(fs::read_to_string(capture).unwrap(), expected);
+        assert_eq!(
+            output.status.success(),
+            expected.is_some(),
+            "{args:?}: {output:?}"
+        );
+        if let Some(expected) = expected {
+            assert_eq!(fs::read_to_string(capture).unwrap(), expected);
+        } else {
+            assert!(!capture.exists(), "{args:?}: build should not start");
+        }
     }
 }
