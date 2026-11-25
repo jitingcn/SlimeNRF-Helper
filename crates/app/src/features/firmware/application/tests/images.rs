@@ -11,7 +11,7 @@ use std::sync::Arc;
 #[cfg(feature = "embed-firmware")]
 #[test]
 fn bundled_image_identity_retains_configured_dfu_options_and_notes() {
-    use crate::features::firmware::board_catalog::{BleOtaTarget, Catalog, OpenDfuTarget};
+    use crate::features::firmware::board_catalog::{Catalog, OpenDfuTarget};
     let resource = Resource::bundled("firmwares/SlimeNRF_Holyiot_Dongle_Receiver.hex").unwrap();
     let catalog = Catalog {
         opendfu_targets: vec![OpenDfuTarget {
@@ -43,24 +43,6 @@ fn bundled_image_identity_retains_configured_dfu_options_and_notes() {
     external.opendfu_targets[0].firmware =
         Resource::File("firmwares/SlimeNRF_Holyiot_Dongle_Receiver.hex".into());
     assert!(image.configured_opendfu(&external).is_none());
-    let package =
-        Resource::bundled("firmwares/SlimeNRF_Tracker_SPI_SD_StackedSmol-mod_ota.zip").unwrap();
-    let mut catalog = catalog;
-    catalog.ble_ota_targets.push(BleOtaTarget {
-        package: package.clone(),
-        display_name: "configured BLE board".into(),
-        success: Some("configured BLE note".into()),
-    });
-    let image = load_image(package, &std::sync::atomic::AtomicBool::new(false)).unwrap();
-    assert!(image.local);
-    assert_eq!(
-        catalog
-            .ble_ota_targets
-            .iter()
-            .find(|target| image.resource.as_deref() == Some(&target.package))
-            .and_then(|target| target.success.as_deref()),
-        Some("configured BLE note")
-    );
 }
 
 #[cfg(not(feature = "embed-firmware"))]

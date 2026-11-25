@@ -47,6 +47,59 @@ fn matches_cdc_without_inventing_targets_or_roles() {
     let promicro = catalog.match_filename("SlimeNRF_ProMicro_Receiver.uf2");
     assert_eq!(promicro[0].kind, Some(EsbOtaKind::Receiver));
 }
+
+#[test]
+fn new_tracker_products_keep_uf2_and_ota_identities_separate() {
+    let catalog = Catalog::from_bytes(&embedded_config(), Path::new("base")).unwrap();
+    let ultra = "aero_ultra_uf2/nrf52840";
+    let target = catalog.ota_target(EsbOtaKind::Tracker, ultra).unwrap();
+    assert_eq!(
+        target.firmware.as_ref().unwrap().filename(),
+        Some("Aero_Tracker_Ultra.uf2")
+    );
+    let hints = catalog.match_filename("Aero_Tracker_Ultra.uf2");
+    assert_eq!(hints.len(), 1);
+    assert_eq!(hints[0].board_target, ultra);
+    let preset = catalog
+        .preset_for_volume("AERO-Ultra", Some("slimevr-tracker-aerotracker-ultra"))
+        .unwrap();
+    assert!(preset.firmware_candidates().any(|(_, resource, name)| {
+        resource.filename() == Some("Aero_Tracker_Ultra.uf2") && name == ultra
+    }));
+    assert!(catalog.preset_for_volume("AERO-Ultra", None).is_none());
+    assert!(catalog.preset_for_volume("AERO-Pro", Some(ultra)).is_none());
+
+    let xiao = catalog
+        .preset_for_volume("XIAO-BOOT", Some("nRF52840-SeeedXiao-v1"))
+        .unwrap();
+    let mut profiles = Vec::new();
+    for filename in ["SlimeNRF_XIAO_Tracker.uf2", "SlimeNRF_XIAO_New_Tracker.uf2"] {
+        let hints = catalog.match_filename(filename);
+        assert_eq!(hints.len(), 1, "{filename}");
+        assert_eq!(hints[0].kind, Some(EsbOtaKind::Tracker));
+        assert_ne!(hints[0].board_target, "xiao_ble/nrf52840");
+        assert!(xiao.firmware_candidates().any(|(_, resource, name)| {
+            resource.filename() == Some(filename)
+                && super::canonical_board(name) == hints[0].board_target
+        }));
+        profiles.push(hints[0].board_target.clone());
+    }
+    assert_ne!(profiles[0], profiles[1]);
+    let legacy_xiao = catalog.match_filename("XIAO_Tracker.uf2");
+    assert_eq!(legacy_xiao.len(), 1);
+    assert_eq!(legacy_xiao[0].board_target, profiles[0]);
+    assert!(
+        catalog
+            .ota_target(EsbOtaKind::Tracker, "xiao_ble/nrf52840")
+            .is_err()
+    );
+    assert!(
+        catalog
+            .ota_target(EsbOtaKind::Receiver, "xiao_ble/nrf52840")
+            .is_ok()
+    );
+}
+
 #[test]
 fn bootloader_only_presets_match_without_application_targets() {
     let raw =
@@ -239,7 +292,7 @@ fn no_external_config_loads_real_embedded_catalog_and_case_aliases() {
             .iter()
             .all(|resource| matches!(resource, Resource::Bundled(_)))
     );
-    for filename in ["kawazu_tracker.uf2", "dawn_tracker_mini.uf2"] {
+    for filename in ["Kawazu_Tracker.uf2", "Dawn_Tracker_Mini.uf2"] {
         let resource = resources
             .iter()
             .find(|resource| resource.filename() == Some(filename))
@@ -357,7 +410,7 @@ fn malformed_selected_external_config_never_uses_another_config_or_bundle() {
 #[test]
 fn embedded_conversion_covers_all_fields_without_disk_paths() {
     let raw = br#"{"schema_version":1,"firmware_root":".","legacy_targets":{"board":{
-            "firmware":"./FiRmWaReS/Kawazu_Tracker.uf2",
+            "firmware":"./FiRmWaReS/kawazu_tracker.uf2",
             "bootloader":"Firmwares/boot.uf2", "ota_firmware":"firmwares/ota.zip",
             "esb_ota_firmware":"firmwares/esb.hex", "esb_ota_mcuboot_firmware":"firmwares/update.bin"
         }},"opendfu_targets":[{"name":"dfu","firmware":"firmwares/dfu.hex","hw_version":81,"app_version":42,"sd_req":"0x12"}]}"#;
@@ -368,9 +421,9 @@ fn embedded_conversion_covers_all_fields_without_disk_paths() {
         (
             target.firmware.as_ref().unwrap(),
             if cfg!(feature = "embed-firmware") {
-                "firmwares/kawazu_tracker.uf2"
-            } else {
                 "firmwares/Kawazu_Tracker.uf2"
+            } else {
+                "firmwares/kawazu_tracker.uf2"
             },
         ),
         (preset.bootloader.as_ref().unwrap(), "firmwares/boot.uf2"),

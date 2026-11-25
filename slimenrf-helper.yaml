@@ -25,6 +25,7 @@ board_volume_labels:
   - "FOX-BOOT"
   - "AERO-BOOT"
   - "AERO-Pro"
+  - "AERO-Ultra"
   - "XIAO-BOOT"
   - "XIAO-SENSE"
   - "CHEESER33"
@@ -64,12 +65,12 @@ board_targets:
   kawazu-tracker:
     name: kawazu_uf2/nrf52833
     esb_ota_kind: tracker
-    firmware: kawazu_tracker.uf2
+    firmware: Kawazu_Tracker.uf2
     firmware_aliases: [Kawazu_Tracker.uf2]
     success: KAWAZU TRACKER SUCCESS
-  # Exact identities: Bootloader master 7f0654b898e92dd13f89c4fef108559a3d1c4b0e
-  # src/boards/<bootloader_board>/board.h; released baseline remains b43e929b / 0.11.1-slimenrf.
-  # Product sources: Tracker 69190cb3 / Receiver 674f50d2 (docs/PROTOCOLS.md#board-product-sources).
+  # Exact identities: Bootloader 0.11.2-slimenrf (7f0654b8), src/boards/<bootloader_board>/board.h,
+  # plus pre-existing IDs without a released updater (docs/PROTOCOLS.md#board-product-sources).
+  # Application products: Tracker 82f54a77 / Receiver 908cf821.
   nRF52840-nicenano: *nicenano_conversion
   mochi: *mochi_preset
   nRF52840-SlimeNRFReceiver-eteeDongle:
@@ -94,14 +95,13 @@ board_targets:
     bootloader_mcu: nrf52840
     firmware: SlimeNRF_SK_Cheesecake_P00_Tracker.uf2
     firmware_aliases: [SlimeNRF_SK_Cheesecake_P00_Tracker.uf2]
-  # Kawazu identity is master d1afd3e4 only; 0.11.1 Release has no updater.
   Kawazu:
     name: kawazu_uf2/nrf52833
     esb_ota_kind: tracker
     bootloader_board: kawazu
     bootloader_mcu: nrf52833
     success: KAWAZU TRACKER SUCCESS
-    firmware: kawazu_tracker.uf2
+    firmware: Kawazu_Tracker.uf2
     firmware_aliases: [Kawazu_Tracker.uf2]
   # Released bootloader identities without a proven current application product.
   nRF52840-SlimeNRFTracker-R3:
@@ -180,10 +180,16 @@ board_targets:
     bootloader_board: xiao_nrf52840_ble
     bootloader_mcu: nrf52840
     targets:
-      - name: xiao_ble/nrf52840
+      # The two tracker builds report the same OTA target. These names are
+      # wired choices, not runtime targets: neither is auto-assigned for OTA.
+      - name: Seeed XIAO nRF52840 (original tracker wiring)
         esb_ota_kind: tracker
         firmware: SlimeNRF_XIAO_Tracker.uf2
-        firmware_aliases: [SlimeNRF_XIAO_Tracker.uf2]
+        firmware_aliases: [SlimeNRF_XIAO_Tracker, XIAO_Tracker]
+      - name: Seeed XIAO nRF52840 (new tracker wiring)
+        esb_ota_kind: tracker
+        firmware: SlimeNRF_XIAO_New_Tracker.uf2
+        firmware_aliases: [SlimeNRF_XIAO_New_Tracker.uf2]
       - name: xiao_ble/nrf52840-receiver
         esb_ota_kind: receiver
         firmware: SlimeNRF_XIAO_Receiver.uf2
@@ -219,7 +225,7 @@ board_targets:
     esb_ota_kind: tracker
     bootloader_board: dawn-tracker-mini
     bootloader_mcu: nrf52833
-    firmware: dawn_tracker_mini.uf2
+    firmware: Dawn_Tracker_Mini.uf2
     firmware_aliases: [Dawn_Tracker_Mini.uf2]
     success: DAWN TRACKER MINI SUCCESS
   nini-mag-tracker:
@@ -260,8 +266,8 @@ board_targets:
     firmware: FoxApplication_FoxSnackLite_Tracker.uf2
     firmware_aliases: [FoxApplication_FoxSnackLite_Tracker.uf2]
     success: FOXSNACK LITE V2 SUCCESS
-  # FoxSnackLiteV3 firmware / FoxSnack V3 bootloader: hardware-source-correlated,
-  # not filename-derived. Exact Board-ID comes from board.h; no released updater yet.
+  # The tracker product and exact Bootloader Board-ID are correlated by
+  # hardware source; see docs/PROTOCOLS.md#board-product-sources.
   FoxSnack-v3:
     name: foxsnacklitev3_uf2/nrf52840
     esb_ota_kind: tracker
@@ -276,7 +282,6 @@ board_targets:
     firmware: SlimeNRF_FoxDongle33_Receiver.uf2
     firmware_aliases: [SlimeNRF_FoxDongle33_Receiver.uf2, SlimeNRF_FoxDongle33_Receiver_DataCollect_CDC.uf2]
     success: FOXDOBGLE33 V1 SUCCESS
-  # Source identity only; 0.11.1-slimenrf has no FoxDongleNEO updater.
   FoxDongleNEO-v1:
     name: foxdongleneo_uf2/nrf52840
     esb_ota_kind: receiver
@@ -299,6 +304,15 @@ board_targets:
     firmware: Aero_Tracker_Pro.uf2
     firmware_aliases: [Aero_Tracker_Pro.uf2]
     success: AERO PRO TRACKER SUCCESS
+  # The board author's bootloader defines this exact ID; 0.11.2-slimenrf has no Ultra updater.
+  slimevr-tracker-aerotracker-ultra:
+    name: aero_ultra_uf2/nrf52840
+    esb_ota_kind: tracker
+    bootloader_board: slimenrf_tracker_aerotracker_ultra
+    bootloader_mcu: nrf52840
+    firmware: Aero_Tracker_Ultra.uf2
+    firmware_aliases: [Aero_Tracker_Ultra.uf2]
+    success: AERO ULTRA TRACKER SUCCESS
   nRF52833-sorakage-Cheesecake-R33:
     name: sk_cheesecake_recv33/nrf52833/uf2
     esb_ota_kind: receiver
@@ -319,7 +333,7 @@ board_targets:
 
 # Product/role inventory only: no proven UF2 Board-ID or volume-label mapping.
 # These entries do not authorize a transport; runtime OTA identity/bootloader/base
-# checks still apply. Sources: Tracker 69190cb3 / Receiver 674f50d2 (docs/PROTOCOLS.md#board-product-sources).
+# checks still apply. Sources: Tracker 82f54a77 / Receiver 908cf821.
 application_targets:
   estmini_uf2/nrf52840:
     name: estmini_uf2/nrf52840
@@ -339,7 +353,7 @@ application_targets:
   dawnrx_2_uf2/nrf52833:
     name: dawnrx_2_uf2/nrf52833
     esb_ota_kind: receiver
-    firmware: SlimeNRF_Dawn_Tracker_Receiver_2.uf2
+    # The 261120 release has no DawnRX-2 asset; keep CI and local matching.
     firmware_aliases: [SlimeNRF_Dawn_Tracker_Receiver_2.uf2, SlimeNRF_Dawn_Tracker_Receiver_2_DataCollect_CDC.uf2]
   foxdongle_uf2/nrf52840:
     name: foxdongle_uf2/nrf52840

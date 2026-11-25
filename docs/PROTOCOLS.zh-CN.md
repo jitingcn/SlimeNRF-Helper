@@ -9,13 +9,17 @@
 <a id="board-product-sources"></a>
 ## 板型与产品来源
 
-- Tracker 产品矩阵：[69190cb3](https://github.com/jitingcn/SlimeVR-Tracker-nRF/blob/69190cb39e7117c9116abf336a3f3bd4b487773b/.github/workflows/workflow.yml)。
-- Receiver 产品矩阵：[674f50d2](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/674f50d27baeedc0438f340cda3fa99643ef6b3c/.github/workflows/workflow.yml)。
-- 对照正式发布：[260910](https://github.com/jitingcn/SlimeVR-Tracker-nRF/releases/tag/260910)，接收器文件附在 Tracker 发布中，不把 Tracker tag SHA 当作接收器二进制来源 SHA。
-- UF2 Board-ID、卷标、bootloader prefix 与 MCU：已核对 [Bootloader master 7f0654b8](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/tree/7f0654b898e92dd13f89c4fef108559a3d1c4b0e/src/boards)。已发布 updater 和 nosd 链接布局基线仍为 [b43e929b](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/tree/b43e929b1126fb7dc132a8453dc9593fa73765d8/src/boards) / [0.11.1-slimenrf](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/releases/tag/0.11.1-slimenrf)。
+- Tracker 产品矩阵：[82f54a77](https://github.com/jitingcn/SlimeVR-Tracker-nRF/blob/82f54a774ed75f17c7babc8fd5a196eea2ece004/.github/workflows/workflow.yml)。
+- Receiver 产品矩阵：[908cf821](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/908cf8219ab7ef2eea91bf25553e7898242093b7/.github/workflows/workflow.yml)。
+- 对照正式发布：[261120](https://github.com/jitingcn/SlimeVR-Tracker-nRF/releases/tag/261120)。接收器文件附在 Tracker 发布中，二者的源码提交不同。
+- 已发布的 UF2 Board-ID、卷标、bootloader prefix 和 MCU 布局：[7f0654b8](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/tree/7f0654b898e92dd13f89c4fef108559a3d1c4b0e/src/boards) / [0.11.2-slimenrf](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/releases/tag/0.11.2-slimenrf)。
 - nice!nano → SlimeNRF ProMicro 转换：[板级兼容性提交 b6c88ead](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/commit/b6c88ead6aa5b436062b3f6453f91b69020069d6)，不是全局 alias 或所有 clone 的保证。
 
-矩阵核对基线为 2026-10-24，当前映射以 [YAML](../slimenrf-helper.yaml) 为准。Miro、P00、P10、RECV33、DawnRX-2、FoxSnackLiteV3、FoxDongleNEO 在该 CI 基线有产物但不在所查 260910 资产中。FoxDongleNEO 广告包含 Standard 和 DataCollect CDC；配置默认项为 Standard，不编造本地 CDC 默认资源。nRF54 六项只有 HEX；nRF54L15 的 Sense/ExtAnt 四组合共用 target 不能证明可互刷。矩阵无 MCUboot/DataCollect HID 产品，不构造默认下载；NekoNya receiver 只有 Standard。Holyiot 不编造引导，Aero Pro 不借用 Aero Lite。Kawazu 在后续 [master d1afd3e4](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/commit/d1afd3e4f9e85da4c16e6dd8c4023c9574508c0b) 才新增。所查 0.11.1-slimenrf Release 无 Kawazu 和两款新 Fox 板的 updater。引导程序 CI 是独立来源，提供仍有可用产物的成功构建。
+映射以 [YAML](../slimenrf-helper.yaml) 为准。261120 提供 Miro、P00/P10、RECV33、FoxSnackLite V3 和 FoxDongleNEO 应用固件。FoxDongleNEO 和 RECV33 均有普通版与 DataCollect CDC 版；NekoNya 接收器只有普通版。DawnRX-2 在接收器 CI 矩阵中，但没有 261120 发布产物。SlimeNRF R3 只保留引导程序映射。六款 nRF54 构建只提供 HEX；nRF54L15 的四种接线与天线组合共用 target，不代表可以互刷。不从发布产物推断 MCUboot 或 DataCollect HID 默认项。
+
+Bootloader 0.11.2-slimenrf 已发布 Kawazu、FoxSnack V3 和 FoxDongleNEO 的 `update-…_nosd.uf2`。此版本没有 Dawn Mini 更新镜像。Holyiot 仍走单独配置的 OpenDFU 路径。Aero Pro 和 Ultra 不复用 Aero Lite 的引导程序。Aero Ultra 的 OTA 目标为 `aero_ultra_uf2/nrf52840`，有线 UF2 的 Board-ID 为 `slimevr-tracker-aerotracker-ultra`；该 ID 和 `AERO-Ultra` 卷标来自[板卡作者的引导程序源码](https://github.com/Virus-Cui/Adafruit_nRF52_Bootloader/blob/4bf9e0ef337d7b46e69f4d37f6839639651ea83e/src/boards/slimenrf_tracker_aerotracker_ultra/board.h)。正式发布未提供此板的引导程序更新镜像。
+
+XIAO nRF52840 追踪器的新旧接线使用同一模块的 UF2 Board-ID，且均报告 `xiao_ble/nrf52840`。上游的[新接线 overlay](https://github.com/jitingcn/SlimeVR-Tracker-nRF/blob/82f54a774ed75f17c7babc8fd5a196eea2ece004/boards/xiao_ble_new.overlay) 改了传感器接线，但不改变报告的 target。请在有线 UF2 页面按实际接线选择固件；两种追踪器固件均不按共享 target 自动匹配 OTA。XIAO 接收器和 Sense 的映射不变。
 
 FoxSnackLiteV3 固件使用 `foxsnacklitev3_uf2/nrf52840`，对应 bootloader 名称则为 FoxSnack V3。两者关联是**[INFERENCE]，由硬件源码交叉关联的推断**，不是从文件名推导：[tracker DTS](https://github.com/jitingcn/SlimeVR-Tracker-nRF/blob/69190cb39e7117c9116abf336a3f3bd4b487773b/boards/foxapplication/foxsnacklitev3/foxsnacklitev3_uf2.dts) 与 [bootloader header](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/blob/7f0654b898e92dd13f89c4fef108559a3d1c4b0e/src/boards/foxsnackv3_nrf52840/board.h) 的共阴 RGB 引脚 P0.12/P0.08/P1.09、功能按键 P1.06 一致。精确 Board-ID `FoxSnack-v3` 来自 header，不编造 `FoxSnackLite-v3`。[FoxDongleNEO header](https://github.com/jitingcn/Adafruit_nRF52_Bootloader/blob/7f0654b898e92dd13f89c4fef108559a3d1c4b0e/src/boards/foxdongleneo_nrf52840/board.h) 提供 `FoxDongleNEO-v1`，对应接收器 target `foxdongleneo_uf2/nrf52840`。两款 bootloader 定义都声明 nRF52840、共享 `FOX-BOOT`；卷标仅为发现线索。两项映射均未经实物验证，也不复用旧 FoxSnackLite V2、FoxDongle33 或 FoxDongle 身份。
 
