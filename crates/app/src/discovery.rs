@@ -11,9 +11,11 @@ use serialport::SerialPortType;
 
 #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 use crate::domain::InterfaceDescription;
+#[cfg(not(target_os = "macos"))]
+use crate::domain::SerialPortKind;
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 use crate::domain::UsbInterface;
-use crate::domain::{Inventory, ReceiverEndpoint, SerialEndpoint, SerialPortKind, TrackerLink};
+use crate::domain::{Inventory, ReceiverEndpoint, SerialEndpoint, TrackerLink};
 use crate::hid_log::decode::BatteryTemperature;
 use crate::i18n::tr;
 use crate::native_hid;

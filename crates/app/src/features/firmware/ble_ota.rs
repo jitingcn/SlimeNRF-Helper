@@ -648,7 +648,13 @@ mod tests {
             .block_on(require_send(scan(&backend, &cancel, &mut |_| {})))
             .unwrap_err();
         assert!(error.contains("cancelled"));
+        #[cfg(not(target_os = "macos"))]
         assert!(backend.manager.get().is_none());
+        #[cfg(target_os = "macos")]
+        assert!(matches!(
+            *backend.adapter.try_lock().unwrap(),
+            super::CoreBluetoothAdapter::Idle
+        ));
     }
 
     fn init() -> Vec<u8> {
