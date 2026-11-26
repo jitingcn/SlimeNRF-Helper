@@ -105,7 +105,15 @@ cargo doc --locked --no-deps -p slimenrf-firmware-image
 
 保持已固定的 stable 工具链、正常 rust-analyzer `check` 和现有原生缓存。Windows 上调用 Cargo 的工具需要继承一致的宿主 MSVC、C 和 C++ 环境。环境差异可能使原生构建指纹失效，即使源码没有变化。仅凭指纹失效不能证明源码陈旧，也不能据此例行 `clean`。
 
-可选 `./scripts/install-hooks.ps1` 仅在应用本身已是独立 Git 根目录时安装非修改式格式 hook，拒绝父仓库、保留其他 hooks、不覆盖不同的 pre-commit。虚拟 workspace 迁移前已安装的副本使用旧标记，不会自动升级；安装当前 hook 前须自行审查并手动替换旧副本。脚本不自动暂存或提交。hook 不替代质量入口或原生 GUI 验证；部分暂存需自行确保已检工作树与暂存内容一致。
+### Git 钩子与提交信息
+
+如需为当前克隆启用本地检查，在 PowerShell 中运行 `./scripts/install-hooks.ps1`。它将 `pre-commit` 和 `commit-msg` 安装到应用自己的 Git 仓库。如果任一目标已有不同的钩子（包括旧版格式钩子），安装器会在复制前停止。请先审查并手动整合原有钩子；安装器不修改 `core.hooksPath`。
+
+`commit-msg` 会拒绝 `Add macOS support` 这样的标题；可改为 `feat(macos): add device support`。有正文或页脚时，在标题后留一个空行。使用直接创建提交对象的工具前，运行 `sh .githooks/commit-msg --raw <message-file>` 检查完整提交信息。类型是否准确、一次提交是否只做一件事、正文是否简短且只讲主要改动，由作者和审阅者判断。见[提交规范](../AGENTS.md#tooling-and-maintenance)。
+
+提交信息只在自愿安装钩子的本地仓库检查。某次提交确需例外时，可用 `git commit --no-verify`；这也会跳过该次提交的格式检查。推送和拉取请求不以提交信息格式为门槛。
+
+`pre-commit` 只检查格式，不修改或暂存文件。部分暂存时，须自行确保被检查的工作树与暂存内容一致。钩子不替代质量检查或原生 GUI 验证。
 
 <a id="device-diagnosis"></a>
 ## 设备诊断

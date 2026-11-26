@@ -172,17 +172,17 @@ impl Fixture {
             .expect("create hook directory");
         fs::create_dir_all(fixture.installer.parent().expect("installer parent"))
             .expect("create script directory");
-        fs::copy(
-            crate::workspace_root().join(".githooks/pre-commit"),
-            &fixture.hook,
-        )
-        .expect("copy production hook");
+        for relative in [".githooks/pre-commit", ".githooks/commit-msg"] {
+            let destination = fixture.root.join(relative);
+            fs::copy(crate::workspace_root().join(relative), &destination)
+                .expect("copy production hook");
+            mark_executable(&destination);
+        }
         fs::copy(
             crate::workspace_root().join("scripts/install-hooks.ps1"),
             &fixture.installer,
         )
         .expect("copy production installer");
-        mark_executable(&fixture.hook);
         Some(fixture)
     }
 
@@ -370,7 +370,7 @@ fn hook_only_checks_format_for_relevant_changes_without_mutating_index() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(fixture.checked_git(&["ls-files", "--stage"]), before);
-    let output = fixture.commit_with_path(&["commit", "-m", "safe baseline"], path);
+    let output = fixture.commit_with_path(&["commit", "-m", "docs: add fixture readme"], path);
     assert!(
         output.status.success(),
         "safe commit: {}",
@@ -389,7 +389,7 @@ fn hook_only_checks_format_for_relevant_changes_without_mutating_index() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(fixture.checked_git(&["ls-files", "--stage"]), before);
-    let output = fixture.commit_with_path(&["commit", "-m", "relevant change"], path);
+    let output = fixture.commit_with_path(&["commit", "-m", "feat: add app entry point"], path);
     assert!(
         !output.status.success(),
         "format failure must reject the commit"
@@ -404,7 +404,7 @@ fn hook_only_checks_format_for_relevant_changes_without_mutating_index() {
             "commit",
             "--only",
             "-m",
-            "safe partial commit",
+            "docs: update fixture readme",
             "--",
             "README.md",
         ],
@@ -431,7 +431,7 @@ fn hook_only_checks_format_for_relevant_changes_without_mutating_index() {
     );
     let head = fixture.checked_git(&["rev-parse", "HEAD"]);
     let tree = fixture.checked_git(&["write-tree"]);
-    let output = fixture.commit_with_path(&["commit", "-m", "still relevant"], path);
+    let output = fixture.commit_with_path(&["commit", "-m", "feat: add app entry point"], path);
     assert!(
         !output.status.success(),
         "remaining format failure must reject commit"
@@ -449,6 +449,8 @@ fn installer_honors_relative_hooks_path_and_refuses_replacement() {
     fixture.checked_git(&["config", "--local", "core.hooksPath", ".custom/hooks"]);
     let other = fixture.put(".custom/hooks/post-commit", "existing post hook\n");
     let destination = fixture.root.join(".custom/hooks/pre-commit");
+    fs::copy(&fixture.hook, &destination).expect("install matching pre-commit hook");
+    let message_hook = fixture.root.join(".custom/hooks/commit-msg");
     let Some(output) = fixture.run_installer(&fixture.installer) else {
         eprintln!("native PowerShell is required");
         return;
@@ -462,6 +464,10 @@ fn installer_honors_relative_hooks_path_and_refuses_replacement() {
         fs::read(&destination).expect("installed hook"),
         fs::read(&fixture.hook).expect("source hook")
     );
+    assert_eq!(
+        fs::read(&message_hook).expect("installed commit-msg hook"),
+        fs::read(fixture.root.join(".githooks/commit-msg")).expect("source commit-msg hook")
+    );
     let output = fixture
         .run_installer(&fixture.installer)
         .expect("native PowerShell remains available");
@@ -471,6 +477,7 @@ fn installer_honors_relative_hooks_path_and_refuses_replacement() {
         String::from_utf8_lossy(&output.stderr)
     );
     fs::write(&destination, b"existing user hook\n").expect("install another hook");
+    fs::remove_file(&message_hook).expect("remove installed commit-msg hook");
     let output = fixture
         .run_installer(&fixture.installer)
         .expect("native PowerShell remains available");
@@ -483,12 +490,88 @@ fn installer_honors_relative_hooks_path_and_refuses_replacement() {
         fs::read(&other).expect("other hook"),
         b"existing post hook\n"
     );
+    assert!(
+        !message_hook.exists(),
+        "installed despite pre-commit conflict"
+    );
     assert_eq!(
         fixture
             .checked_git(&["config", "--local", "core.hooksPath"])
             .trim(),
         ".custom/hooks"
     );
+}
+
+#[test]
+fn installer_preflights_both_hooks_before_writing_either() {
+    let Some(fixture) = Fixture::new() else {
+        eprintln!("Git and native shell are required");
+        return;
+    };
+    let hook = fixture.put(".git/hooks/commit-msg", "#!/bin/sh\nexit 0\n");
+    let Some(output) = fixture.run_installer(&fixture.installer) else {
+        eprintln!("native PowerShell is required");
+        return;
+    };
+    assert!(
+        !output.status.success(),
+        "installer accepted a different commit-msg hook"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("Refusing to replace existing commit-msg hook")
+    );
+    assert_eq!(
+        fs::read_to_string(hook).expect("existing commit-msg hook"),
+        "#!/bin/sh\nexit 0\n"
+    );
+    assert!(
+        !fixture.root.join(".git/hooks/pre-commit").exists(),
+        "installed despite commit-msg conflict"
+    );
+}
+
+#[test]
+fn installed_hooks_reject_a_nonconventional_commit_message() {
+    let Some(fixture) = Fixture::new() else {
+        eprintln!("Git and native shell are required");
+        return;
+    };
+    let Some(output) = fixture.run_installer(&fixture.installer) else {
+        eprintln!("native PowerShell is required");
+        return;
+    };
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fixture
+            .git(&["config", "--local", "--get", "core.hooksPath"])
+            .status
+            .code(),
+        Some(1),
+        "installer changed core.hooksPath"
+    );
+
+    fixture.checked_git(&["add", "README.md"]);
+    fixture.checked_git(&["commit", "-m", "docs: add fixture readme"]);
+    fixture.put("README.md", "updated fixture\n");
+    fixture.checked_git(&["add", "README.md"]);
+    let head = fixture.checked_git(&["rev-parse", "HEAD"]);
+    let tree = fixture.checked_git(&["write-tree"]);
+    let output = fixture.git(&["commit", "-m", "update the fixture"]);
+    assert!(
+        !output.status.success(),
+        "Git committed a nonconventional message"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("commit-msg: expected a Conventional Commit subject")
+    );
+    assert_eq!(fixture.checked_git(&["rev-parse", "HEAD"]), head);
+    assert_eq!(fixture.checked_git(&["write-tree"]), tree);
 }
 
 #[test]
@@ -511,4 +594,5 @@ fn installer_rejects_parent_repository() {
             .contains("application directory must be the Git working tree root")
     );
     assert!(!fixture.root.join(".git/hooks/pre-commit").exists());
+    assert!(!fixture.root.join(".git/hooks/commit-msg").exists());
 }

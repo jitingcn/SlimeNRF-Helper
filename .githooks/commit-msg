@@ -1,0 +1,71 @@
+#!/bin/sh
+# Validate a Git draft by default, or committed message bytes with --raw.
+set -eu
+
+mode=hook
+if [ "${1-}" = --raw ]; then
+    mode=raw
+    shift
+fi
+if [ "$#" -ne 1 ]; then
+    printf 'Usage: sh .githooks/commit-msg [--raw] <message-file>\n' >&2
+    exit 2
+fi
+
+cleanup=verbatim
+comment=
+cut=
+if [ "$mode" = hook ]; then
+    # Git sets GIT_EDITOR=: when it does not launch a commit editor.
+    editor=${GIT_EDITOR-}
+    cleanup=$(git config --get commit.cleanup) || [ "$?" -eq 1 ]
+    case "$cleanup" in
+        ''|default)
+            if [ "$editor" = : ]; then cleanup=whitespace; else cleanup=strip; fi
+            ;;
+    esac
+    if [ "$cleanup" = strip ] || [ "$editor" != : ]; then
+        # The last setting wins across Git's two names for the comment prefix.
+        settings=$(git config --get-regexp '^core\.comment(char|string)$') || [ "$?" -eq 1 ]
+        setting=${settings##*'
+'}
+        prefix=${setting#* }
+        case "$prefix" in ''|auto) prefix='#' ;; esac
+        if [ "$cleanup" = strip ]; then comment=$prefix; fi
+        if [ "$editor" != : ]; then cut="$prefix ------------------------ >8 ------------------------"; fi
+    fi
+fi
+
+LC_ALL=C CLEANUP="$cleanup" COMMENT_PREFIX="$comment" CUT_LINE="$cut" awk '
+    BEGIN {
+        trim = ENVIRON["CLEANUP"] != "verbatim"
+        comment = ENVIRON["COMMENT_PREFIX"]
+        cut = ENVIRON["CUT_LINE"]
+    }
+    {
+        # Git matches its own LF-terminated scissors line before cleanup.
+        if (cut != "" && $0 == cut) exit
+        sub(/\r$/, "")
+        if (comment != "" && index($0, comment) == 1) next
+        blank = $0 ~ /^[[:space:]]*$/
+        if (!subject) {
+            if (trim && blank) next
+            subject = ($0 ~ /^[[:alpha:]][[:alnum:]_-]*(\([^()[:cntrl:]]+\))?!?: [[:space:]]*[^[:space:]]/ &&
+                       $0 !~ /^[[:alpha:]][[:alnum:]_-]*\([[:space:]]*\)/)
+            if (!subject) exit
+            next
+        }
+        missing_separator = !blank
+        exit
+    }
+    END {
+        if (!subject) {
+            print "commit-msg: expected a Conventional Commit subject: type[(scope)][!]: description"
+            exit 1
+        }
+        if (missing_separator) {
+            print "commit-msg: separate the subject from the body or footer with a blank line"
+            exit 1
+        }
+    }
+' < "$1" >&2

@@ -105,7 +105,15 @@ For contexts created outside `#[gpui_kit::test]`, follow the standalone ownershi
 
 Keep the pinned stable toolchain, normal rust-analyzer `check`, and existing native cache. On Windows, tools that invoke Cargo need a consistent inherited host MSVC, C, and C++ environment. Environment differences can invalidate native-build fingerprints even when sources are unchanged. Fingerprint invalidation alone does not prove stale source or justify routine `clean`.
 
-The optional `./scripts/install-hooks.ps1` installs a non-mutating formatting hook only when the application itself is an independent Git root. It rejects parent repositories, preserves other hooks, and does not overwrite a different pre-commit hook. A previously installed copy from before the virtual-workspace migration has an older sentinel and is not upgraded automatically; review it and replace it manually before installing the current hook. It never stages or commits automatically. The hook does not replace the quality entry points or native GUI validation. For partial staging, ensure that the checked working tree matches the staged content yourself.
+### Git hooks and commit messages
+
+To enable local checks for a clone, run `./scripts/install-hooks.ps1` from PowerShell. It installs `pre-commit` and `commit-msg` only in the application's own Git repository. If either destination contains a different hook, including an older formatting hook, the installer stops before copying either file. Review the existing hook and reconcile it manually; installation does not change `core.hooksPath`.
+
+`commit-msg` rejects a subject such as `Add macOS support`; use `feat(macos): add device support` instead. Separate an optional body or footer from the subject with a blank line. To check a message before passing it to a tool that creates commits directly, run `sh .githooks/commit-msg --raw <message-file>`. Choosing the right type, keeping each commit to one logical change, and writing a short body about the change rather than the tests remain author and reviewer responsibilities. See [commit policy](../AGENTS.md#tooling-and-maintenance).
+
+Commit message checks are local and opt-in. For a deliberate one-off exception, `git commit --no-verify` skips both the message and formatting hooks for that commit. Message format does not gate pushes or pull requests.
+
+`pre-commit` runs a read-only formatting check; it never stages files. For partial staging, ensure the checked working tree matches the staged content. The hooks do not replace the quality checks or native GUI validation.
 
 <a id="device-diagnosis"></a>
 ## Device diagnosis
