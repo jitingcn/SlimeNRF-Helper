@@ -60,6 +60,8 @@ A running EXE can lock the output. First, exit your own instance normally. If yo
 
 `quality.ps1` and `quality.sh` use locked dependencies, stable rustfmt, strict Clippy across the workspace and all targets with `-D warnings`, nextest, and a separate Cargo doctest run. They stop on failure. Cover both full and no-firmware modes for changes to shared boundaries, builds, configuration, or resources. Do not add `--all-features`, which re-enables embedded firmware.
 
+Hosted workflows select the `ci` nextest profile: a failing test does not cancel the remaining selected tests. The test step still fails, so packaging does not proceed. Local runs keep nextest's default fail-fast behavior.
+
 After configuring native dependencies, use these equivalent commands:
 
 ```text

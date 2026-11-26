@@ -60,6 +60,8 @@ Nextest 在 `--` 之后只支持其模拟的 libtest 参数：`--ignored`、`--i
 
 `quality.ps1` 和 `quality.sh` 使用锁定依赖、stable rustfmt、整个 workspace/all-target 严格 Clippy `-D warnings`、nextest 和单独的 Cargo doctest，失败即停止。共享边界、构建、配置或资源变更应覆盖完整和无固件两种模式；不要加 `--all-features` 重新开启内置固件。
 
+GitHub Actions 使用 nextest 的 `ci` 配置：某项测试失败后仍跑完其余已选测试，最后将测试步骤标为失败，不进入打包。本地运行保留默认行为，遇到失败便停止。
+
 配置好原生依赖后，等价命令：
 
 ```text
