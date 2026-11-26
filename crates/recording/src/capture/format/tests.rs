@@ -22,8 +22,8 @@ fn assert_synthetic_pair(csv: &Path, metadata: &Path) {
 fn metadata_selection_removes_exactly_the_final_suffix() {
     let directory = tempfile::tempdir().unwrap();
     assert_synthetic_pair(
-        &directory.path().join("example.meta.txt.csv"),
-        &directory.path().join("example.meta.txt.meta.txt"),
+        &directory.path().join("温度.meta.txt.csv"),
+        &directory.path().join("温度.meta.txt.meta.txt"),
     );
 }
 
@@ -34,12 +34,17 @@ fn metadata_selection_preserves_non_utf8_basename() {
     use std::os::unix::ffi::OsStringExt;
 
     let directory = tempfile::tempdir().unwrap();
-    assert_synthetic_pair(
-        &directory
-            .path()
-            .join(OsString::from_vec(b"synthetic-\xff.csv".to_vec())),
-        &directory
-            .path()
-            .join(OsString::from_vec(b"synthetic-\xff.meta.txt".to_vec())),
+    let csv = directory
+        .path()
+        .join(OsString::from_vec(b"synthetic-\xff.csv".to_vec()));
+    let metadata = directory
+        .path()
+        .join(OsString::from_vec(b"synthetic-\xff.meta.txt".to_vec()));
+    assert_eq!(
+        super::recording_input_path(&metadata).as_ref(),
+        csv.as_path()
     );
+    // Native macOS volumes reject this filename before the recording can be opened.
+    #[cfg(not(target_os = "macos"))]
+    assert_synthetic_pair(&csv, &metadata);
 }

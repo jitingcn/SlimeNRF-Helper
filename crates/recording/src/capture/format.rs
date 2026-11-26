@@ -247,19 +247,26 @@ fn validate_report(report: &ParsedReport) -> Result<(), String> {
     }
 }
 
+fn recording_input_path(path: &Path) -> std::borrow::Cow<'_, Path> {
+    if path.extension().is_some_and(|ext| ext == "txt")
+        && path
+            .file_stem()
+            .and_then(|stem| Path::new(stem).extension())
+            .is_some_and(|ext| ext == "meta")
+    {
+        let mut csv = path.with_extension("");
+        csv.set_extension("csv");
+        csv.into()
+    } else {
+        path.into()
+    }
+}
+
 pub fn load(path: &Path, cancel: &AtomicBool) -> Result<Recording, String> {
     cancelled(cancel)?;
-    let path = if path.extension().is_some_and(|extension| extension == "txt")
-        && path
-            .with_extension("")
-            .extension()
-            .is_some_and(|extension| extension == "meta")
-    {
-        path.with_extension("").with_extension("csv")
-    } else {
-        path.to_owned()
-    };
-    let metadata = std::fs::metadata(&path).map_err(err)?;
+    let input = recording_input_path(path);
+    let path = input.as_ref();
+    let metadata = std::fs::metadata(path).map_err(err)?;
     if !metadata.is_file() || metadata.len() > MAX_INPUT_BYTES {
         return Err("Input is not a regular file or exceeds 1 GiB".into());
     }
@@ -269,7 +276,7 @@ pub fn load(path: &Path, cancel: &AtomicBool) -> Result<Recording, String> {
         .map(str::to_ascii_lowercase)
         .as_deref()
     {
-        Some("slimecap") => load_native(BufReader::new(File::open(&path).map_err(err)?), cancel),
+        Some("slimecap") => load_native(BufReader::new(File::open(path).map_err(err)?), cancel),
         Some("csv") => {
             let meta_path = path.with_extension("meta.txt");
             let meta = if meta_path.exists() {
@@ -279,7 +286,7 @@ pub fn load(path: &Path, cancel: &AtomicBool) -> Result<Recording, String> {
             };
             let mut remaining = MAX_SAMPLES;
             let track = load_csv(
-                BufReader::new(File::open(&path).map_err(err)?),
+                BufReader::new(File::open(path).map_err(err)?),
                 &meta,
                 &path.to_string_lossy(),
                 cancel,
@@ -289,7 +296,7 @@ pub fn load(path: &Path, cancel: &AtomicBool) -> Result<Recording, String> {
             restore_context(&mut recording)?;
             Ok(recording)
         }
-        Some("zip") => load_zip(&path, cancel),
+        Some("zip") => load_zip(path, cancel),
         _ => Err("Choose a .slimecap, .csv, .meta.txt or paired CSV .zip recording".into()),
     }
 }
