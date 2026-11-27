@@ -154,7 +154,7 @@ Controls 场景提供可选择的合成卡片、短/长内容和动态详情；T
 
 - **Windows：**启动自己的进程，取得 PID 和实际主窗口 HWND；采集或窗口内输入前确认 HWND 属于该 PID。使用 Windows.Graphics.Capture 等窗口级采集并检查图像。不要仅凭标题选窗或发送全局输入。仅修改 `APPDATA` 不能保证 Windows KnownFolder 偏好隔离；保护真实偏好，不要用旧备份覆盖。
 - **Linux：**隔离运行使用私有显示及私有 XDG 配置/状态目录，并准备可用的 Vulkan ICD、字体和用户 D-Bus。只清理自己启动的显示、总线和应用进程，观察实际渲染器和窗口。测试原生文件选择器时，在同一私有总线与显示上运行真实 portal 和兼容后端，并操作实际选择流程。私有 Xvfb、WSLg 和原生桌面验收应分别报告；它们都不能证明 USB、BLE 或刷写功能。
-- **macOS：**从实际的预览 DMG 安装 App，先按[无硬件检查步骤](USER_GUIDE.zh-CN.md#macos-preview-checks)观察窗口、输入、系统文件选择器和正常退出，再决定是否检查设备发现。分别报告 Apple 芯片和 Intel 的结果；检查包内容不能代替界面和实体设备验证。
+- **macOS：**从实际的 DMG 安装 App，先按[无硬件首次启动检查](USER_GUIDE.zh-CN.md#macos-first-launch)观察窗口、输入、系统文件选择器和正常退出，再决定是否检查设备发现。分别报告 Apple 芯片和 Intel 的结果；检查包内容不能代替界面和实体设备验证。
 
 私有 Linux 运行除构建依赖外还需安装 Xvfb、`xvfb-run`、`dbus-run-session`、Vulkan ICD 和字体。为 `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_STATE_HOME` 和权限为 0700 的 `XDG_RUNTIME_DIR` 创建新的私有目录并导出变量，在新的 `dbus-run-session` 和 `xvfb-run` 下启动应用。覆盖文件选择器时还须安装 `xdg-desktop-portal` 与兼容桌面后端，确保服务使用同一会话总线和显示；结束自己启动的会话前检查真实对话框。模拟实现不能充当原生选择器证据。
 
@@ -364,9 +364,10 @@ SDK 构建通过同一个 Rust 库从暂存的已跟踪输入离线生成内嵌�
 SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架构>`，可用 `SLIMENRF_FLATPAK_CACHE` 改位置，`SLIMENRF_FLATPAK_JOBS` 改并行（默认 2）。不与原生缓存混用。磁盘不足优先换宽裕 Linux 文件系统；OSTree 的保留空间可使 df 仍有空间时拒绝导出，不自动降保护或清别人的缓存。WSLg 排查单次 X11 可用 `flatpak run --nosocket=wayland --socket=x11 io.github.jitingcn.SlimeNRFHelper`，不保存全局 override。
 
 <a id="macos"></a>
-## macOS 预览版开发
+<a id="macos-预览版开发"></a>
+## macOS 开发与打包
 
-在运行 macOS 15.0 或更新版本的 Apple 芯片或 Intel Mac 上，使用仓库固定的 Rust 工具链，以及当前选定的 Command Line Tools 或 Xcode 提供的 Apple SDK 和 Clang。参见 [GPUI Kit 前置条件](https://gpui-kit.com/docs/installation)。打包需要 CMake 和 `jq`；[质量检查](#checks-and-editor)另需 cargo-nextest。预览包内嵌 GPUI Fast 的 Metal 源码，渲染器启动时再编译，不需要单独下载 Metal Toolchain。
+在运行 macOS 15 或更新版本的 Apple 芯片或 Intel Mac 上，使用仓库固定的 Rust 工具链，以及当前选定的 Command Line Tools 或 Xcode 提供的 Apple SDK 和 Clang。参见 [GPUI Kit 前置条件](https://gpui-kit.com/docs/installation)。打包需要 CMake 和 `jq`；[质量检查](#checks-and-editor)另需 cargo-nextest。App 内嵌 GPUI Fast 的 Metal 源码，渲染器启动时再编译，不需要单独下载 Metal Toolchain。
 
 ```bash
 bash ./build.sh run --no-firmware
@@ -376,23 +377,26 @@ bash ./scripts/package-macos.sh
 
 打包脚本默认生成宿主机架构的无固件 Release 包。若要在对应架构的 Mac 上显式指定目标，先运行 `rustup target add aarch64-apple-darwin`（Apple 芯片）或 `rustup target add x86_64-apple-darwin`（Intel），再分别运行 `bash ./scripts/package-macos.sh arm64` 或 `bash ./scripts/package-macos.sh x64`。如需替换已有产物，显式传 `--force`。`dist/` 中的压缩只读 DMG 包含 `SlimeNRF Helper.app` 和供拖拽安装的**应用程序**链接。许可证文件位于 App 包内的 `Contents/Resources/licenses/`。每个 DMG 只包含一种原生架构，不提供通用包。`package.sh` 仍用于 Linux 打包。
 
-App 的 bundle ID 为 `io.github.jitingcn.SlimeNRFHelper`。App 使用本地临时签名（ad hoc）；App 与磁盘映像均没有 Developer ID 签名，也未公证。按[预览版安装步骤](USER_GUIDE.zh-CN.md#macos-preview)测试安装后的 App，需要时处理单 App 门禁提示。本地 `cargo run` 不能验证下载包的首次启动行为。
+App 的 bundle ID 为 `io.github.jitingcn.SlimeNRFHelper`。App 采用临时签名（ad hoc）；App 和磁盘映像都没有 Developer ID 签名，也未公证。按 [macOS 安装步骤](USER_GUIDE.zh-CN.md#macos-installation)测试安装后的 App，需要时处理 Gatekeeper 的单 App 提示。本地 `cargo run` 不能验证下载包的首次启动行为。
 
 ## CI 与发布门槛
 
-[Native no-firmware CI](../.github/workflows/ci.yml)在 push、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括发布准备测试），并检查公开边界和冻结的版权输入。通过后，`windows-2022` 与 `ubuntu-22.04` x64 作业独立运行。Windows 还运行工具测试以覆盖原生 hook；两者打包前都运行维护的质量入口。
+[Native no-firmware CI](../.github/workflows/ci.yml)在分支或标签推送、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括发布准备测试），并检查公开边界和冻结的版权输入。通过后，原生作业分别在 `windows-2022`（x64）、`ubuntu-22.04`（x64）、`macos-26`（Apple 芯片）和 `macos-26-intel`（Intel）上运行。四项作业均在打包前运行无固件质量检查。Windows 还运行工具测试以覆盖原生 hook；两种 Mac 构建也单独运行工具测试。
 
-源码和发布作业使用相同的显式 Rust 缓存 key，沿用已有源码作业的前缀，不再分别追加作业 ID。编译器、环境和依赖哈希仍然启用。GitHub 的缓存作用域限制仍然生效：标签构建可以恢复默认分支的缓存，但相同 key 不会让其他标签的缓存全局可见。Windows 与 Linux 应用构建继续使用独立的缓存 key。
+源码和发布作业共用一个 Rust 缓存 key。原生应用构建仍按平台和架构使用独立缓存。编译器、环境与依赖哈希以及 GitHub 缓存作用域规则继续生效。
 
-Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage。两个文件均不含固件，文件名包含 Cargo 版本，并作为 Actions artifact 保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。
+每个原生作业直接上传一个带版本号的文件。正式发布必须包含以下四个文件，其中 `<版本>` 是应用的 Cargo 版本：
 
-独立的 [macOS preview 工作流](../.github/workflows/macos-preview.yml)在分支 push、PR 和手动触发时运行，标签推送不触发。`macos-26` 与 `macos-26-intel` runner 分别构建 `macOS arm64 / no firmware` 和 `macOS x64 / no firmware`。每种架构打包前独立运行 `bash quality.sh --no-firmware`，再用 `cargo nextest run --locked -p slimenrf-tools` 单独测试 CLI。
+- `slimenrf-helper-<版本>-windows-x64-no-firmware.exe`（UPX 压缩）
+- `slimenrf-helper-<版本>-linux-x64-no-firmware.AppImage`
+- `slimenrf-helper-<版本>-macos-arm64-no-firmware.dmg`
+- `slimenrf-helper-<版本>-macos-x64-no-firmware.dmg`
 
-打包脚本校验并以只读方式挂载 DMG，检查其中的 Mach-O 架构、链接的最低系统版本（macOS 15.0）、系统库链接、包元数据、临时签名、许可证文件和**应用程序**链接，再卸载映像。通过后直接上传带版本号的 DMG，保留 14 天。作业不启动 GUI，也不验证实体设备；不影响 Windows/Linux 的发布门槛，也不向 Releases 发布附件。
+Actions 产物保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。Mac 打包脚本校验并以只读方式挂载 DMG，检查其中的 Mach-O 架构、链接的最低系统版本（macOS 15.0）、系统库链接、包元数据、临时签名、许可证文件和**应用程序**链接，再卸载映像。CI 不启动 macOS 界面，也不验证实体设备。
 
-推送 `v<版本号>` 标签后，还会在三个前置作业全部成功后运行发布作业。标签必须匹配主应用的稳定 Cargo 版本和英文 `CHANGELOG.md` 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
+推送 `v<版本号>` 标签后，须等源码作业与四个原生作业全部通过，才会运行发布作业。标签必须匹配主应用的稳定 Cargo 版本以及英文 [CHANGELOG.md](../CHANGELOG.md) 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的中文更改日志。
 
-发布作业下载本次运行的准确产物，不重新编译。它检查远程标签对应的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，禁止覆盖附件。最后一步核对两个附件的完整名称和大小集合，再公开稳定版本；latest 由 GitHub 按 legacy 创建日期及 SemVer 策略选择。上传或验证失败可能留下草稿。重试前先人工检查该草稿。工作流不会覆盖或删除它。
+发布作业按精确文件名从该标签的同一次工作流运行中下载四个产物，不重新编译。它确认远程标签指向触发工作流的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，不覆盖附件。公开前，工作流核对草稿的标签和提交、四个已上传附件的完整名称和大小，并再次确认远程标签仍指向触发工作流的提交。GitHub 按 legacy 创建日期及 SemVer 策略选择 latest。上传或验证失败可能留下草稿，重试前请人工检查。工作流不会覆盖或删除草稿。
 
 仓库权限保持只读，仅发布作业拥有 `contents: write`。发布使用工作流令牌，不需要额外 secret。工作流不推送提交或标签。
 
@@ -404,16 +408,16 @@ Windows 以普通文件名上传一个 UPX 压缩的 EXE。Linux 上传 AppImage
 4. 创建与 Cargo 版本一致的附注标签。
 5. 一并推送 `main` 和标签。
 
-以 `0.3.2` 为例，最后执行：
+例如 Cargo 版本为 `0.7.0` 时，最后执行：
 
 ```bash
-	git tag -a v0.3.2 -m "SlimeNRF Helper 0.3.2"
-	git push --atomic origin main v0.3.2
+git tag -a v0.7.0 -m "SlimeNRF Helper 0.7.0"
+git push --atomic origin main v0.7.0
 ```
 
-等待标签对应的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 核对发布说明和两个下载文件。不要移动已发布的标签或替换附件。
+等待对应标签的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 打开该标签的发布页，核对发布说明和 **Assets** 中的四个下载文件。不要移动已发布的标签或替换附件；[v0.6.0 发布页](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0)保留原有附件。
 
-CI 成功只证明配置的检查与产物上传已完成。本地构建、WSLg 渲染、原生 GUI、USB 权限和真实设备更新是不同证据；目标发行版、macOS、签名、性能及物理硬件仍须独立验收。应用自有材料的 MIT OR Apache-2.0 许可不能替代[上文](#license-notices)所述第三方材料、源码提供、固件和产物的独立审查，不由打包成功解决。
+CI 成功只证明配置的检查与产物上传已完成。原生界面、目标发行版兼容性、Mac 下载包的 Gatekeeper 行为、USB 权限、性能和实体设备更新须分别验收。WSLg 渲染和本地源码构建不能替代下载包验收。应用自有材料的 MIT OR Apache-2.0 许可不能替代[上文](#license-notices)所述第三方材料、源码提供、固件和产物的独立审查。
 
 <a id="clean-and-troubleshoot"></a>
 ## 清理与排查

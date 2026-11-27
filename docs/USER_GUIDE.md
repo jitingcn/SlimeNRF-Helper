@@ -7,15 +7,15 @@
 <a id="installation"></a>
 ## Install and start the application
 
-1. For Windows and Linux, open the project's [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) page. For Mac, use the [macOS preview](#macos-preview) below.
+1. Open the project's [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) page.
 2. Select a version. Choose a **Pre-release** if you want a test version.
 3. Under **Assets**, download the package for your platform.
 
-For a development build, open **Actions**, select a successful **Native no-firmware CI** run, and download its **Artifacts**.
+For a development build, open [Native no-firmware CI](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/ci.yml), select a successful run for the commit you want, and download the package from **Artifacts** on the run's **Summary** page. Artifacts are retained for 14 days, subject to repository policy.
 
 On Windows, download the package whose filename ends in `windows-x64-no-firmware.exe` and run it directly. It is UPX-compressed, which can trigger security software or compatibility problems. No uncompressed fallback is published; a local Cargo build retains the original uncompressed executable.
 
-On Linux, download the AppImage. Replace the example filename below with the actual filename. Run these commands in the directory that contains the file.
+On Linux, download the x64 AppImage. Replace the example filename below with the actual filename. Run these commands in the directory that contains the file.
 
 ```bash
 chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
@@ -31,19 +31,22 @@ If FUSE is unavailable, start the application with this command:
 The no-firmware package includes the default configuration but no firmware payloads. For updates, use local files, remote downloads, or an explicitly supplied external configuration. For Linux services, device permissions, and UF2 mount requirements, see [Linux device and runtime requirements](#linux-devices). For source builds, see [Development and packaging](DEVELOPMENT.md).
 
 <a id="macos-preview"></a>
-### Try a macOS preview
+<a id="macos-installation"></a>
+### Install on macOS
 
-The experimental no-firmware preview targets macOS 15.0 or later. It is not a stable supported build and is not available through in-app updates.
+The no-firmware DMGs require macOS 15 or later. On Mac, you can [check for application updates](#app-updates) in the app, but must install a new version manually.
 
-1. In **Apple menu → About This Mac**, check the chip or processor. Choose `arm64` for a Mac with an Apple chip and `x64` for a Mac with an Intel processor. Test the matching native build rather than running the Intel build on Apple Silicon via Rosetta.
-2. For v0.6.0, download the DMG for your architecture from **Assets** on the [v0.6.0 release page](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0). The macOS release filenames include `preview`. To test a development commit instead, sign in to GitHub and open [Actions → macOS preview](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/macos-preview.yml). Select the successful run for that commit, then download `slimenrf-helper-<version>-macos-arm64-no-firmware.dmg` or `slimenrf-helper-<version>-macos-x64-no-firmware.dmg` under **Artifacts** on the run's **Summary** page. Actions artifacts are retained for 14 days, subject to repository policy.
-3. Open the DMG in Finder, drag **SlimeNRF Helper** to **Applications**, then eject the disk image. With SlimeNRF USB devices disconnected and test trackers turned off, open the installed `SlimeNRF Helper.app` from **Applications**, not from the disk image.
-4. The preview app is ad hoc signed, without an Apple Developer ID signature or notarization. If Gatekeeper reports an unverified developer or that Apple cannot check the app, confirm that the DMG came from the linked release page or the exact Actions run you selected before making an exception. After the first blocked launch, go to **System Settings → Privacy & Security → Open Anyway** and confirm **Open** for this app only. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Do not disable Gatekeeper, change the global app security policy, or override a malware or damaged-app warning. If the per-app option is unavailable, report the block.
+1. In **Apple menu → About This Mac**, check the chip or processor. Starting with v0.7.0, choose `slimenrf-helper-<version>-macos-arm64-no-firmware.dmg` for Apple Silicon or `slimenrf-helper-<version>-macos-x64-no-firmware.dmg` for Intel. Use the matching native build rather than running the Intel build on Apple Silicon through Rosetta.
+2. Open the DMG in Finder, drag **SlimeNRF Helper** to **Applications**, then eject the disk image. Open the installed `SlimeNRF Helper.app` from **Applications**, not from the disk image. To update, quit the old version before replacing it with the app from the new DMG.
+3. The app is ad hoc signed, without Apple Developer ID signing or notarization. If Gatekeeper reports an unverified developer or says Apple cannot check the app, confirm that the DMG came from the project's release page or the exact CI run you selected. After the first blocked launch, go to **System Settings → Privacy & Security → Open Anyway** and confirm **Open** for this app only. Follow [Apple's instructions](https://support.apple.com/en-us/102445). Do not disable Gatekeeper, change global security settings, or override a malware or damaged-app warning. If the per-app option is unavailable, report the block.
+
+The original [v0.6.0 release](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0) uses `macos-arm64-preview-no-firmware.dmg` and `macos-x64-preview-no-firmware.dmg` as its filename suffixes.
 
 <a id="macos-preview-checks"></a>
+<a id="macos-first-launch"></a>
 #### Start without hardware
 
-Check that the window opens and responds to resizing, browse **Home → Connect your devices**, then open **Settings → About** and **View licenses and notices**. In **VQF replay**, select **Import** and cancel the native file chooser without picking a file. Quit with **Command–Q**. Do not send commands, subscribe to HID events, start capture or calibration, or run any update.
+Disconnect SlimeNRF USB devices and turn off test trackers before opening the installed app. Check that the window opens and responds to resizing, browse **Home → Connect your devices**, then open **Settings → About** and **View licenses and notices**. In **VQF replay**, select **Import** and cancel the native file chooser without picking a file. Quit with **Command–Q**. Do not send commands, subscribe to HID events, start capture or calibration, or run any update.
 
 #### Optional discovery checks
 
@@ -60,7 +63,7 @@ For UF2 discovery, macOS may request **System Settings → Privacy & Security �
 
 To investigate without opening the device, run `ioreg -p IOService -r -c IOHIDDevice -l -w 0 | less`. Search for the receiver product with `/SlimeNRF`. Under the affected HID service, inspect each direct `IOHIDLibUserClient` child separately. A holder has `ClientOpened=Yes`, `ClientSeized=No`, and bit 0 set in `ClientOptions` (usually `1`) in its `DebugState`. Read `IOUserClientCreator` on **that same child** for the PID and process name. `ClientSeized=Yes` means that client was blocked, not that it holds the device. Registry details may be absent; do not stop a system process based on its presence in the tree. `lsof /dev/cu.*` identifies serial-port users, not HID owners.
 
-Try the preview and share your results in [GitHub Issues](https://github.com/jitingcn/SlimeNRF-Helper/issues). Include the release tag or the Actions run URL and commit ID, the DMG filename, macOS version and build (`sw_vers`), CPU or chip model, and the version shown in **Settings → About** if the app launched. Include what you did, what you observed, the text of any warning or error, and which checks you skipped. Remove device serial numbers, RF addresses, Bluetooth UUIDs, and private paths from screenshots and logs. Launch and discovery results do not verify firmware writes or physical device support.
+Report macOS problems in [GitHub Issues](https://github.com/jitingcn/SlimeNRF-Helper/issues). Include the release tag or the Actions run URL and commit ID, the DMG filename, macOS version and build (`sw_vers`), CPU or chip model, and the version shown in **Settings → About** if the app launched. Include what you did, what you observed, the text of any warning or error, and which checks you skipped. Remove device serial numbers, RF addresses, Bluetooth UUIDs, and private paths from screenshots and logs. Launch and discovery results do not verify firmware writes.
 
 <a id="first-use"></a>
 ## Use the application for the first time
@@ -444,7 +447,7 @@ Compilation generates the embedded `THIRD_PARTY_NOTICES.txt` with the shared Rus
 
 **Settings → About** can check GitHub releases on all platforms. Only eligible official Windows portable builds can install updates. Other platforms and Windows development, custom, or unmarked builds open the release page for manual installation.
 
-1. Choose **Check for updates**. Stable releases are selected by default; enable **Include prereleases** to include previews. If the repository has only prereleases, the stable channel reports that no stable release is available.
+1. Choose **Check for updates**. Stable releases are selected by default; enable **Include prereleases** to check test releases too. If the repository has only prereleases, the stable channel reports that no stable release is available.
 2. Review the version and release notes. On check-only builds, choose **View release on GitHub** to open that release in your browser. The application does not download or replace its executable. A newer release does not necessarily contain an installation package for your platform.
 3. On eligible Windows portable builds, choose **Download update**. The asset must exactly match the Windows architecture and bundled/no-firmware variant; missing assets do not cause a variant switch.
 4. Downloading and a ready update keep navigation on the update settings. **Cancel** discards the update and restores navigation, including when you need to return to an active device task. Checks alone do not restrict navigation. Closing the application normally discards the download without installing it.

@@ -19,14 +19,14 @@ for argument in "$@"; do
             printf '%s\n' \
                 'Usage: bash scripts/package-macos.sh [arm64|x64] [--force]' \
                 'Builds the no-firmware Release app for the chosen architecture (default: native).' \
-                'Signs the app ad hoc and writes a verified, read-only preview DMG to dist/.'
+                'Signs the app ad hoc and writes a verified, read-only DMG to dist/.'
             exit 0
             ;;
         *) fail "Unknown package argument: $argument" ;;
     esac
 done
 
-[[ $(uname -s) == Darwin ]] || fail 'macOS preview packaging requires macOS.'
+[[ $(uname -s) == Darwin ]] || fail 'DMG packaging requires macOS.'
 case "${arch:-$(uname -m)}" in
     arm64) arch=arm64; target=aarch64-apple-darwin; macho_arch=arm64 ;;
     x64|x86_64) arch=x64; target=x86_64-apple-darwin; macho_arch=x86_64 ;;

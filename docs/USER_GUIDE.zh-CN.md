@@ -7,15 +7,15 @@
 <a id="installation"></a>
 ## 安装与启动
 
-1. Windows 和 Linux 用户请打开项目的 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 页面。Mac 用户请使用下方的 [macOS 预览版](#macos-preview)。
+1. 打开项目的 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 页面。
 2. 选择版本。需要测试版时，选择标记为 **Pre-release** 的版本。
 3. 在 **Assets** 下载对应平台的包。
 
-需要开发构建时，打开 **Actions**，选择成功的 **Native no-firmware CI** 运行记录，再下载其中的 **Artifacts**。
+需要开发构建时，打开 [Native no-firmware CI](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/ci.yml)，选择目标提交对应的成功运行记录，在 **Summary** 页的 **Artifacts** 区域下载对应的包。产物保留 14 天，受仓库策略限制。
 
 Windows 下载文件名以 `windows-x64-no-firmware.exe` 结尾的包，下载完成后直接运行。该文件使用 UPX 压缩，可能引发安全软件误报或兼容性问题。不发布未压缩的备用版本；本地 Cargo 构建仍保留未压缩的原始可执行文件。
 
-Linux 下载 AppImage。将以下示例文件名替换为实际下载文件名。在文件所在目录执行以下命令。
+Linux 下载 x64 AppImage。将以下示例文件名替换为实际下载文件名。在文件所在目录执行以下命令。
 
 ```bash
 chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
@@ -31,19 +31,22 @@ chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
 无固件包内置默认配置，但不包含固件载荷。更新时使用本地文件、远程下载或显式外部配置。Linux 的服务、设备权限与 UF2 挂载条件见 [Linux 设备与运行条件](#linux-devices)。源码构建见[开发与打包](DEVELOPMENT.zh-CN.md)。
 
 <a id="macos-preview"></a>
-### 试用 macOS 预览版
+<a id="macos-installation"></a>
+### 在 macOS 上安装
 
-实验性无固件预览版面向 macOS 15.0 及以上版本，不属于正式支持的版本，也不能通过应用内更新安装。
+无固件 DMG 要求 macOS 15 或更新版本。macOS 版可以在应用内[检查更新](#app-updates)，但须手动安装新版本。
 
-1. 在**苹果菜单 → 关于本机**中查看芯片或处理器。Apple 芯片选 `arm64`，Intel 处理器选 `x64`。请测试与本机架构匹配的版本，不要在 Apple 芯片的 Mac 上用 Rosetta 运行 Intel 版来代替原生测试。
-2. 试用 v0.6.0 时，从 [v0.6.0 发布页](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0)的 **Assets** 下载与本机架构匹配的 DMG，文件名含 `preview`。如需测试某个开发提交，请登录 GitHub，打开 [Actions → macOS preview](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/macos-preview.yml)，选择该提交对应的成功运行记录。在 **Summary** 页的 **Artifacts** 中下载 `slimenrf-helper-<版本>-macos-arm64-no-firmware.dmg` 或 `slimenrf-helper-<版本>-macos-x64-no-firmware.dmg`。Actions 产物保留 14 天，受仓库策略限制。
-3. 在访达中打开 DMG，将 **SlimeNRF Helper** 拖入**应用程序**，再推出磁盘映像。拔下 SlimeNRF USB 设备并关闭测试用追踪器，从**应用程序**打开已安装的 `SlimeNRF Helper.app`，不要从磁盘映像直接启动。
-4. 预览 App 只有临时签名（ad hoc），没有 Apple Developer ID 签名，也未公证。如果门禁提示开发者无法验证，或 Apple 无法检查 App，请先确认 DMG 来自上面链接的发布页，或你选定的 Actions 运行记录。首次打开被拦截后，进入**系统设置 → 隐私与安全性 → 仍要打开**，只为这个 App 确认**打开**。参见 [Apple 的说明](https://support.apple.com/zh-cn/102445)。不要关闭门禁、修改全局安全策略，或绕过恶意软件或 App 损坏提示。如果系统未提供单 App 例外选项，请报告拦截情况。
+1. 在**苹果菜单 → 关于本机**中查看芯片或处理器。从 v0.7.0 起，Apple 芯片选择 `slimenrf-helper-<版本>-macos-arm64-no-firmware.dmg`，Intel 选择 `slimenrf-helper-<版本>-macos-x64-no-firmware.dmg`。请使用与本机架构匹配的包，不要在 Apple 芯片的 Mac 上通过 Rosetta 运行 Intel 版来代替。
+2. 在访达中打开 DMG，将 **SlimeNRF Helper** 拖入**应用程序**，再推出磁盘映像。从**应用程序**打开已安装的 `SlimeNRF Helper.app`，不要从磁盘映像直接启动。更新时，先退出旧版，再用新 DMG 中的 App 替换它。
+3. App 采用临时签名（ad hoc），没有 Apple Developer ID 签名，也未公证。如果 Gatekeeper 提示开发者无法验证，或 Apple 无法检查 App，请先确认 DMG 来自项目发布页或你选定的 CI 运行记录。首次打开被拦截后，进入**系统设置 → 隐私与安全性 → 仍要打开**，只为这个 App 确认**打开**。参见 [Apple 的说明](https://support.apple.com/zh-cn/102445)。不要关闭 Gatekeeper、修改全局安全设置，或绕过恶意软件或 App 损坏提示。如果系统未提供单 App 例外选项，请报告拦截情况。
+
+[v0.6.0 发布页](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0)保留原有的文件名后缀：`macos-arm64-preview-no-firmware.dmg` 和 `macos-x64-preview-no-firmware.dmg`。
 
 <a id="macos-preview-checks"></a>
+<a id="macos-first-launch"></a>
 #### 不接设备，先检查启动
 
-确认窗口能打开并响应大小调整，浏览**首页 → 连接设备**，打开**设置 → 关于**和**查看许可证与声明**。在 **VQF 回放**中点击**导入**，打开系统文件选择器后直接取消，不选文件。用 **Command–Q** 退出。不要发送命令、订阅 HID 事件、开始采集或校准，也不要执行任何更新。
+打开已安装的 App 前，拔下 SlimeNRF USB 设备并关闭测试用追踪器。确认窗口能打开并响应大小调整，浏览**首页 → 连接设备**，打开**设置 → 关于**和**查看许可证与声明**。在 **VQF 回放**中点击**导入**，打开系统文件选择器后直接取消，不选文件。用 **Command–Q** 退出。不要发送命令、订阅 HID 事件、开始采集或校准，也不要执行任何更新。
 
 #### 可选：只检查设备发现
 
@@ -60,7 +63,7 @@ chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
 
 手动排查不需要打开设备。运行 `ioreg -p IOService -r -c IOHIDDevice -l -w 0 | less`，输入 `/SlimeNRF` 搜索接收器产品名。在出错的 HID 服务下，逐个查看直属的 `IOHIDLibUserClient` 子项：如果 `DebugState` 里 `ClientOpened=Yes`、`ClientSeized=No`，且 `ClientOptions` 最低位为 1（通常值就是 `1`），读取**同一子项**的 `IOUserClientCreator` 即可查看 PID 和进程名。`ClientSeized=Yes` 表示该客户端被挡住，并非占用者。系统不一定公开这些字段；不要因为某个系统进程出现在列表里就终止它。`lsof /dev/cu.*` 查到的是串口使用者，不是 HID 占用者。
 
-欢迎试用并在 [GitHub Issues](https://github.com/jitingcn/SlimeNRF-Helper/issues) 反馈。请附发布标签，或 Actions 运行链接和提交 ID；另外请附 DMG 文件名、macOS 版本和构建号（`sw_vers`）、CPU 或芯片型号，若能启动，也请附上**设置 → 关于**中显示的版本。写明操作、观察结果、警告或错误原文，以及未做的检查。分享截图或日志前，去掉设备序列号、RF 地址、蓝牙 UUID 和私有路径。启动和发现结果不能证明固件写入成功或实体设备已通过验收。
+遇到 macOS 问题时，请在 [GitHub Issues](https://github.com/jitingcn/SlimeNRF-Helper/issues) 反馈。请附发布标签，或 Actions 运行链接和提交 ID；另外请附 DMG 文件名、macOS 版本和构建号（`sw_vers`）、CPU 或芯片型号，若能启动，也请附上**设置 → 关于**中显示的版本。写明操作、观察结果、警告或错误原文，以及未做的检查。分享截图或日志前，去掉设备序列号、RF 地址、蓝牙 UUID 和私有路径。启动和发现结果不能证明固件写入成功。
 
 <a id="first-use"></a>
 ## 首次使用
@@ -442,7 +445,7 @@ UF2 和 OpenDFU 传输在总量已知时显示进度条、字节数和百分比�
 
 所有平台均可在**设置 → 关于**检查 GitHub Release。仅符合条件的官方 Windows 便携构建可以安装更新；其他平台及 Windows 开发、自定义或未带官方发布标记的构建打开发布页面，由用户手动安装。
 
-1. 点击**检查更新**。默认仅选择稳定版本；启用**包括预发布版本**后也会检查预览版。仓库只有预发布版本时，稳定频道会提示暂无稳定版本。
+1. 点击**检查更新**。默认仅选择稳定版本；启用**包括预发布版本**后也会检查测试版本。仓库只有预发布版本时，稳定频道会提示暂无稳定版本。
 2. 查看版本及发布说明。仅检查版本的构建可点击**在 GitHub 查看发行版本**，在浏览器打开对应版本的发布页；应用不会下载或替换自身。发现新版本不代表该版本提供当前平台的安装包。
 3. 符合条件的 Windows 便携构建可点击**下载更新**。产物必须精确匹配 Windows 架构和内置固件／无固件变体，缺少匹配产物时不会改装另一变体。
 4. 下载中及下载就绪后，页面导航保持在更新设置。点击**取消**会丢弃更新并恢复导航；需要返回处理正在运行的设备任务时，也可先取消更新。仅检查版本不限制导航。普通关闭应用会丢弃下载，不会安装更新。

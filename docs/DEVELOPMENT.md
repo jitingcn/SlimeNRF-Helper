@@ -154,7 +154,7 @@ Build the actual application using the platform instructions ([Windows](#windows
 
 - **Windows:** launch your own process and identify its PID and actual main HWND; verify the HWND belongs to that PID before capture or window-local input. Use a window-local capture such as Windows.Graphics.Capture and inspect the image. Do not select a window by title alone or send global input. Changing `APPDATA` alone does not guarantee isolation of Windows KnownFolder preferences. Preserve real preferences; do not overwrite them with a stale backup.
 - **Linux:** use a private display and private XDG configuration/state directories for an isolated run, with a working Vulkan ICD, fonts and a user D-Bus. Own and clean up only the display, bus and application processes you started. Observe the actual renderer and window. For a native file chooser, run a real portal and compatible backend on the same private bus and display and exercise the actual chooser. A private Xvfb result is distinct from WSLg and native desktop acceptance; none proves USB, BLE or flashing.
-- **macOS:** install the app from the actual preview DMG and follow the [hardware-free preview checks](USER_GUIDE.md#macos-preview-checks) before optional discovery. Observe the window, input, native file chooser, and normal quit. Report Apple Silicon and Intel results separately; package inspection does not test GUI or hardware.
+- **macOS:** install the app from the actual DMG and follow the [hardware-free first-launch checks](USER_GUIDE.md#macos-first-launch) before optional discovery. Observe the window, input, native file chooser, and normal quit. Report Apple Silicon and Intel results separately; package inspection does not test GUI or hardware.
 
 For a private Linux run, install Xvfb, `xvfb-run`, `dbus-run-session`, a Vulkan ICD and fonts in addition to build prerequisites. Create fresh private directories for `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME` and a mode-0700 `XDG_RUNTIME_DIR`; export them and launch the application under a new `dbus-run-session` and `xvfb-run`. For chooser coverage, install `xdg-desktop-portal` and a compatible desktop backend, and ensure their services use that same session bus and display. Inspect the actual dialog before closing the owned session. A mock is not native chooser evidence.
 
@@ -364,9 +364,10 @@ This is a broad-permission compatibility package, not a strict sandbox. To suppo
 The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<architecture>`. Change its location with `SLIMENRF_FLATPAK_CACHE` and parallelism with `SLIMENRF_FLATPAK_JOBS`, which defaults to 2. Do not mix it with native caches. If disk space is low, first move the cache to a Linux filesystem with more space. OSTree's reserved space can reject exports even when df reports free space. Do not automatically reduce this protection or clear other people's caches. For a single WSLg X11 diagnostic run, use `flatpak run --nosocket=wayland --socket=x11 io.github.jitingcn.SlimeNRFHelper`. Do not save a global override.
 
 <a id="macos"></a>
-## macOS preview development
+<a id="macos-preview-development"></a>
+## macOS development and packaging
 
-Use a native Apple Silicon or Intel Mac with macOS 15.0 or later, the pinned Rust toolchain, and an Apple SDK and Clang from the selected Command Line Tools or Xcode. See [GPUI Kit's prerequisites](https://gpui-kit.com/docs/installation). Install CMake and `jq` for packaging and cargo-nextest for the [quality checks](#checks-and-editor). The preview embeds GPUI Fast's Metal source; the renderer compiles it at launch, so the preview build does not need a separate Metal Toolchain download.
+Use a native Apple Silicon or Intel Mac with macOS 15 or later, the pinned Rust toolchain, and an Apple SDK and Clang from the selected Command Line Tools or Xcode. See [GPUI Kit's prerequisites](https://gpui-kit.com/docs/installation). Install CMake and `jq` for packaging and cargo-nextest for the [quality checks](#checks-and-editor). The app embeds GPUI Fast's Metal source; the renderer compiles it at launch, so the build does not need a separate Metal Toolchain download.
 
 ```bash
 bash ./build.sh run --no-firmware
@@ -376,23 +377,26 @@ bash ./scripts/package-macos.sh
 
 The packager builds the no-firmware Release app for the host architecture by default. To pass the architecture explicitly on the matching Mac, install the Rust target with `rustup target add aarch64-apple-darwin` (Apple Silicon) or `rustup target add x86_64-apple-darwin` (Intel), then run `bash ./scripts/package-macos.sh arm64` or `bash ./scripts/package-macos.sh x64` respectively. An explicit `--force` allows replacement of an existing output. The compressed read-only DMG in `dist/` contains `SlimeNRF Helper.app` and an **Applications** link for drag installation. The app's license files are in `Contents/Resources/licenses/`. Each DMG contains one native architecture; there is no universal bundle. `package.sh` remains the Linux packager.
 
-The bundle ID is `io.github.jitingcn.SlimeNRFHelper`. The app uses a local ad hoc signature; neither the app nor the disk image has a Developer ID signature or notarization. Follow the [preview installation steps](USER_GUIDE.md#macos-preview) to test the installed app, including any per-app Gatekeeper prompt. A local Cargo run does not demonstrate the downloaded bundle's first-launch behavior.
+The bundle ID is `io.github.jitingcn.SlimeNRFHelper`. The app uses an ad hoc signature; neither the app nor the disk image has a Developer ID signature or notarization. Follow the [macOS installation steps](USER_GUIDE.md#macos-installation) to test the installed app, including any per-app Gatekeeper prompt. A local Cargo run does not demonstrate the downloaded bundle's first-launch behavior.
 
 ## CI and release acceptance
 
-[Native no-firmware CI](../.github/workflows/ci.yml) runs on pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including release preparation tests, and checks publication boundaries and frozen notice inputs. After it passes, the `windows-2022` and `ubuntu-22.04` x64 jobs run independently. Windows also runs the tools tests for native hook coverage; both run the maintained quality entry points before packaging.
+[Native no-firmware CI](../.github/workflows/ci.yml) runs on branch and tag pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including release preparation tests, and checks publication boundaries and frozen notice inputs. After it passes, the native jobs run on `windows-2022` (x64), `ubuntu-22.04` (x64), `macos-26` (Apple Silicon), and `macos-26-intel` (Intel). All four run the maintained no-firmware quality entry points before packaging. Windows also runs the tools tests for native hook coverage; both Mac jobs run the tools tests separately.
 
-The source and release jobs share an explicit Rust cache key, preserving the existing source-job prefix instead of adding separate job IDs. Compiler, environment, and dependency hashes remain enabled. GitHub's cache scope rules still apply; tag builds can restore the default branch's cache, but matching keys do not make caches from other tags globally accessible. Windows and Linux application builds retain separate cache keys.
+The source and release jobs share a Rust cache key. Native application build caches stay separate by platform and architecture. Compiler, environment, and dependency hashes and GitHub's cache scope rules still apply.
 
-Windows uploads one UPX-compressed executable under the normal filename. Linux uploads an AppImage. Both omit firmware, use the Cargo version in their filenames, and remain available as Actions artifacts for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets.
+Each native job uploads one file directly under its versioned filename. A standard release requires this exact set, where `<version>` is the application's Cargo version:
 
-The separate [macOS preview workflow](../.github/workflows/macos-preview.yml) runs on branch pushes, pull requests, and manual dispatch, not tag pushes. The `macos-26` and `macos-26-intel` runners build `macOS arm64 / no firmware` and `macOS x64 / no firmware`, respectively. Each independently runs `bash quality.sh --no-firmware` and the separate `cargo nextest run --locked -p slimenrf-tools` CLI tests before packaging.
+- `slimenrf-helper-<version>-windows-x64-no-firmware.exe` (UPX-compressed)
+- `slimenrf-helper-<version>-linux-x64-no-firmware.AppImage`
+- `slimenrf-helper-<version>-macos-arm64-no-firmware.dmg`
+- `slimenrf-helper-<version>-macos-x64-no-firmware.dmg`
 
-The packager verifies the DMG, attaches it read-only, checks the mounted app's Mach-O architecture, linked deployment target (macOS 15.0), system library linkage, metadata, ad hoc signature, license files, and the **Applications** link, then detaches it. Each passing job uploads its versioned DMG directly for 14 days. These jobs neither launch the GUI nor verify physical devices. They do not gate the Windows/Linux release workflow and never publish artifacts to Releases.
+Actions artifacts are retained for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets. The Mac packager verifies the DMG, attaches it read-only, checks the mounted app's Mach-O architecture, linked deployment target (macOS 15.0), system library linkage, metadata, ad hoc signature, license files, and the **Applications** link, then detaches it. CI does not launch the macOS GUI or verify physical devices.
 
-A `v<version>` tag push also runs the release job after all three prerequisite jobs succeed. The tag must match the application's stable Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md); SemVer prerelease versions are rejected. Release notes use that entry and link to the Chinese changelog at the same commit.
+A `v<version>` tag push runs the release job only after the source job and all four native jobs pass. The tag must match the application's stable Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md); SemVer prerelease versions are rejected. Release notes use that entry and link to the Chinese changelog at the same commit.
 
-The publisher downloads the exact artifacts from that run without rebuilding them. It checks the remote tag's commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files with overwrites disabled. The final step verifies the exact set of both uploaded names and sizes before publishing a stable release; GitHub selects latest using its legacy creation-date and SemVer policy. A failed upload or verification can leave a draft. Review that draft manually before retrying. The workflow does not overwrite or delete it.
+The publisher downloads all four exact-name artifacts from that tag's workflow run without rebuilding them. It checks that the remote tag resolves to the event commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files without overwriting assets. Before publishing, the workflow checks the draft tag and commit, the exact set of four uploaded asset names and sizes, and that the remote tag still points to the event commit. GitHub selects latest using its legacy creation-date and SemVer policy. A failed upload or verification can leave a draft; inspect it manually before retrying. The workflow does not overwrite or delete it.
 
 Repository permissions remain read-only except for `contents: write` on the release job. Publication uses the workflow token and needs no additional secret. The workflow never pushes commits or tags.
 
@@ -404,16 +408,16 @@ Repository permissions remain read-only except for `contents: write` on the rele
 4. Create an annotated tag that matches the Cargo version.
 5. Push `main` and the tag together.
 
-For version `0.3.2`, the final commands are:
+For example, if the Cargo version is `0.7.0`, the final commands are:
 
 ```bash
-	git tag -a v0.3.2 -m "SlimeNRF Helper 0.3.2"
-	git push --atomic origin main v0.3.2
+git tag -a v0.7.0 -m "SlimeNRF Helper 0.7.0"
+git push --atomic origin main v0.7.0
 ```
 
-Wait for the tag's workflow to finish. Check the release notes and both downloads on [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Do not move a published tag or replace its assets.
+Wait for the exact tag's workflow to finish. Open that tag's page from [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) and check the release notes and all four downloads under **Assets**. Do not move published tags or replace their assets; the [v0.6.0 release](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0) retains its original assets.
 
-Successful CI confirms only the configured checks and uploaded artifacts. Local builds, WSLg rendering, native GUI behavior, USB permissions, and real device updates are separate evidence. Target distributions, macOS, signing, performance, and physical hardware still require independent acceptance. The application-owned MIT OR Apache-2.0 license does not replace the separate third-party, source-availability, firmware, and artifact reviews described [above](#license-notices). Successful packaging does not resolve them.
+Successful CI confirms only the configured checks and uploaded artifacts. Native GUI behavior, target distribution compatibility, Gatekeeper on downloaded Mac builds, USB permissions, performance, and physical device updates require separate acceptance. WSLg rendering and local source builds do not substitute for testing the downloaded package. The application-owned MIT OR Apache-2.0 license does not replace the separate third-party, source-availability, firmware, and artifact reviews described [above](#license-notices).
 
 <a id="clean-and-troubleshoot"></a>
 ## Clean and troubleshoot

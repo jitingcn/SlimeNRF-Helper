@@ -236,9 +236,94 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  macos:
+    name: macOS ${{ matrix.arch }} / no firmware
+    needs: source
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+            machine: arm64
+          # Standard native Intel runner; see actions/runner-images#13739.
+          - runner: macos-26-intel
+            arch: x64
+            machine: x86_64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out standalone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select native Apple SDK and repository-pinned Rust
+        env:
+          NATIVE_MACHINE: ${{ matrix.machine }}
+        run: |
+          test "$(uname -m)" = "$NATIVE_MACHINE"
+          rustc --version --verbose
+          cargo --version
+          xcrun --sdk macosx --show-sdk-version
+          cmake --version
+          deployment="$(plutil -extract LSMinimumSystemVersion raw -expect string scripts/macos/Info.plist)"
+          sdk="$(xcrun --sdk macosx --show-sdk-path)"
+          printf 'MACOSX_DEPLOYMENT_TARGET=%s\nSDKROOT=%s\n' "$deployment" "$sdk" >> "$GITHUB_ENV"
+
+      - name: Install checksum-pinned universal cargo-nextest
+        run: |
+          archive="$RUNNER_TEMP/cargo-nextest-0.9.152-universal-apple-darwin.tar.gz"
+          tools="$RUNNER_TEMP/cargo-nextest-0.9.152"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.152/cargo-nextest-0.9.152-universal-apple-darwin.tar.gz \
+            --output "$archive"
+          printf '%s  %s\n' '2fadf57df4243e691f088ee3bff4f4ab9af16da0c95a1db84b5cb1685e098a76' "$archive" | shasum -a 256 -c -
+          mkdir -p "$tools"
+          tar -xzf "$archive" -C "$tools" cargo-nextest
+          test -x "$tools/cargo-nextest"
+          printf '%s\n' "$tools" >> "$GITHUB_PATH"
+
+      - name: Check formatting, strict workspace Clippy, tests and doctests
+        env:
+          CARGO_INCREMENTAL: '0'
+        run: |
+          # Reclaim this job's quality build before restoring Release artifacts.
+          CARGO_TARGET_DIR="$(mktemp -d "$RUNNER_TEMP/slimenrf-quality.XXXXXXXX")"
+          export CARGO_TARGET_DIR
+          trap 'rm -rf -- "$CARGO_TARGET_DIR"' EXIT
+          bash ./quality.sh --no-firmware
+          cargo nextest run --locked -p slimenrf-tools
+
+      - name: Cache Release packaging dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: '. -> target'
+          key: macos-26-${{ matrix.arch }}-no-firmware
+          cache-bin: false
+
+      - name: Build, sign and verify the no-firmware DMG
+        id: package
+        env:
+          PACKAGE_ARCH: ${{ matrix.arch }}
+        run: |
+          image="$(bash scripts/package-macos.sh "$PACKAGE_ARCH")"
+          printf 'path=%s\n' "$image" >> "$GITHUB_OUTPUT"
+
+      - name: Upload macOS DMG only
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: ${{ steps.package.outputs.path }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
   release:
     name: Publish tagged release
-    needs: [source, windows, linux]
+    needs: [source, windows, linux, macos]
     if: >-
       github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/v') &&
@@ -302,6 +387,18 @@ jobs:
           name: slimenrf-helper-${{ steps.release.outputs.version }}-linux-x64-no-firmware.AppImage
           path: ${{ runner.temp }}/release-assets
 
+      - name: Download exact Apple Silicon DMG
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: slimenrf-helper-${{ steps.release.outputs.version }}-macos-arm64-no-firmware.dmg
+          path: ${{ runner.temp }}/release-assets
+
+      - name: Download exact Intel Mac DMG
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: slimenrf-helper-${{ steps.release.outputs.version }}-macos-x64-no-firmware.dmg
+          path: ${{ runner.temp }}/release-assets
+
       - name: Validate release inputs and refuse existing releases
         env:
           GH_TOKEN: ${{ github.token }}
@@ -316,6 +413,8 @@ jobs:
           assets=(
             "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware.exe"
             "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-linux-x64-no-firmware.AppImage"
+            "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-macos-arm64-no-firmware.dmg"
+            "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-macos-x64-no-firmware.dmg"
           )
           for asset in "${assets[@]}"; do
             if [[ ! -f "$asset" || -L "$asset" || ! -s "$asset" ]]; then
@@ -354,6 +453,8 @@ jobs:
           files: |
             ${{ runner.temp }}/release-assets/slimenrf-helper-${{ steps.release.outputs.version }}-windows-x64-no-firmware.exe
             ${{ runner.temp }}/release-assets/slimenrf-helper-${{ steps.release.outputs.version }}-linux-x64-no-firmware.AppImage
+            ${{ runner.temp }}/release-assets/slimenrf-helper-${{ steps.release.outputs.version }}-macos-arm64-no-firmware.dmg
+            ${{ runner.temp }}/release-assets/slimenrf-helper-${{ steps.release.outputs.version }}-macos-x64-no-firmware.dmg
 
       - name: Verify uploaded draft and publish the release
         env:
@@ -367,6 +468,8 @@ jobs:
           assets=(
             "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-windows-x64-no-firmware.exe"
             "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-linux-x64-no-firmware.AppImage"
+            "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-macos-arm64-no-firmware.dmg"
+            "$RUNNER_TEMP/release-assets/slimenrf-helper-${VERSION}-macos-x64-no-firmware.dmg"
           )
           expected_assets='[]'
           for asset in "${assets[@]}"; do

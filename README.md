@@ -21,13 +21,13 @@ Start on **Home** and choose **Connect your devices** to check your receiver and
 
 ## Downloads and platform limits
 
-Download the Windows x64 EXE or Linux x64 AppImage from [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). Prereleases are marked for testing. Development builds are available under **Actions**, in the **Artifacts** section of a successful **Native no-firmware CI** run.
+Starting with v0.7.0, official releases include a Windows x64 EXE, a Linux x64 AppImage, and separate macOS DMGs for Apple Silicon and Intel. Download the package for your platform from [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). The [v0.6.0 release](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0) keeps its original macOS DMGs marked `preview`. Development builds for all four targets are available under **Artifacts** in successful [Native no-firmware CI](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/ci.yml) runs.
 
 - The Windows EXE filename ends in `windows-x64-no-firmware.exe` and is UPX-compressed. Compression can trigger security software or compatibility problems; no uncompressed fallback is published. A local Cargo build retains the original uncompressed executable.
 - The Linux AppImage uses an Ubuntu 22.04 build baseline with glibc 2.35. It is not fully static and requires a compatible host graphics stack, fonts, desktop and device services, and USB, HID, and serial permissions.
-- [v0.6.0 Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0) includes experimental no-firmware macOS preview DMGs for Apple Silicon and Intel. Hardware compatibility is not yet verified. See the [macOS preview guide](docs/USER_GUIDE.md#macos-preview) for trial instructions, development builds, and feedback.
+- The macOS DMGs require macOS 15 or later. Choose `arm64` for Apple Silicon or `x64` for Intel. The app is ad hoc signed, without Developer ID signing or notarization. See [macOS installation](docs/USER_GUIDE.md#macos-installation) for Gatekeeper and manual updates.
 
-CI packages include the default configuration but omit firmware payloads. Full builds include bundled firmware. No-firmware builds can use local files, remote downloads, or explicitly selected external configuration.
+Release and CI packages include the default configuration but omit firmware payloads. Full builds include bundled firmware. No-firmware builds can use local files, remote downloads, or explicitly selected external configuration.
 
 [Installation and launch instructions](docs/USER_GUIDE.md#installation) include the AppImage commands and the option to run without FUSE. [Linux device requirements](docs/USER_GUIDE.md#linux-devices) cover permissions and UF2 mounts. [Development and packaging](docs/DEVELOPMENT.md) covers source builds.
 
