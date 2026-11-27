@@ -33,6 +33,9 @@ mod windows_serial_names;
 mod linux_serial_metadata;
 
 #[cfg(target_os = "macos")]
+mod macos_hid_owner;
+
+#[cfg(target_os = "macos")]
 mod macos_serial;
 
 #[cfg(any(target_os = "macos", test))]
@@ -1053,6 +1056,20 @@ fn with_receiver_handle<'a, D, H>(
     read(device)
 }
 
+#[cfg(any(target_os = "macos", test))]
+fn is_macos_hid_exclusive_access(error: &hidapi::HidError) -> bool {
+    // hidapi exposes the IOReturn only in the message from this open call.
+    const OPEN_STATUS_PREFIX: &str =
+        "hid_open_path: failed to open IOHIDDevice from mach entry: (0x";
+    let hidapi::HidError::HidApiError { message } = error else {
+        return false;
+    };
+    message
+        .strip_prefix(OPEN_STATUS_PREFIX)
+        .and_then(|status| status.split_once(") "))
+        .is_some_and(|(code, _)| code.eq_ignore_ascii_case("E00002C5")) // kIOReturnExclusiveAccess
+}
+
 fn read_receiver(
     receiver: &ReceiverEndpoint,
     cancel: &AtomicBool,
@@ -1084,6 +1101,20 @@ fn read_receiver(
         }),
         |device| {
             api.open_path(device.path()).map_err(|error| {
+                #[cfg(target_os = "macos")]
+                if is_macos_hid_exclusive_access(&error) {
+                    return if let Some(owner) = macos_hid_owner::exclusive_client(device.path()) {
+                        rust_i18n::t!(
+                            "devices.receiver.error.open_exclusive_owner",
+                            owner = owner,
+                            error = error
+                        )
+                        .to_string()
+                    } else {
+                        rust_i18n::t!("devices.receiver.error.open_exclusive", error = error)
+                            .to_string()
+                    };
+                }
                 rust_i18n::t!(
                     "devices.receiver.error.open",
                     receiver = receiver.label,
@@ -1462,6 +1493,37 @@ impl Roster {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn macos_receiver_open_classifies_only_the_exact_exclusive_access_status() {
+        fn hid_error(message: &str) -> hidapi::HidError {
+            hidapi::HidError::HidApiError {
+                message: message.into(),
+            }
+        }
+
+        for message in [
+            "hid_open_path: failed to open IOHIDDevice from mach entry: (0xE00002C5) exclusive access",
+            "hid_open_path: failed to open IOHIDDevice from mach entry: (0xe00002c5) unknown error",
+        ] {
+            assert!(is_macos_hid_exclusive_access(&hid_error(message)));
+        }
+        for message in [
+            "hid_open_path: failed to open IOHIDDevice from mach entry: (0xE00002C1) not privileged",
+            "hid_open_path: failed to open IOHIDDevice from mach entry: (0xE00002C50) unknown error",
+            "hid_open_path: failed to open IOHIDDevice from mach entry: (0xE00002C0) 0xe00002c5",
+            "hid_open_path: device mach entry not found with the given path",
+            "hid_read: (0xE00002C5) exclusive access",
+        ] {
+            assert!(!is_macos_hid_exclusive_access(&hid_error(message)));
+        }
+        assert!(!is_macos_hid_exclusive_access(
+            &hidapi::HidError::HidApiErrorEmpty
+        ));
+        assert!(!is_macos_hid_exclusive_access(&hidapi::HidError::from(
+            std::io::Error::from_raw_os_error(0xe000_02c5_u32 as i32)
+        )));
+    }
 
     #[test]
     fn fixture_monitor_reserves_and_restores_without_spawning_native_readers() {

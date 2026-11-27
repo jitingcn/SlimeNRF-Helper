@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- On macOS, Device setup explains when another client holds the receiver HID interface exclusively. It shows the process when macOS identifies the holder.
+
 ### Fixed
 
 - Prevent a macOS crash when a USB HID device reappears, including after wireless OTA. Device discovery and opens now use the same long-lived HID manager thread.

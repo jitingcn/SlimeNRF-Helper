@@ -56,6 +56,10 @@ Only use your own test devices. Do these checks separately from the first launch
 
 For UF2 discovery, macOS may request **System Settings → Privacy & Security → Files & Folders → SlimeNRF Helper → Removable Volumes**. That permission is separate from **Privacy & Security → Bluetooth** for BLE scanning. Allow only the needed access for this app, or report that the permission was denied. Do not grant Full Disk Access or run the app as root.
 
+**Receiver HID is busy (`0xE00002C5`).** This is an exclusive-access conflict, not a request for a privacy permission. The serial port is separate and can still show **Connected**. If the receiver error names an app you recognize, quit it normally and refresh Device setup. If no process is named, quit likely receiver clients one at a time and refresh between attempts.
+
+To investigate without opening the device, run `ioreg -p IOService -r -c IOHIDDevice -l -w 0 | less`. Search for the receiver product with `/SlimeNRF`. Under the affected HID service, inspect each direct `IOHIDLibUserClient` child separately. A holder has `ClientOpened=Yes`, `ClientSeized=No`, and bit 0 set in `ClientOptions` (usually `1`) in its `DebugState`. Read `IOUserClientCreator` on **that same child** for the PID and process name. `ClientSeized=Yes` means that client was blocked, not that it holds the device. Registry details may be absent; do not stop a system process based on its presence in the tree. `lsof /dev/cu.*` identifies serial-port users, not HID owners.
+
 Try the preview and share your results in [GitHub Issues](https://github.com/jitingcn/SlimeNRF-Helper/issues). Include the release tag or the Actions run URL and commit ID, the DMG filename, macOS version and build (`sw_vers`), CPU or chip model, and the version shown in **Settings → About** if the app launched. Include what you did, what you observed, the text of any warning or error, and which checks you skipped. Remove device serial numbers, RF addresses, Bluetooth UUIDs, and private paths from screenshots and logs. Launch and discovery results do not verify firmware writes or physical device support.
 
 <a id="first-use"></a>

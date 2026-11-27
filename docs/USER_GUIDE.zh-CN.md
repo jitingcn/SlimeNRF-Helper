@@ -56,6 +56,10 @@ chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
 
 检查 UF2 时，macOS 可能要求为本应用开启**系统设置 → 隐私与安全性 → 文件和文件夹 → SlimeNRF Helper → 可移动宗卷**，与 BLE 扫描所需的**隐私与安全性 → 蓝牙**权限分开。仅为本应用允许本次检查所需的访问；若未授权，请在反馈中说明。不要授予完全磁盘访问权限，也不要以 root 身份运行。
 
+**接收器 HID 接口被占用（`0xE00002C5`）。** 这是独占访问冲突，不是隐私权限请求。串口是另一个接口，仍可能显示**已连接**。如果错误中列出你认识的应用，正常退出它，再刷新设备设置。若没有进程名，可逐个退出可能正在使用接收器的应用，每次退出后刷新一次。
+
+手动排查不需要打开设备。运行 `ioreg -p IOService -r -c IOHIDDevice -l -w 0 | less`，输入 `/SlimeNRF` 搜索接收器产品名。在出错的 HID 服务下，逐个查看直属的 `IOHIDLibUserClient` 子项：如果 `DebugState` 里 `ClientOpened=Yes`、`ClientSeized=No`，且 `ClientOptions` 最低位为 1（通常值就是 `1`），读取**同一子项**的 `IOUserClientCreator` 即可查看 PID 和进程名。`ClientSeized=Yes` 表示该客户端被挡住，并非占用者。系统不一定公开这些字段；不要因为某个系统进程出现在列表里就终止它。`lsof /dev/cu.*` 查到的是串口使用者，不是 HID 占用者。
+
 欢迎试用并在 [GitHub Issues](https://github.com/jitingcn/SlimeNRF-Helper/issues) 反馈。请附发布标签，或 Actions 运行链接和提交 ID；另外请附 DMG 文件名、macOS 版本和构建号（`sw_vers`）、CPU 或芯片型号，若能启动，也请附上**设置 → 关于**中显示的版本。写明操作、观察结果、警告或错误原文，以及未做的检查。分享截图或日志前，去掉设备序列号、RF 地址、蓝牙 UUID 和私有路径。启动和发现结果不能证明固件写入成功或实体设备已通过验收。
 
 <a id="first-use"></a>

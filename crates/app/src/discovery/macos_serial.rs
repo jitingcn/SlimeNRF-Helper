@@ -201,10 +201,10 @@ fn interface_name(interface: &Object) -> Option<Box<str>> {
 }
 
 // IOKit returns owned send rights for each iterator, service, and parent entry.
-struct Object(NonZeroU32);
+pub(super) struct Object(NonZeroU32);
 
 impl Object {
-    fn new(raw: io_object_t) -> Option<Self> {
+    pub(super) fn new(raw: io_object_t) -> Option<Self> {
         NonZeroU32::new(raw).map(Self)
     }
 
@@ -219,7 +219,7 @@ impl Object {
             .then_some(id)
     }
 
-    fn conforms_to(&self, class: &CStr) -> bool {
+    pub(super) fn conforms_to(&self, class: &CStr) -> bool {
         // SAFETY: `self` retains the object and the C API only reads `class`.
         unsafe { IOObjectConformsTo(self.raw(), class.as_ptr().cast_mut()) != 0 }
     }
@@ -240,7 +240,7 @@ impl Object {
         Self::new(parent)
     }
 
-    fn children(&self) -> Option<Objects> {
+    pub(super) fn children(&self) -> Option<Objects> {
         let mut iterator = 0;
         // SAFETY: the object is live, the SDK treats the plane as const, and the
         // returned owned iterator writes to initialized storage.
@@ -253,7 +253,7 @@ impl Object {
         Objects::new(iterator)
     }
 
-    fn property(&self, key: &'static str) -> Option<CFType> {
+    pub(super) fn property(&self, key: &'static str) -> Option<CFType> {
         let key = CFString::from_static_string(key);
         // SAFETY: `self` owns a live right and `key` stays valid for this call;
         // a non-null returned CF object follows the Create Rule.
@@ -268,7 +268,7 @@ impl Object {
         }
     }
 
-    fn string(&self, key: &'static str) -> Option<String> {
+    pub(super) fn string(&self, key: &'static str) -> Option<String> {
         let value = self.property(key)?.downcast_into::<CFString>()?.to_string();
         let trimmed = value.trim();
         if trimmed.is_empty() {
@@ -301,14 +301,14 @@ impl Drop for Object {
     }
 }
 
-struct Objects(Object);
+pub(super) struct Objects(Object);
 
 impl Objects {
     fn new(raw: io_object_t) -> Option<Self> {
         Object::new(raw).map(Self)
     }
 
-    fn is_valid(&self) -> bool {
+    pub(super) fn is_valid(&self) -> bool {
         // SAFETY: `self` owns an iterator obtained from IOKit.
         unsafe { IOIteratorIsValid(self.0.raw()) != 0 }
     }

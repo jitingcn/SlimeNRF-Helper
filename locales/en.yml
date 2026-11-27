@@ -809,6 +809,8 @@ devices:
       invalid_path: "Receiver has an invalid HID path (embedded NUL)"
       not_present: "Receiver no longer present"
       open: "Cannot open receiver %{receiver}: %{error}"
+      open_exclusive: "Receiver HID is busy. Quit other apps using it, then refresh. %{error}"
+      open_exclusive_owner: "Receiver HID is held by %{owner}. If this is your app, quit it and refresh. %{error}"
       read: "Cannot read receiver %{receiver}: %{error}"
       reader_start: "Cannot start receiver HID reader: %{error}"
       reader_stopped: "Receiver HID reader stopped unexpectedly"

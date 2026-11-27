@@ -809,6 +809,8 @@ devices:
       invalid_path: "接收器 HID 路径无效（含空字符）"
       not_present: "接收器已不在列表中"
       open: "无法打开接收器 %{receiver}：%{error}"
+      open_exclusive: "接收器 HID 被独占。请退出正在使用它的其他应用，再刷新。%{error}"
+      open_exclusive_owner: "接收器 HID 被 %{owner} 独占。如果是你打开的应用，请退出后刷新。%{error}"
       read: "无法读取接收器 %{receiver}：%{error}"
       reader_start: "无法启动接收器 HID 读取：%{error}"
       reader_stopped: "接收器 HID 读取意外中断"
