@@ -9,12 +9,15 @@
 
 ## [未发布]
 
+## [0.7.0] - 2026-11-27
+
 ### 新增
 
 - 新增 261127 对等中继命令卡片：直连追踪器或接收器均可查看本机中继状态；接收器还可查看诊断、切换模式、调整并保存布局，以及测试直连丢包。
 
 ### 变更
 
+- macOS 纳入正式发布。新版本会同时提供 Apple 芯片（`arm64`）和 Intel（`x64`）的无固件 DMG，与 Windows 可执行文件和 Linux AppImage 一同发布。
 - macOS 的设备设置页现在会提示接收器 HID 接口被独占；能从系统确认占用者时，一并显示进程信息。
 
 ### 修复
@@ -215,7 +218,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.6.0...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.5...v0.4.6

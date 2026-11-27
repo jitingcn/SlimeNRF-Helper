@@ -9,12 +9,15 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-27
+
 ### Added
 
 - Command cards for 261127 peer relay: read status on a directly connected tracker or receiver; use the receiver to inspect diagnostics, switch modes, configure the persistent layout and test direct-link packet loss.
 
 ### Changed
 
+- macOS joins the standard release downloads. Each new release includes separate no-firmware DMGs for Apple Silicon (`arm64`) and Intel (`x64`), alongside the Windows executable and Linux AppImage.
 - On macOS, Device setup explains when another client holds the receiver HID interface exclusively. It shows the process when macOS identifies the holder.
 
 ### Fixed
@@ -215,7 +218,8 @@ Initial standalone application version, documented from the repository's initial
 - Gyroscope calibration guides, temperature calibration analysis with SVG export, and RSSI channel analysis.
 - English and Simplified Chinese interfaces, light and dark themes, and Windows and Linux packaging with full-firmware and no-firmware build modes.
 
-[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.5...v0.4.6
