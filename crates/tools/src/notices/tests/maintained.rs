@@ -59,7 +59,7 @@ fn all_reviewed_source_texts_survive_rendering() {
     let root = crate::workspace_root();
     let loaded = load_inputs(&root, false).expect("load maintained reviewed inventory");
     let output = render(&root, &loaded).expect("render maintained reviewed inventory");
-    std::str::from_utf8(&output).expect("rendered inventory is UTF-8");
+    let output = std::str::from_utf8(&output).expect("rendered inventory is UTF-8");
     let targets: BTreeSet<_> = loaded.manifest["graphs"]
         .as_array()
         .expect("reviewed target graphs")
@@ -75,32 +75,27 @@ fn all_reviewed_source_texts_survive_rendering() {
             "x86_64-unknown-linux-gnu",
         ])
     );
-    assert!(contains_bytes(
-        &output,
-        b"Captured roles: aarch64-apple-darwin: code_candidate; x86_64-apple-darwin: code_candidate\n"
+    assert!(output.contains(
+        "Captured roles: aarch64-apple-darwin: code_candidate; x86_64-apple-darwin: code_candidate\n"
     ));
     for (key, original) in &loaded.sources {
         let encoding = loaded.manifest["sources"][key.as_str()]["encoding"]
             .as_str()
             .expect("reviewed source encoding");
-        let rendered = match encoding {
-            "utf-8" => std::str::from_utf8(original)
-                .expect("reviewed UTF-8 source")
-                .to_owned(),
-            "windows-1252" => decode_windows_1252(original),
+        let decoded;
+        let source = match encoding {
+            "utf-8" => std::str::from_utf8(original).expect("reviewed UTF-8 source"),
+            "windows-1252" => {
+                decoded = decode_windows_1252(original);
+                decoded.as_str()
+            }
             other => panic!("unexpected encoding {other:?} for source {key}"),
         };
+        // For UTF-8 sources this searches the original bytes verbatim.
         assert!(
-            contains_bytes(&output, rendered.as_bytes()),
+            !source.is_empty() && output.contains(source),
             "render omitted source {key}"
         );
-        if encoding == "utf-8" {
-            assert_eq!(
-                rendered.as_bytes(),
-                original,
-                "changed original UTF-8 source {key}"
-            );
-        }
     }
     let sources = loaded.manifest["sources"]
         .as_object()

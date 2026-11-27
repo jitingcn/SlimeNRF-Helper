@@ -20,7 +20,7 @@
 
 CLI 应用及 workspace 构建默认仍启用 `embed-firmware`。独立 checkout 没有固件载荷时，所有选择应用的 CLI 构建、运行、检查、测试和打包命令明确加 `-NoFirmware` 或 `--no-firmware`，直接 Cargo 用 `--no-default-features`。完整构建必须提供预期固件，不能用无固件包代替完整包验收。
 
-脚本支持 build/run/test/check/clippy/fmt/clean：build 默认 Release，run/test/check/clippy 默认开发配置；显式 Debug/Release 互斥。默认 build/run 选择桌面应用，test/check/clippy 覆盖 workspace，fmt 覆盖全部成员；显式 Cargo 包选择优先。开发 profile 中应用使用优化级别 0，recording 和其他依赖使用级别 1；Cargo 默认的 build override 仍不优化。Release 使用优化级别 2、fat LTO、单个 codegen unit，并剥离符号。权威配置见 [Cargo.toml](../Cargo.toml)；package 只取实际 Release 产物，不用开发版替代。
+脚本支持 build/run/test/check/clippy/fmt/clean：build 默认 Release，run/test/check/clippy 默认开发配置；显式 Debug/Release 互斥。默认 build/run 选择桌面应用，test/check/clippy 覆盖 workspace，fmt 覆盖全部成员；显式 Cargo 包选择优先。Release 使用 ThinLTO。开发和发布配置见[工作区清单](../Cargo.toml)；打包只使用实际 Release 产物。
 
 Cargo 默认根据可用 CPU 自动选择构建并发数，可用 `CARGO_BUILD_JOBS` 覆盖。测试操作中 nextest 的 `--build-jobs` 控制构建并发，而 `-j` / `--jobs` 控制测试执行并发。
 

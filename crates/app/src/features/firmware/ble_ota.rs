@@ -1144,6 +1144,7 @@ mod tests {
     #[test]
     fn cleanup_deadlines_drop_pending_operations_and_still_disconnect() {
         runtime().unwrap().block_on(async {
+            tokio::time::pause();
             let actions = Arc::new(Mutex::new(Vec::new()));
             let (abort, abort_gate) = oneshot::channel();
             let (unsubscribe, unsubscribe_gate) = oneshot::channel();

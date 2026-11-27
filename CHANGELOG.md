@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+
+- Release builds use ThinLTO instead of fat LTO.
+
 ## [0.7.0] - 2026-11-27
 
 ### Added

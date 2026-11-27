@@ -43,6 +43,6 @@ lto = "off"
 
 [profile.release]
 opt-level = 2
-lto = "fat"
+lto = "thin"
 codegen-units = 1
 strip = "symbols"
