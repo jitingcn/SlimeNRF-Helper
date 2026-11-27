@@ -419,6 +419,15 @@ commands:
       none: "No parameter"
       pair_count: "Number to pair (firmware syntax)"
       pairing_data: "Tracker pairing data (firmware syntax)"
+      relay_block: "Enter a tracker slot (0–15) and loss percentage (0–100), separated by a space. Set the percentage to 0 to clear the test."
+      relay_blockmask: "Enter a 16-bit mask with up to 3 bits set and a duration of 1–60 seconds, separated by a space. Use 0 0 to clear."
+      relay_control_repeat_mode: "0 = off; 1 = before repairs; 2 = after repairs"
+      relay_max_repairs: "Maximum repairs: 1–5"
+      relay_max_trackers: "Maximum relay members: 1–16"
+      relay_repair_floor: "Minimum repairs: 0 through the current maximum"
+      relay_slot_ticks: "Slot width: 16 ticks; 15 only on experimental builds"
+      relay_tps_max: "TPS cap: current target through 32768"
+      relay_tps_min: "TPS target: 1 through the current cap"
       remove_entry: "Entry to remove (firmware syntax)"
       reset: "Reset target: zro, acc, bat, mag, tcal or fusion"
       sensitivity: "Comma-separated angular errors in degrees: x,y,z; or reset"
@@ -455,6 +464,9 @@ commands:
     add:
       description: "Add a tracker record to the receiver using the supplied pairing data."
       title: "Add tracker"
+    tracker_relay_status:
+      title: "Tracker relay status"
+      description: "Show this tracker's peer relay state on its own serial console. Requires relay-enabled tracker firmware."
     battery:
       description: "Read the tracker's battery status."
       title: "Battery"
@@ -539,6 +551,54 @@ commands:
     receiver_pair:
       description: "Put the receiver into pairing mode to register trackers."
       title: "Enter pairing mode"
+    relay_auto:
+      description: "Use direct tracking on healthy links and allow a relay-capable receiver to engage peer relay when links degrade. Also known as relay on."
+      title: "Automatic peer relay"
+    relay_block:
+      description: "On a relay-capable receiver, simulate packet loss on one tracker's direct uplink until cleared or rebooted."
+      title: "Test direct uplink loss"
+    relay_blockmask:
+      description: "On a relay-capable receiver, temporarily block direct uplinks for the chosen tracker bits. Bit 0 selects tracker 0. Use decimal, hexadecimal (0x) or octal (leading 0)."
+      title: "Test timed uplink blocking"
+    relay_diag:
+      description: "Read peer relay timing errors and live member leases on a relay-capable receiver."
+      title: "Peer relay diagnostics"
+    relay_force:
+      description: "Request peer relay whenever the fleet is eligible, even when direct links are healthy. The mode resets at reboot."
+      title: "Force peer relay"
+    relay_layout:
+      description: "Read saved, applied and announced peer relay layouts on a relay-capable receiver."
+      title: "Show peer relay layout"
+    relay_layout_control_repeat_mode:
+      description: "Save where to repeat the control frame. The experimental repeat is used only when there is room in the layout."
+      title: "Set relay control repeat mode"
+    relay_layout_max_repairs:
+      description: "Save the maximum number of relay repair slots. A static repair floor follows this setting."
+      title: "Set maximum relay repairs"
+    relay_layout_max_trackers:
+      description: "Save the maximum number of trackers that can participate in a peer relay layout."
+      title: "Set relay member limit"
+    relay_layout_repair_floor:
+      description: "Save the minimum number of relay repair slots. Below the current maximum, the receiver uses experimental on-demand repair."
+      title: "Set relay repair floor"
+    relay_layout_slot_ticks:
+      description: "Save the peer relay slot width. A width of 15 ticks requires firmware with experimental slot support."
+      title: "Set relay slot width"
+    relay_layout_tps_max:
+      description: "Save the maximum peer relay transmissions per second. The cap cannot be below the current target."
+      title: "Set relay TPS cap"
+    relay_layout_tps_min:
+      description: "Save the peer relay TPS target used to budget repair slots, not a guaranteed transmission rate. It cannot exceed the current cap."
+      title: "Set relay TPS target"
+    relay_off:
+      description: "Stop requesting peer relay and schedule a return to direct tracking. The mode resets at reboot."
+      title: "Disable peer relay"
+    relay_pool:
+      description: "Read direct-link and relay repair-slot counters. Requires receiver firmware built with the relay frame ledger."
+      title: "Peer relay slot counters"
+    relay_status:
+      description: "Read peer relay mode, fleet eligibility, active profile and member mask. Requires relay-capable receiver firmware."
+      title: "Peer relay status"
     remote_reset:
       description: "Reset tracker calibration: zro, acc, bat, mag or tcal. Fusion resets only the running fusion state; sensitivity uses sens reset."
       title: "Reset calibration"

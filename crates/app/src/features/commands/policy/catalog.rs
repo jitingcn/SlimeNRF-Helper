@@ -4,6 +4,7 @@ const CHANNEL: ParameterSpec = ParameterSpec::Integer {
     min: 0,
     max: 100,
     default: "0",
+    hint: "commands.parameter.hint.channel",
 };
 const SENS_AUTO: ParameterSpec = ParameterSpec::SensitivityAuto;
 const RESET: ParameterSpec = ParameterSpec::RemoteReset;
@@ -69,6 +70,17 @@ pub(super) static PRESETS: &[Preset] = &[
         "commands.preset.battery.title",
         "commands.preset.battery.description",
         "battery",
+        ParameterSpec::None,
+        TRACKER,
+        false,
+        false
+    ),
+    entry!(
+        "tracker-relay-status",
+        "commands.group.diagnostics",
+        "commands.preset.tracker_relay_status.title",
+        "commands.preset.tracker_relay_status.description",
+        "relay",
         ParameterSpec::None,
         TRACKER,
         false,
@@ -854,6 +866,217 @@ pub(super) static PRESETS: &[Preset] = &[
         RECEIVER,
         false,
         false
+    ),
+    entry!(
+        "relay-status",
+        "commands.group.radio",
+        "commands.preset.relay_status.title",
+        "commands.preset.relay_status.description",
+        "relay",
+        ParameterSpec::None,
+        RECEIVER,
+        false,
+        false
+    ),
+    entry!(
+        "relay-diag",
+        "commands.group.radio",
+        "commands.preset.relay_diag.title",
+        "commands.preset.relay_diag.description",
+        "relay diag",
+        ParameterSpec::None,
+        RECEIVER,
+        false,
+        false
+    ),
+    entry!(
+        "relay-pool",
+        "commands.group.radio",
+        "commands.preset.relay_pool.title",
+        "commands.preset.relay_pool.description",
+        "relay pool",
+        ParameterSpec::None,
+        RECEIVER,
+        false,
+        false
+    ),
+    entry!(
+        "relay-auto",
+        "commands.group.radio",
+        "commands.preset.relay_auto.title",
+        "commands.preset.relay_auto.description",
+        "relay auto",
+        ParameterSpec::None,
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-force",
+        "commands.group.radio",
+        "commands.preset.relay_force.title",
+        "commands.preset.relay_force.description",
+        "relay force",
+        ParameterSpec::None,
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-off",
+        "commands.group.radio",
+        "commands.preset.relay_off.title",
+        "commands.preset.relay_off.description",
+        "relay off",
+        ParameterSpec::None,
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-layout",
+        "commands.group.radio",
+        "commands.preset.relay_layout.title",
+        "commands.preset.relay_layout.description",
+        "relay layout",
+        ParameterSpec::None,
+        RECEIVER,
+        false,
+        false
+    ),
+    entry!(
+        "relay-layout-max-trackers",
+        "commands.group.radio",
+        "commands.preset.relay_layout_max_trackers.title",
+        "commands.preset.relay_layout_max_trackers.description",
+        "relay layout max_trackers",
+        ParameterSpec::Integer {
+            min: 1,
+            max: 16,
+            default: "16",
+            hint: "commands.parameter.hint.relay_max_trackers"
+        },
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-layout-max-repairs",
+        "commands.group.radio",
+        "commands.preset.relay_layout_max_repairs.title",
+        "commands.preset.relay_layout_max_repairs.description",
+        "relay layout max_repairs",
+        ParameterSpec::Integer {
+            min: 1,
+            max: 5,
+            default: "5",
+            hint: "commands.parameter.hint.relay_max_repairs"
+        },
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-layout-repair-floor",
+        "commands.group.radio",
+        "commands.preset.relay_layout_repair_floor.title",
+        "commands.preset.relay_layout_repair_floor.description",
+        "relay layout repair_floor",
+        ParameterSpec::Integer {
+            min: 0,
+            max: 5,
+            default: "5",
+            hint: "commands.parameter.hint.relay_repair_floor"
+        },
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-layout-control-repeat-mode",
+        "commands.group.radio",
+        "commands.preset.relay_layout_control_repeat_mode.title",
+        "commands.preset.relay_layout_control_repeat_mode.description",
+        "relay layout control_repeat_mode",
+        ParameterSpec::Integer {
+            min: 0,
+            max: 2,
+            default: "0",
+            hint: "commands.parameter.hint.relay_control_repeat_mode"
+        },
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-layout-slot-ticks",
+        "commands.group.radio",
+        "commands.preset.relay_layout_slot_ticks.title",
+        "commands.preset.relay_layout_slot_ticks.description",
+        "relay layout slot_ticks",
+        ParameterSpec::Integer {
+            min: 15,
+            max: 16,
+            default: "16",
+            hint: "commands.parameter.hint.relay_slot_ticks"
+        },
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-layout-tps-min",
+        "commands.group.radio",
+        "commands.preset.relay_layout_tps_min.title",
+        "commands.preset.relay_layout_tps_min.description",
+        "relay layout tps_min",
+        ParameterSpec::Integer {
+            min: 1,
+            max: 32768,
+            default: "120",
+            hint: "commands.parameter.hint.relay_tps_min"
+        },
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-layout-tps-max",
+        "commands.group.radio",
+        "commands.preset.relay_layout_tps_max.title",
+        "commands.preset.relay_layout_tps_max.description",
+        "relay layout tps_max",
+        ParameterSpec::Integer {
+            min: 1,
+            max: 32768,
+            default: "120",
+            hint: "commands.parameter.hint.relay_tps_max"
+        },
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-block",
+        "commands.group.radio",
+        "commands.preset.relay_block.title",
+        "commands.preset.relay_block.description",
+        "relay block",
+        ParameterSpec::RelayBlock,
+        RECEIVER,
+        false,
+        true
+    ),
+    entry!(
+        "relay-blockmask",
+        "commands.group.radio",
+        "commands.preset.relay_blockmask.title",
+        "commands.preset.relay_blockmask.description",
+        "relay blockmask",
+        ParameterSpec::RelayBlockMask,
+        RECEIVER,
+        false,
+        true
     ),
 ];
 

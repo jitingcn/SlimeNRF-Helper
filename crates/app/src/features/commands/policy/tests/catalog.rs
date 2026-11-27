@@ -78,6 +78,72 @@ fn information_commands_are_direct_only_for_all_roles() {
         );
     }
 }
+
+#[test]
+fn relay_controls_target_only_the_receiver_and_review_link_changes() {
+    let receiver = direct(DeviceRole::Receiver);
+    let tracker = direct(DeviceRole::Tracker);
+    let status = get("tracker-relay-status");
+    let local_status = CommandSnapshot::capture(status, "", tracker).unwrap();
+    assert_eq!(local_status.command(), "relay");
+    assert!(local_status.authorize(tracker, false).is_ok());
+    for wrong in [receiver, forwarded(), broadcast()] {
+        assert!(CommandSnapshot::capture(status, "", wrong).is_err());
+    }
+    for (id, parameter, payload, changes_link) in [
+        ("relay-status", "", "relay", false),
+        ("relay-diag", "", "relay diag", false),
+        ("relay-pool", "", "relay pool", false),
+        ("relay-layout", "", "relay layout", false),
+        ("relay-auto", "", "relay auto", true),
+        ("relay-force", "", "relay force", true),
+        ("relay-off", "", "relay off", true),
+        (
+            "relay-layout-tps-min",
+            "100",
+            "relay layout tps_min 100",
+            true,
+        ),
+        ("relay-block", "15 100", "relay block 15 100", true),
+        ("relay-blockmask", "7 60", "relay blockmask 7 60", true),
+    ] {
+        let card = get(id);
+        let snapshot = CommandSnapshot::capture(card, parameter, receiver).unwrap();
+        assert_eq!(snapshot.command(), payload);
+        assert_eq!(snapshot.authorize(receiver, false).is_err(), changes_link);
+        assert!(snapshot.authorize(receiver, true).is_ok());
+        for wrong in [direct(DeviceRole::Tracker), forwarded(), broadcast()] {
+            assert!(
+                CommandSnapshot::capture(card, parameter, wrong).is_err(),
+                "{id}"
+            );
+        }
+    }
+}
+
+#[test]
+fn relay_packet_loss_inputs_stay_within_firmware_slot_and_time_limits() {
+    for (id, valid, invalid) in [
+        (
+            "relay-block",
+            &["0 0", "15 100"][..],
+            &["16 0", "0 101", "0", "0 0 1"][..],
+        ),
+        (
+            "relay-blockmask",
+            &["0 0", "0x8003 60", "7 1"],
+            &["15 1", "1 0", "1 61", "0x10000 1"],
+        ),
+    ] {
+        for parameter in valid {
+            assert!(get(id).build(parameter).is_ok(), "{id}: {parameter}");
+        }
+        for parameter in invalid {
+            assert!(get(id).build(parameter).is_err(), "{id}: {parameter}");
+        }
+    }
+}
+
 #[test]
 fn unknown_roles_only_have_safe_generic_info_and_help() {
     let commands: Vec<_> = presets(CommandContext::Direct(DeviceRole::Unknown))

@@ -182,6 +182,12 @@ Click a group heading to collapse or expand its command cards. Groups start expa
 
 Direct tracker commands start with **Information**. Both direct and remote tracker commands then show **System**, **Diagnostics**, **Connection**, **Sensor calibration**, and **Magnetometer**, followed by **Temperature calibration** and **Reset**; remote trackers do not have an **Information** group. The remote order applies to the current remote tracker, selected trackers, and all-online commands. Receivers and devices with unknown roles still start with **Information**.
 
+With 261127 relay-enabled tracker firmware, connect to the tracker's own serial port and use `relay` to read its local status. It cannot change the relay mode. The nRF52833 **DataCollect** receiver build does not include peer relay.
+
+On a directly connected receiver running relay-enabled [261127 firmware](https://github.com/jitingcn/SlimeVR-Tracker-nRF/releases/tag/261127), use `relay` for status, `relay layout` for the current layout, or `relay diag` for diagnostics. `relay pool` prints frame and repair-slot counts only on builds with the frame ledger enabled. These are receiver commands, not `send` commands for trackers. Both the receiver and trackers need compatible firmware for relay to operate.
+
+The receiver boots in `relay auto` (`relay on` is an alias). Use `relay off` for direct TDMA or `relay force` to keep an eligible group in relay mode until reboot. Unlike the mode, `relay layout <key> <value>` is saved across reboots. `relay block` and `relay blockmask` deliberately drop direct uplink packets for testing; they do not fix a weak link.
+
 - To command selected trackers, check each card, preview every `send <slot> <command>`, and confirm. Different slots on one receiver execute separately. They are not deduplicated by serial port. A single remote card or multiple remote targets require known addresses, a unique receiver serial port, and recent sensor activity. A unique connected direct endpoint does not use this wireless-activity check.
 - To command all online devices, use the receiver's **Select all online** to set the command scope, then confirm `send all <command>`. The receiver determines the actual online scope. It is neither the host's checked subset nor every historical device.
 - For a direct serial batch, check serial port rows and enter the command in **Direct serial batch**. Click **Review selected…**. After the explicit targets finish connecting, click **Confirm and send**. Excluded targets do not cause an automatic change to broadcast.

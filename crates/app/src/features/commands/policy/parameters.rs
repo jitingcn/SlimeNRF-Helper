@@ -11,6 +11,7 @@ pub enum ParameterSpec {
         min: u32,
         max: u32,
         default: &'static str,
+        hint: &'static str,
     },
     OptionalInteger {
         min: u32,
@@ -22,6 +23,8 @@ pub enum ParameterSpec {
     },
     SensitivityAuto,
     RemoteReset,
+    RelayBlock,
+    RelayBlockMask,
 }
 
 impl ParameterSpec {
@@ -32,6 +35,7 @@ impl ParameterSpec {
             Self::SensitivityAuto => "x",
             Self::RemoteReset => "zro",
             Self::Integer { default, .. } => default,
+            Self::RelayBlock | Self::RelayBlockMask => "0 0",
         }
     }
 
@@ -39,11 +43,12 @@ impl ParameterSpec {
         match self {
             Self::None => "commands.parameter.hint.none",
             Self::Text { hint } => hint,
-            Self::Integer { .. } => "commands.parameter.hint.channel",
-            Self::OptionalInteger { hint, .. } => hint,
+            Self::Integer { hint, .. } | Self::OptionalInteger { hint, .. } => hint,
             Self::Sensitivity { .. } => "commands.parameter.hint.sensitivity",
             Self::SensitivityAuto => "commands.parameter.hint.sensitivity_auto",
             Self::RemoteReset => "commands.parameter.hint.reset",
+            Self::RelayBlock => "commands.parameter.hint.relay_block",
+            Self::RelayBlockMask => "commands.parameter.hint.relay_blockmask",
         }
     }
 
@@ -64,6 +69,22 @@ impl ParameterSpec {
             Self::Text { .. } => Ok(value),
             Self::Integer { min, max, .. } | Self::OptionalInteger { min, max, .. } => {
                 validate_integer(value, min, max)?;
+                Ok(value)
+            }
+            Self::RelayBlock | Self::RelayBlockMask => {
+                let mut tokens = value.split(' ').filter(|token| !token.is_empty());
+                let (Some(first), Some(second), None) =
+                    (tokens.next(), tokens.next(), tokens.next())
+                else {
+                    return Err(tr(self.hint()));
+                };
+                if self == Self::RelayBlock {
+                    validate_integer(first, 0, 15)?;
+                    validate_integer(second, 0, 100)?;
+                } else {
+                    let mask = relay_block_mask(first).ok_or_else(|| tr(self.hint()))?;
+                    validate_integer(second, u32::from(mask != 0), 60)?;
+                }
                 Ok(value)
             }
             Self::SensitivityAuto => {
@@ -119,6 +140,26 @@ impl ParameterSpec {
             }
         }
     }
+}
+
+// The receiver uses strtoul with base zero; a leading zero means octal.
+fn relay_block_mask(value: &str) -> Option<u16> {
+    let (digits, radix) = if let Some(hex) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        (hex, 16)
+    } else if value.starts_with('0') {
+        (value, 8)
+    } else {
+        (value, 10)
+    };
+    if !digits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    u16::from_str_radix(digits, radix)
+        .ok()
+        .filter(|mask| mask.count_ones() <= 3)
 }
 
 fn validate_integer(value: &str, min: u32, max: u32) -> Result<(), String> {

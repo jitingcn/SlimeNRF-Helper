@@ -34,6 +34,11 @@ pub fn command_tone(command: &str) -> CommandTone {
         || (is("mag") && sub("cal"))
         || is("sens")
         || is("channel")
+        || (is("relay")
+            && (["auto", "on", "force", "off", "block", "blockmask"]
+                .into_iter()
+                .any(sub)
+                || (sub("layout") && !third.is_empty())))
         || is("tdma")
         || (is("test") && sub("on"))
         || (is("tcal") && sub("heat"))

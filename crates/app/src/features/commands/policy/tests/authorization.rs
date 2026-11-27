@@ -342,6 +342,7 @@ fn receiver_wide_semantics_cannot_be_bypassed_by_missing_preset_metadata_or_cust
             min: 0,
             max: 100,
             default: "0",
+            hint: "commands.parameter.hint.channel",
         },
         ..CUSTOM
     };

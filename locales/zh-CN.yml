@@ -419,6 +419,15 @@ commands:
       none: "无需参数"
       pair_count: "配对数量（固件语法）"
       pairing_data: "追踪器配对数据（固件语法）"
+      relay_block: "输入追踪器槽位（0–15）和丢包百分比（0–100），用空格分隔。百分比设为 0 即可结束测试。"
+      relay_blockmask: "输入 16 位掩码（最多置 3 位）和持续时间（1–60 秒），用空格分隔。输入 0 0 解除屏蔽。"
+      relay_control_repeat_mode: "0 = 关闭；1 = 在补发前重复；2 = 在补发后重复"
+      relay_max_repairs: "补发时隙上限：1–5"
+      relay_max_trackers: "中继成员上限：1–16"
+      relay_repair_floor: "补发时隙下限：0 至当前上限"
+      relay_slot_ticks: "时隙宽度：16 tick；15 tick 仅限实验版固件"
+      relay_tps_max: "TPS 上限：当前目标值至 32768"
+      relay_tps_min: "TPS 目标：1 至当前上限"
       remove_entry: "要移除的条目（固件语法）"
       reset: "重置目标：zro、acc、bat、mag、tcal 或 fusion"
       sensitivity: "以逗号分隔的角度误差（度）：x,y,z；或输入 reset 重置"
@@ -455,6 +464,9 @@ commands:
     add:
       description: "按输入的配对数据向接收器添加追踪器记录。"
       title: "添加追踪器"
+    tracker_relay_status:
+      title: "追踪器中继状态"
+      description: "在追踪器自己的串口上查看对等中继状态。需要启用了中继的追踪器固件。"
     battery:
       description: "读取追踪器的电池状态。"
       title: "电池"
@@ -539,6 +551,54 @@ commands:
     receiver_pair:
       description: "使接收器进入配对模式，以注册追踪器。"
       title: "进入配对模式"
+    relay_auto:
+      description: "链路稳定时让追踪器直连接收器，链路变差时允许启用追踪器间中继。需要接收器支持中继，等同于 relay on。"
+      title: "自动中继"
+    relay_block:
+      description: "在支持中继的接收器上模拟一个追踪器的直连上行丢包，直到清除设置或重启。"
+      title: "测试直连上行丢包"
+    relay_blockmask:
+      description: "在支持中继的接收器上暂时阻断所选追踪器的直连上行。最低位对应槽位 0；支持十进制、十六进制（0x）和八进制（前导 0）。"
+      title: "测试限时阻断上行"
+    relay_diag:
+      description: "查看支持中继的接收器上的时序错误和各成员的有效期。"
+      title: "中继诊断"
+    relay_force:
+      description: "只要设备满足中继条件就请求使用中继，即使直连链路稳定。重启后恢复默认模式。"
+      title: "强制中继"
+    relay_layout:
+      description: "查看支持中继的接收器上已保存、已生效和即将启用的中继布局。"
+      title: "查看中继布局"
+    relay_layout_control_repeat_mode:
+      description: "保存实验性的控制帧重复位置。布局有足够的时隙时才会启用重复。"
+      title: "设置中继控制帧重复模式"
+    relay_layout_max_repairs:
+      description: "保存中继补发时隙上限。采用固定补发模式时，下限随上限一起变化。"
+      title: "设置中继补发时隙上限"
+    relay_layout_max_trackers:
+      description: "保存中继布局可容纳的追踪器数量上限。"
+      title: "设置中继成员上限"
+    relay_layout_repair_floor:
+      description: "保存中继补发时隙下限。下限低于当前上限时启用实验性的按需补发。"
+      title: "设置中继补发时隙下限"
+    relay_layout_slot_ticks:
+      description: "保存中继时隙宽度。选择 15 tick 需要启用实验性时隙支持的固件。"
+      title: "设置中继时隙宽度"
+    relay_layout_tps_max:
+      description: "保存中继每秒传输次数的上限，不得低于当前目标值。"
+      title: "设置中继 TPS 上限"
+    relay_layout_tps_min:
+      description: "保存分配补发时隙时使用的 TPS 目标值，不保证实际传输速率。目标值不得高于当前上限。"
+      title: "设置中继 TPS 目标"
+    relay_off:
+      description: "停止请求中继，并准备切回直连。重启后恢复默认模式。"
+      title: "关闭中继"
+    relay_pool:
+      description: "查看直连和中继补发时隙计数。需要启用中继帧统计的接收器固件。"
+      title: "中继时隙计数"
+    relay_status:
+      description: "查看中继模式、设备是否满足中继条件、当前配置和成员掩码。需要支持中继的接收器固件。"
+      title: "中继状态"
     remote_reset:
       description: "重置追踪器校准：zro、acc、bat、mag 或 tcal。fusion 仅重置运行中的融合状态；重置灵敏度请使用 sens reset。"
       title: "重置校准"

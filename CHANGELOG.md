@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- Command cards for 261127 peer relay: read status on a directly connected tracker or receiver; use the receiver to inspect diagnostics, switch modes, configure the persistent layout and test direct-link packet loss.
+
 ### Changed
 
 - On macOS, Device setup explains when another client holds the receiver HID interface exclusively. It shows the process when macOS identifies the holder.

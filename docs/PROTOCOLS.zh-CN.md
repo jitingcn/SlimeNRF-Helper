@@ -73,6 +73,8 @@ OpenDFU 根据原生 USB 接口描述识别引导程序，仅在该描述缺失�
 
 接收器 CDC 分类要求 USB 厂商 ID `0x1209`、产品 ID `0x7690`，以及去除首尾空白后精确匹配的原生接口描述 `SlimeNRF Raw Data CDC`。产品名或显示标签不能代替该描述。共享清单将 raw 数据接口与上下文控制台关联到一个唯一识别的 HID 接收器。唯一剩余的非 raw 候选无需接口名称也可作为控制台。重复或歧义证据拒绝关联，多个剩余候选不提供控制台。命令使用控制台准入，CDC 采集则仅准入显式 raw 数据接口。
 
+[261127 版本](https://github.com/jitingcn/SlimeVR-Tracker-nRF/releases/tag/261127)的[追踪器](https://github.com/jitingcn/SlimeVR-Tracker-nRF/blob/64bc4229717213820258ddc39a3bc87dde790991/src/console.c)与[接收器](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/e8a45de609788cf550cdc15f24ad66b500852c9e/src/console.c#L1045-L1099)分别解析各自的串口命令。启用 `CONFIG_CONNECTION_RELAY` 的追踪器在本机控制台用 `relay` 查询状态。切换模式、调整布局和丢包测试只在启用 `CONFIG_RELAY` 的接收器上提供，中继命令不通过接收器转发给追踪器。[接收器运行策略](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/e8a45de609788cf550cdc15f24ad66b500852c9e/docs/relay-runtime.md)区分了重启即恢复默认的模式和持久保存的布局设置。
+
 通用 HID 命令能力按 [rcv_hid_cmd.h](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/9ee5e788346018a0b390bdacec372cc6f7ea7000/src/rcv_hid_cmd.h) 与 [rcv_cmd.c](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/9ee5e788346018a0b390bdacec372cc6f7ea7000/src/rcv_cmd.c) 核实：type 254 命令、type 251 ACK，参数需二进制编码，远程串行且 STARTED 不等于最终 ACK；`all` 指活跃追踪器。info/list/uptime 等文本仍需 USB CDC。Tracker 的该版 hid.c 只有 INPUT 报告。现有 OTA 与采集专用 HID 控制不等于已交付通用 HID 命令面板；不能失败后自动跨路由重发。
 
 事件依据 [events-watch c6cfb46d](https://github.com/jitingcn/SlimeVR-Tracker-nRF-Receiver/blob/c6cfb46df2d527052bfa8a4b92f9d1a7c4f7e478/scripts/hid_cmd.py)，保留 tracker/receiver observation、snapshot、boot/operation/event sequence、用户或自动来源、阶段、结果及原因。ACK 不冒充校准完成，未知字段保留原值。

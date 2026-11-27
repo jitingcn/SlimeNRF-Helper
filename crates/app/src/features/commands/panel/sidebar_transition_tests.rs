@@ -922,29 +922,26 @@ mod search_ui_tests {
                 CommandContext::Direct(DeviceRole::Receiver)
             );
 
-            replace_search(window, cx, "channel");
-            assert_cards(
-                window,
-                &["receiver-channel", "receiver-clearchannel", "rssi-scan"],
-            );
-            window.click("sidebar-preset:receiver-channel", cx);
+            replace_search(window, cx, "relay layout tps_min");
+            assert_cards(window, &["relay-layout-tps-min"]);
+            window.click("sidebar-preset:relay-layout-tps-min", cx);
             let workbench = fixture.workbench.read(cx);
             assert!(
                 matches!(
                     &workbench.sidebar.pending,
-                    Some(PendingCommand::Parameter { preset, .. }) if preset.id == "receiver-channel"
+                    Some(PendingCommand::Parameter { preset, .. }) if preset.id == "relay-layout-tps-min"
                 ),
                 "the filtered card must open its own parameter editor"
             );
             assert!(workbench.batch_history.is_empty());
             assert!(workbench.manager.writes_idle(RECEIVER_PORT));
             window.click("cancel-sidebar-command", cx);
-            assert_eq!(window.find("command-search").value(), Some("channel"));
-            assert_eq!(fixture.workbench.read(cx).command_search.entity_id(), input_id);
-            assert_cards(
-                window,
-                &["receiver-channel", "receiver-clearchannel", "rssi-scan"],
+            assert_eq!(
+                window.find("command-search").value(),
+                Some("relay layout tps_min")
             );
+            assert_eq!(fixture.workbench.read(cx).command_search.entity_id(), input_id);
+            assert_cards(window, &["relay-layout-tps-min"]);
         })
         .expect("exercise context filtering and the non-sending card action");
     }
