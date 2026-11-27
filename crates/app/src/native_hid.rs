@@ -72,6 +72,11 @@ mod darwin {
             path: CString,
             reply: SyncSender<HidResult<HidDevice>>,
         },
+        #[cfg(test)]
+        GetOpenExclusive {
+            snapshot: Arc<HidApi>,
+            reply: SyncSender<bool>,
+        },
     }
 
     unsafe extern "C" {
@@ -90,9 +95,13 @@ mod darwin {
                     path,
                     reply,
                 } => {
-                    // The shared-device feature sets the nonexclusive default
-                    // on init. Each Send handle has its own HIDAPI read thread.
+                    // Darwin HIDAPI defaults to exclusive opens. Enumeration
+                    // does not seize devices.
                     let _ = reply.send(snapshot.open_path(&path));
+                }
+                #[cfg(test)]
+                Request::GetOpenExclusive { snapshot, reply } => {
+                    let _ = reply.send(snapshot.get_open_exclusive());
                 }
             }
         }
@@ -116,6 +125,46 @@ mod darwin {
 
     pub(super) fn shutdown() {
         OWNER.shutdown();
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{OWNER, Request, enumerate, shutdown};
+        use std::process::Command;
+
+        #[test]
+        fn native_owner_uses_exclusive_open_mode() {
+            // The owner and HIDAPI context are process-global. Isolate startup
+            // and terminal shutdown from other tests that may use native HID.
+            const CHILD: &str = "SLIMENRF_TEST_MACOS_HID_CHILD";
+            if std::env::var_os(CHILD).is_some() {
+                let snapshot = enumerate().expect("native HID owner should initialize");
+                let exclusive =
+                    OWNER.request(|reply| Request::GetOpenExclusive { snapshot, reply });
+                shutdown();
+                assert!(
+                    exclusive.expect("native HID owner should report its open mode"),
+                    "Darwin HID opens should be exclusive"
+                );
+                return;
+            }
+
+            let output = Command::new(std::env::current_exe().expect("locate test executable"))
+                .args([
+                    "--exact",
+                    "native_hid::darwin::tests::native_owner_uses_exclusive_open_mode",
+                    "--nocapture",
+                ])
+                .env(CHILD, "1")
+                .output()
+                .expect("run isolated native HID test");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                output.status.success() && stdout.contains("running 1 test"),
+                "isolated native HID test failed or did not run:\n{stdout}\n{stderr}"
+            );
+        }
     }
 }
 

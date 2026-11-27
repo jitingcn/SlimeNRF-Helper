@@ -18,6 +18,7 @@
 ### 变更
 
 - macOS 纳入正式发布。新版本会同时提供 Apple 芯片（`arm64`）和 Intel（`x64`）的无固件 DMG，与 Windows 可执行文件和 Linux AppImage 一同发布。
+- macOS 上的 Helper 现独占打开接收器 HID 接口，包括被动监听时，以减少其他应用对 ESB OTA 的干扰。要让其他应用访问接收器 HID，请先退出 Helper。独立的串口不受影响。
 - macOS 的设备设置页现在会提示接收器 HID 接口被独占；能从系统确认占用者时，一并显示进程信息。
 
 ### 修复

@@ -18,6 +18,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Changed
 
 - macOS joins the standard release downloads. Each new release includes separate no-firmware DMGs for Apple Silicon (`arm64`) and Intel (`x64`), alongside the Windows executable and Linux AppImage.
+- macOS now opens receiver HID exclusively, including for passive listening, to reduce interference during ESB OTA. Quit Helper before using receiver HID in another app. The separate serial interface is unaffected.
 - On macOS, Device setup explains when another client holds the receiver HID interface exclusively. It shows the process when macOS identifies the holder.
 
 ### Fixed

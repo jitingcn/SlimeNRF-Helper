@@ -3,7 +3,7 @@
   "input_sha256": {
     "Cargo.lock": "e5bc722fd3fbe69f4486fe885c7be6ad2e66ee08736136cd10669496f2476b60",
     "Cargo.toml": "f570f4116195b53781aeb7b7d8ba9e48826a18b2a41904c2d6053544981b6852",
-    "crates/app/Cargo.toml": "6a334f8c7c9c1d5bee5c4c9b2e8311bfe975be914c415b47ec566d2b5f42fc85",
+    "crates/app/Cargo.toml": "ace9a253f6fed4b00d038ebb7765fe41ad0b3db0c461961c7afece17ba725131",
     "crates/firmware-image/Cargo.toml": "d3bdd031e217e7ec80c7ffec79968d86394638f0e241f058111edd40753319e5",
     "crates/recording/Cargo.toml": "036459dd38d91f190a7f1c2d050c43365e9a940b645dbd49cb77c8c2f66c1675",
     "crates/terminal-core/Cargo.toml": "b810a664285c398cdd98bdc751d72fd5c51fcc6af9723f8cb5edcce0f554ee7f",
@@ -25,7 +25,7 @@
   },
   "manifest_semantic_sha256": {
     "Cargo.toml": "f0b54874c1c528fea1e1a6dcc7ce7101609e4e23e2cc655c77b50f14c736350a",
-    "crates/app/Cargo.toml": "fc7abc900b8d3600715d18068a79c5b1ef5cf26ac245ab5f92807eaebb500a0e",
+    "crates/app/Cargo.toml": "cd74f3e5f8fe03cf0ebf5afd106a145ee4548c7e4336dfeacdd50971b34df86a",
     "crates/firmware-image/Cargo.toml": "651bec200844128d5050f5fb910675c23b6ee90aab3e692fa973a386a49a3fc4",
     "crates/recording/Cargo.toml": "c0aeb10e4f4c921985c6a946d1d3c0e81f123ee411ebeeb1e6f211fd001d637d",
     "crates/terminal-core/Cargo.toml": "ad9ab1de52cf9551fd2738cb02712dd3a01431ea053d26a95588f660d2178ba4",
@@ -12741,22 +12741,18 @@
       "target_features": {
         "x86_64-pc-windows-msvc": [
           "linux-native",
-          "macos-shared-device",
           "windows-native"
         ],
         "x86_64-unknown-linux-gnu": [
           "linux-native",
-          "macos-shared-device",
           "windows-native"
         ],
         "aarch64-apple-darwin": [
           "linux-native",
-          "macos-shared-device",
           "windows-native"
         ],
         "x86_64-apple-darwin": [
           "linux-native",
-          "macos-shared-device",
           "windows-native"
         ]
       },
