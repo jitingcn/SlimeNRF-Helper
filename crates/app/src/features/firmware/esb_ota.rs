@@ -198,11 +198,11 @@ impl NativeHid {
     }
 
     fn open_checked(endpoint: &ReceiverEndpoint) -> Result<Self, ReceiverOpenError> {
-        let api = crate::native_hid::enumerate()
+        let devices = crate::native_hid::enumerate()
             .map_err(|e| ReceiverOpenError::Unavailable(e.to_string()))?;
-        let path = CString::new(endpoint.path.clone())
+        let path = CString::new(endpoint.path.as_slice())
             .map_err(|_| ReceiverOpenError::Identity("Invalid HID native path".into()))?;
-        let device = api
+        let device = devices
             .device_list()
             .find(|d| d.path() == path.as_c_str())
             .ok_or_else(|| {
@@ -221,7 +221,8 @@ impl NativeHid {
         let device = open_receiver_handle(
             endpoint,
             || {
-                crate::native_hid::open_path(&api, device.path())
+                devices
+                    .open_path(path)
                     .map_err(|e| ReceiverOpenError::Unavailable(format!("Open receiver HID: {e}")))
             },
             |device| device.get_serial_number_string().map_err(|e| e.to_string()),

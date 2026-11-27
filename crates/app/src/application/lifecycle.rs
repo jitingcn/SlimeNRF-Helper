@@ -16,6 +16,8 @@ struct ShutdownPayload {
     restart_update: Option<crate::features::app_update::service::DownloadedUpdate>,
     sessions: Option<std::thread::JoinHandle<()>>,
     discovery: Option<std::thread::JoinHandle<()>>,
+    #[cfg(target_os = "macos")]
+    shutdown_native_hid: bool,
     files: Vec<Shared<Task<()>>>,
     _background: Option<gpui::BackgroundExecutor>,
 }
@@ -93,6 +95,10 @@ impl ShutdownPayload {
                     Poll::Pending => std::thread::park(),
                 }
             }
+        }
+        #[cfg(target_os = "macos")]
+        if self.shutdown_native_hid {
+            crate::native_hid::shutdown();
         }
         after_join();
     }
@@ -199,6 +205,8 @@ impl Workbench {
             restart_update: None,
             sessions: self.manager.shutdown(),
             discovery: self.monitor.shutdown(),
+            #[cfg(target_os = "macos")]
+            shutdown_native_hid: true,
             files: accepted_files,
             _background: Some(cx.background_executor().clone()),
         };

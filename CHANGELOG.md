@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+
+- Prevent a macOS crash when a USB HID device reappears, including after wireless OTA. Device discovery and opens now use the same long-lived HID manager thread.
+
 ## [0.6.0] - 2026-11-27
 
 ### Added

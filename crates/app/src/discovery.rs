@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use hidapi::DeviceInfo;
+use hidapi::{DeviceInfo, HidResult};
 use parking_lot::Mutex;
 #[cfg(not(target_os = "macos"))]
 use serialport::SerialPortType;
@@ -191,11 +191,18 @@ fn serial_enumeration_error(error: impl std::fmt::Display) -> String {
 /// Enumerate endpoints only. No serial or HID handle is opened, and no command
 /// is sent. A failed backend remains visible without hiding the other backend.
 pub fn scan() -> Result<Inventory, String> {
+    scan_with_hid().map(|(inventory, _)| inventory)
+}
+
+/// Keep the original HID snapshot for capture association and checked path opens.
+pub(crate) fn scan_with_hid() -> Result<(Inventory, HidResult<native_hid::Devices>), String> {
     let ports = serial_endpoints();
 
-    let receivers = native_hid::enumerate()
-        .map(|api| {
-            let mut endpoints: Vec<_> = api
+    let devices = native_hid::enumerate();
+    let receivers = devices
+        .as_ref()
+        .map(|devices| {
+            let mut endpoints: Vec<_> = devices
                 .device_list()
                 .filter(|device| is_control_receiver(device))
                 .map(|device| {
@@ -227,7 +234,7 @@ pub fn scan() -> Result<Inventory, String> {
             rust_i18n::t!("devices.discovery.error.hid_enumeration", error = error).to_string()
         });
 
-    combine_inventory(ports, receivers)
+    Ok((combine_inventory(ports, receivers)?, devices))
 }
 
 fn combine_inventory(
@@ -1076,7 +1083,7 @@ fn read_receiver(
             )
         }),
         |device| {
-            native_hid::open_path(&api, device.path()).map_err(|error| {
+            api.open_path(device.path()).map_err(|error| {
                 rust_i18n::t!(
                     "devices.receiver.error.open",
                     receiver = receiver.label,

@@ -2,7 +2,7 @@
 use crate::domain::{
     Inventory, ReceiverEndpoint, SerialEndpoint, SerialRole, receiver_serial_ports,
 };
-use crate::native_hid;
+use crate::native_hid::Devices;
 
 const VID: u16 = 0x1209;
 const PID: u16 = 0x7690;
@@ -101,8 +101,12 @@ fn same_endpoint(a: &SerialEndpoint, b: &SerialEndpoint, role: SerialRole) -> bo
 
 /// Read-only enumeration. A unique USB serial is required; labels/order never establish identity.
 pub fn discover_sources() -> Result<Vec<CaptureSource>, String> {
-    let inventory = crate::discovery::scan()?;
-    let api = native_hid::enumerate().map_err(|e| e.to_string())?;
+    discover_sources_with_hid().map(|(sources, _)| sources)
+}
+
+pub(super) fn discover_sources_with_hid() -> Result<(Vec<CaptureSource>, Devices), String> {
+    let (inventory, devices) = crate::discovery::scan_with_hid()?;
+    let devices = devices.map_err(|error| error.to_string())?;
     let mut sources = Vec::new();
     for receiver in &inventory.receivers {
         let Some(serial) = receiver
@@ -122,7 +126,7 @@ pub fn discover_sources() -> Result<Vec<CaptureSource>, String> {
         {
             continue;
         }
-        let mut raw: Vec<_> = api
+        let mut raw: Vec<_> = devices
             .device_list()
             .filter(|d| {
                 d.vendor_id() == VID
@@ -146,7 +150,7 @@ pub fn discover_sources() -> Result<Vec<CaptureSource>, String> {
             sources.push(source);
         }
     }
-    Ok(sources)
+    Ok((sources, devices))
 }
 
 fn cdc_source(receiver: &ReceiverEndpoint, inventory: &Inventory) -> Option<CaptureSource> {

@@ -1,7 +1,7 @@
 //! The sole native control/data handles and injectable read/write clock seam.
+use super::source::discover_sources_with_hid;
 use super::{CaptureSource, CaptureTransport, discover_sources};
 use crate::hid_log::{Source, TracedHid};
-use crate::native_hid;
 use crate::sessions::{CaptureConsoleProbe, ReservedConsoleSource, probe_reserved_capture_console};
 use hidapi::HidDevice;
 use std::ffi::CString;
@@ -74,15 +74,15 @@ impl NativeIo {
         source: &CaptureSource,
         console: Option<ConsoleInitialization>,
     ) -> Result<Self, String> {
-        if !discover_sources()?.iter().any(|s| source.matches(s)) {
+        let (sources, devices) = discover_sources_with_hid()?;
+        if !sources.iter().any(|s| source.matches(s)) {
             return Err(
                 "Capture source disappeared, changed, or is no longer uniquely associated".into(),
             );
         }
-        let api = native_hid::enumerate().map_err(|e| e.to_string())?;
         let open = |path: &[u8]| -> Result<HidDevice, String> {
             let path = CString::new(path).map_err(|_| "Invalid HID path")?;
-            native_hid::open_path(&api, &path).map_err(|e| e.to_string())
+            devices.open_path(path).map_err(|e| e.to_string())
         };
         // Establish the input stream before any radio-changing command.
         let data = match &source.transport {
