@@ -264,8 +264,8 @@ fn full_operation_snapshots_preserve_finished_groups_and_mixed_cancellation() {
     next_group.preparation = Some(OtaPreparation::ReceiverRecovery);
     merge_ota_progress(&mut operation, vec![next_group]);
     assert_eq!(
-        operation[1].error.as_deref(),
-        Some("VERIFY rejected; OTA abort failed: disconnected")
+        operation[1].error,
+        Some("VERIFY rejected; OTA abort failed: disconnected".into())
     );
     assert_eq!(
         operation[2].preparation,
@@ -281,7 +281,7 @@ fn full_operation_snapshots_preserve_finished_groups_and_mixed_cancellation() {
     assert_eq!(operation[0].completed, 100);
     assert_eq!(operation[1].phase, OtaPhase::Failed);
     assert_eq!(operation[2].phase, OtaPhase::Cancelled);
-    assert_eq!(operation[2].error.as_deref(), Some("cancelled"));
+    assert_eq!(operation[2].error, Some("cancelled".into()));
     assert_eq!(operation[2].preparation, None);
 }
 
@@ -297,11 +297,11 @@ fn progress_replaces_only_matching_receiver_and_clears_recovered_errors() {
     merge_ota_progress(&mut operation, vec![cleanup_failure]);
     assert_eq!(operation[0].phase, OtaPhase::Failed);
     assert_eq!(
-        operation[0].error.as_deref(),
-        Some("CRC mismatch; OTA abort failed: disconnected")
+        operation[0].error,
+        Some("CRC mismatch; OTA abort failed: disconnected".into())
     );
     assert_eq!(operation[1].phase, OtaPhase::Cancelled);
-    assert_eq!(operation[1].error.as_deref(), Some("cancelled"));
+    assert_eq!(operation[1].error, Some("cancelled".into()));
     finish_ota_target(
         &mut operation,
         &devices[0],
@@ -311,6 +311,26 @@ fn progress_replaces_only_matching_receiver_and_clears_recovered_errors() {
     assert_eq!(operation[0].phase, OtaPhase::Completed);
     assert_eq!(operation[0].error, None);
     assert_eq!(operation[1].phase, OtaPhase::Cancelled);
+}
+
+#[test]
+fn typed_ota_failure_is_kept_in_the_joined_snapshot() {
+    use crate::update::{OtaFailure, OtaFailureKind};
+
+    let devices = [target("a", 0)];
+    let mut operation = queued_ota_progress(&groups(&devices));
+    let failure = OtaFailure {
+        abort_error: Some("receiver disconnected".into()),
+        ..OtaFailureKind::BeginUnconfirmed.into()
+    };
+    finish_ota_target(
+        &mut operation,
+        &devices[0],
+        &UpdateOutcome::OtaFailed(failure.clone()),
+        false,
+    );
+    assert_eq!(operation[0].phase, OtaPhase::Failed);
+    assert_eq!(operation[0].error, Some(OtaProgressError::Failure(failure)));
 }
 
 #[test]
@@ -629,7 +649,7 @@ fn receiver_activation_finalization_preserves_uncertainty_after_cancellation() {
     operation[0].eta_seconds = Some(1);
     let outcome = UpdateOutcome::ActivationUnconfirmed(ReceiverActivationReport {
         submission: ActivationSubmission::Accepted,
-        availability: ReceiverAvailability::Responding,
+        availability: ReceiverAvailability::Unconfirmed("ESB OTA cancelled".into()),
     });
     finish_ota_target(&mut operation, &devices[0], &outcome, true);
     assert_eq!(operation[0].phase, OtaPhase::ActivationUnconfirmed);

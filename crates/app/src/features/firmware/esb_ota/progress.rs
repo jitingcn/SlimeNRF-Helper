@@ -1,6 +1,8 @@
 //! UI-only telemetry; never controls transport pacing or protocol decisions.
 use super::{PAYLOAD, Target, TargetOutcome, TransferState};
-use crate::update::{OtaPhase, OtaPreparation, OtaTargetProgress, Progress, UpdateOutcome};
+use crate::update::{
+    OtaPhase, OtaPreparation, OtaProgressError, OtaTargetProgress, Progress, UpdateOutcome,
+};
 use std::time::Duration;
 
 const PUBLISH_INTERVAL: Duration = Duration::from_millis(100);
@@ -179,8 +181,8 @@ impl Telemetry {
             now,
         );
         let value = &mut self.entries[index].value;
-        if value.error.as_deref() != Some(error) {
-            value.error = Some(error.to_owned());
+        if !matches!(&value.error, Some(OtaProgressError::Text(message)) if message == error) {
+            value.error = Some(error.into());
             self.dirty = true;
         }
     }
@@ -197,6 +199,15 @@ impl Telemetry {
                 }
                 // UF2 storage finalization is not an ESB protocol phase.
                 UpdateOutcome::Uf2CopyUnconfirmed(_) => {}
+                UpdateOutcome::OtaFailed(failure) => {
+                    self.phase(index, OtaPhase::Failed, now);
+                    let value = &mut self.entries[index].value;
+                    if !matches!(&value.error, Some(OtaProgressError::Failure(current)) if current == failure)
+                    {
+                        value.error = Some(OtaProgressError::Failure(failure.clone()));
+                        self.dirty = true;
+                    }
+                }
                 UpdateOutcome::Failed(error) if error != "Not started" => {
                     self.fail(index, error, now)
                 }
@@ -343,7 +354,7 @@ mod tests {
         assert_eq!(events[3].ota[0].completed, 1200);
         assert_eq!(events[4].ota[0].phase, OtaPhase::Failed);
         assert_eq!(events[4].ota[0].eta_seconds, None);
-        assert_eq!(events[4].ota[0].error.as_deref(), Some("CRC mismatch"));
+        assert_eq!(events[4].ota[0].error, Some("CRC mismatch".into()));
     }
 
     #[test]
@@ -393,8 +404,8 @@ mod tests {
         telemetry.preparation(1, OtaPreparation::StartingUpdate, Duration::ZERO);
         telemetry.publish(Duration::ZERO, &mut |value| events.push(value));
         assert_eq!(
-            events[1].ota[0].error.as_deref(),
-            Some("Target 0: CRC mismatch")
+            events[1].ota[0].error,
+            Some("Target 0: CRC mismatch".into())
         );
         assert_eq!(events[1].ota[0].preparation, None);
         let cleanup = "Target 0: CRC mismatch; OTA abort failed: disconnected";
@@ -411,15 +422,15 @@ mod tests {
         telemetry.outcomes(&outcomes, Duration::ZERO);
         telemetry.publish(Duration::ZERO, &mut |value| events.push(value));
         assert_eq!(events.len(), 3);
-        assert_eq!(events[2].ota[0].error.as_deref(), Some(cleanup));
+        assert_eq!(events[2].ota[0].error, Some(cleanup.into()));
         telemetry.outcomes(&outcomes, Duration::ZERO);
         telemetry.publish(Duration::ZERO, &mut |value| events.push(value));
         assert_eq!(events.len(), 3);
         telemetry.fail_pending("cancelled", Duration::ZERO);
         telemetry.publish(Duration::ZERO, &mut |value| events.push(value));
-        assert_eq!(events[3].ota[0].error.as_deref(), Some(cleanup));
+        assert_eq!(events[3].ota[0].error, Some(cleanup.into()));
         assert_eq!(events[3].ota[1].phase, OtaPhase::Cancelled);
-        assert_eq!(events[3].ota[1].error.as_deref(), Some("cancelled"));
+        assert_eq!(events[3].ota[1].error, Some("cancelled".into()));
         assert_eq!(events[3].ota[1].preparation, None);
         outcomes[0].outcome = UpdateOutcome::Completed;
         telemetry.outcomes(&outcomes, Duration::ZERO);
@@ -445,7 +456,7 @@ mod tests {
                 target: targets[0].clone(),
                 outcome: UpdateOutcome::ActivationUnconfirmed(ReceiverActivationReport {
                     submission: ActivationSubmission::Accepted,
-                    availability: ReceiverAvailability::Responding,
+                    availability: ReceiverAvailability::Unconfirmed("receiver disconnected".into()),
                 }),
             },
             super::super::TargetOutcome {
@@ -467,7 +478,7 @@ mod tests {
         assert_eq!(snapshot.ota[0].bytes_per_second, None);
         assert_eq!(snapshot.ota[0].eta_seconds, None);
         assert_eq!(snapshot.ota[1].phase, OtaPhase::Cancelled);
-        assert_eq!(snapshot.ota[1].error.as_deref(), Some("cancelled"));
+        assert_eq!(snapshot.ota[1].error, Some("cancelled".into()));
     }
 
     #[test]

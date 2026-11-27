@@ -12,8 +12,8 @@ use crate::{
     domain::{ReceiverEndpoint, TrackerLink, normalize_address},
     hid_log::{Source, TracedHid},
     update::{
-        ActivationSubmission, OtaPhase, OtaPreparation, Progress, ReceiverActivationReport,
-        ReceiverAvailability, UpdateOutcome,
+        ActivationSubmission, OtaFailure, OtaFailureKind, OtaPhase, OtaPreparation, OtaStatusPhase,
+        Progress, ReceiverActivationReport, ReceiverAvailability, UpdateOutcome,
     },
 };
 use parking_lot::Mutex;
@@ -35,6 +35,7 @@ const QUERY_TIMEOUT: Duration = Duration::from_secs(3);
 // Some receivers reset without a COMPLETE status; observation must stay brief.
 const RECEIVER_ACTIVATION_OBSERVATION: Duration = Duration::from_secs(3);
 const PREFLIGHT_QUERY_RETRY_DRAIN: Duration = Duration::from_millis(500);
+const TRACKER_BATCH_RECOVERY: Duration = Duration::from_secs(2);
 // Receiver esb_ota.c retains scoped ABORT tombstones for ten seconds, and
 // connection/esb.c blocks all new radio operations until they expire.
 const ABORT_ADMISSION: Duration = Duration::from_secs(10);
@@ -488,8 +489,14 @@ impl<'a, T: Transport> Session<'a, T> {
         }
     }
     fn wait_for_admission(&mut self) -> Result<(), String> {
-        while self.io.now() < self.next_begin_at {
-            let remaining = self.next_begin_at.saturating_sub(self.io.now());
+        self.wait_until(self.next_begin_at)
+    }
+    fn wait_until(&mut self, deadline: Duration) -> Result<(), String> {
+        loop {
+            let remaining = deadline.saturating_sub(self.io.now());
+            if remaining.is_zero() {
+                break;
+            }
             self.records(remaining.as_millis().clamp(1, 100) as i32)?;
         }
         check_cancel(self.cancel)?;
@@ -1171,6 +1178,8 @@ fn flash_validated<T: Transport>(
         return Ok(results);
     }
 
+    let mut tracker_ready_at = Duration::ZERO;
+    let mut uncertain_tracker_slots = None;
     for plan in prepared {
         let receiver_update = targets[plan.indices[0]].id == RECEIVER_ID;
         if receiver_update {
@@ -1205,36 +1214,91 @@ fn flash_validated<T: Transport>(
             .filter(|&index| ready[index])
             .collect();
         for batch in active.chunks(plan.parallel) {
-            let result = run_batch(
-                session,
-                batch,
-                &plan.image,
-                plan.board,
-                &mut results,
-                progress,
-                &mut telemetry,
-            );
-            if let Err(error) = result {
+            if !receiver_update && let Some(slots) = uncertain_tracker_slots {
+                let cancelled = check_cancel(session.cancel).err();
                 for &index in batch {
-                    if matches!(&results[index].outcome, UpdateOutcome::Failed(error) if error == "Not started")
-                    {
-                        results[index].outcome = UpdateOutcome::Failed(error.clone());
+                    results[index].outcome = if let Some(error) = &cancelled {
+                        UpdateOutcome::Failed(error.clone())
+                    } else {
+                        UpdateOutcome::OtaFailed(OtaFailureKind::BeginBatchSkipped { slots }.into())
+                    };
+                    session.retire(targets[index].id);
+                }
+                continue;
+            }
+
+            let deadline = if receiver_update {
+                session.next_begin_at
+            } else {
+                session.next_begin_at.max(tracker_ready_at)
+            };
+            let now = session.io.now();
+            if now < deadline {
+                for &index in batch {
+                    telemetry.preparation(index, OtaPreparation::ReceiverRecovery, now);
+                }
+                telemetry.publish(now, progress);
+            }
+            let result = session
+                .wait_until(deadline)
+                .map_err(BatchError::Failed)
+                .and_then(|()| {
+                    run_batch(
+                        session,
+                        batch,
+                        &plan.image,
+                        plan.board,
+                        &mut results,
+                        progress,
+                        &mut telemetry,
+                    )
+                });
+            let started_tracker_batch = !receiver_update
+                && (result.is_ok()
+                    || batch
+                        .iter()
+                        .any(|&index| session.unfinished[targets[index].id as usize]));
+            match result {
+                Ok(()) => {}
+                Err(BatchError::Failed(error)) => {
+                    for &index in batch {
+                        if matches!(&results[index].outcome, UpdateOutcome::Failed(error) if error == "Not started")
+                        {
+                            results[index].outcome = UpdateOutcome::Failed(error.clone());
+                        }
                     }
+                }
+                Err(BatchError::TrackerAdmissionUncertain { slots }) => {
+                    uncertain_tracker_slots = Some(slots);
                 }
             }
             // COMPLETE already retires the firmware participant. Successful
             // targets get no ABORT and lose only their own pin; future prepared
             // targets remain pinned through reads/admission and later groups.
             for &index in batch {
-                if let UpdateOutcome::Failed(error) = &mut results[index].outcome
-                    && let Err(cleanup) = session.abort(targets[index].id)
-                {
-                    error.push_str(&format!("; OTA abort failed: {cleanup}"));
+                let id = targets[index].id;
+                match &mut results[index].outcome {
+                    UpdateOutcome::Failed(error) => {
+                        if let Err(cleanup) = session.abort(id) {
+                            error.push_str("; OTA abort failed: ");
+                            error.push_str(&cleanup);
+                        }
+                    }
+                    UpdateOutcome::OtaFailed(failure) => {
+                        if let Err(cleanup) = session.abort(id) {
+                            failure.abort_error = Some(cleanup);
+                        }
+                    }
+                    _ => {}
                 }
-                session.retire(targets[index].id);
+                session.retire(id);
             }
-            telemetry.outcomes(&results, session.io.now());
-            telemetry.publish(session.io.now(), progress);
+            let now = session.io.now();
+            if started_tracker_batch {
+                tracker_ready_at = now + TRACKER_BATCH_RECOVERY;
+            }
+            telemetry.outcomes(&results, now);
+            telemetry.publish(now, progress);
         }
     }
     session.release_batch_identity();
@@ -1252,6 +1316,46 @@ struct TransferState {
     verified: bool,
 }
 
+#[derive(Debug)]
+enum BatchError {
+    Failed(String),
+    TrackerAdmissionUncertain { slots: u16 },
+}
+
+impl From<String> for BatchError {
+    fn from(error: String) -> Self {
+        Self::Failed(error)
+    }
+}
+
+fn fail_tracker_begin(
+    results: &mut [TargetOutcome],
+    indices: impl IntoIterator<Item = usize>,
+    slots: u16,
+    diagnostic: Option<&str>,
+    cancel: &AtomicBool,
+) -> BatchError {
+    let cancelled = check_cancel(cancel).err();
+    for index in indices {
+        let result = &mut results[index];
+        result.outcome = if let Some(error) = &cancelled {
+            UpdateOutcome::Failed(error.clone())
+        } else {
+            let kind = if slots & (1 << result.target.id) != 0 {
+                OtaFailureKind::BeginUnconfirmed
+            } else {
+                OtaFailureKind::BeginPeerUnconfirmed { slots }
+            };
+            UpdateOutcome::OtaFailed(OtaFailure {
+                kind,
+                diagnostic: diagnostic.map(str::to_owned),
+                abort_error: None,
+            })
+        };
+    }
+    BatchError::TrackerAdmissionUncertain { slots }
+}
+
 fn run_batch<T: Transport>(
     session: &mut Session<'_, T>,
     indices: &[usize],
@@ -1260,16 +1364,32 @@ fn run_batch<T: Transport>(
     results: &mut [TargetOutcome],
     progress: &mut dyn FnMut(Progress),
     telemetry: &mut Telemetry,
-) -> Result<(), String> {
-    let mut states = Vec::new();
-    session.wait_for_admission()?;
+) -> Result<(), BatchError> {
+    let mut states = Vec::with_capacity(indices.len());
     for &index in indices {
         telemetry.preparation(index, OtaPreparation::StartingUpdate, session.io.now());
     }
     telemetry.publish(session.io.now(), progress);
     for &index in indices {
         let id = results[index].target.id;
-        session.write_begin(id, image, board)?;
+        if let Err(error) = session.write_begin(id, image, board) {
+            let slots = indices
+                .iter()
+                .map(|&index| results[index].target.id)
+                .filter(|&id| id != RECEIVER_ID && session.unfinished[usize::from(id)])
+                .fold(0, |slots, id| slots | (1 << id));
+            return if slots == 0 {
+                Err(error.into())
+            } else {
+                Err(fail_tracker_begin(
+                    results,
+                    indices.iter().copied(),
+                    slots,
+                    Some(&error),
+                    session.cancel,
+                ))
+            };
+        }
         states.push(TransferState {
             index,
             id,
@@ -1371,30 +1491,61 @@ fn phase<T: Transport>(
     accepted: &[u8],
     progress: &mut dyn FnMut(Progress),
     telemetry: &mut Telemetry,
-) -> Result<(), String> {
+) -> Result<(), BatchError> {
     let deadline = session.io.now() + timeout;
     let mut retry = session.io.now() + Duration::from_secs(3);
-    let mut done: HashSet<u8> = states
-        .iter()
-        .filter(|state| opcode == VERIFY && state.verified)
-        .map(|state| state.id)
-        .collect();
-    while done.len() < states.len() && session.io.now() < deadline {
-        let (records, count) = session.records(100)?;
+    let status_phase = match opcode {
+        BEGIN => OtaStatusPhase::Begin,
+        VERIFY => OtaStatusPhase::Verify,
+        ACTIVATE => OtaStatusPhase::Activate,
+        _ => unreachable!("unsupported OTA phase opcode {opcode:#04x}"),
+    };
+    let slot = |id| {
+        if id == RECEIVER_ID {
+            SLOTS
+        } else {
+            usize::from(id)
+        }
+    };
+    let mut done = [false; SLOTS + 1];
+    if opcode == VERIFY {
+        for state in states.iter() {
+            done[slot(state.id)] = state.verified;
+        }
+    }
+    let mut stale_slots = 0;
+    let wait_result = 'listen: loop {
+        if states.iter().all(|state| done[slot(state.id)]) || session.io.now() >= deadline {
+            break Ok(());
+        }
+        let (records, count) = match session.records(100) {
+            Ok(frame) => frame,
+            Err(error) => break Err(error),
+        };
         for status in records[..count].iter().filter_map(Status::parse) {
             let Some(position) = states.iter().position(|s| s.id == status.id) else {
                 continue;
             };
-            if done.contains(&status.id) {
+            let acknowledged = done[slot(status.id)];
+            // READY is not final while another tracker's BEGIN is pending. A
+            // later terminal status can remove that member before any DATA.
+            if acknowledged && opcode != BEGIN {
                 continue;
             }
-            if let Some(error) = status.failure().or_else(|| {
-                (status.code == 0x14).then(|| "Device rejected OTA sequence/byte count".into())
+            if let Some(kind) = status.refusal(status_phase) {
+                let state = states.remove(position);
+                results[state.index].outcome = refusal_outcome(session, state.id, kind);
+            } else if let Some(error) = status.failure().or_else(|| match status.code {
+                0x14 => Some("Device rejected OTA sequence/byte count".into()),
+                6 if opcode == BEGIN && status.id != RECEIVER_ID => {
+                    Some("Device reported OTA completion before transfer".into())
+                }
+                _ => None,
             }) {
                 let state = states.remove(position);
                 results[state.index].outcome =
                     UpdateOutcome::Failed(session.fail_and_abort(state.id, error));
-            } else if accepted.contains(&status.code) {
+            } else if !acknowledged && accepted.contains(&status.code) {
                 if (opcode == VERIFY || opcode == ACTIVATE)
                     && (status.next != image.data.len().div_ceil(PAYLOAD)
                         || status.bytes as usize != image.data.len())
@@ -1408,19 +1559,22 @@ fn phase<T: Transport>(
                 }
                 if opcode == BEGIN && (status.next != 0 || status.bytes != 0) {
                     let state = states.remove(position);
-                    results[state.index].outcome = UpdateOutcome::Failed(session.fail_and_abort(
-                        state.id,
-                        "Device retained an earlier OTA session; abort and query again".into(),
-                    ));
+                    let error =
+                        "Device retained an earlier OTA session; abort and query again".into();
+                    results[state.index].outcome = if state.id == RECEIVER_ID {
+                        UpdateOutcome::Failed(session.fail_and_abort(state.id, error))
+                    } else {
+                        stale_slots |= 1 << state.id;
+                        UpdateOutcome::OtaFailed(OtaFailure {
+                            diagnostic: Some(error),
+                            ..OtaFailureKind::BeginUnconfirmed.into()
+                        })
+                    };
                 } else {
-                    done.insert(status.id);
+                    done[slot(status.id)] = true;
                     // The receiver may omit its final DATA status. A matching
                     // VERIFY_OK proves those bytes without implying activation.
-                    if opcode == VERIFY
-                        && status.code == 3
-                        && status.next == image.data.len().div_ceil(PAYLOAD)
-                        && status.bytes as usize == image.data.len()
-                    {
+                    if opcode == VERIFY {
                         telemetry.verified_bytes(states[position].index);
                     }
                     if opcode == ACTIVATE {
@@ -1432,19 +1586,43 @@ fn phase<T: Transport>(
         }
         telemetry.outcomes(results, session.io.now());
         telemetry.publish(session.io.now(), progress);
-        if session.io.now() >= retry {
-            for state in states.iter().filter(|s| !done.contains(&s.id)) {
-                if opcode == BEGIN {
-                    session.write_begin(state.id, image, board)?;
+        if stale_slots != 0 {
+            break Ok(());
+        }
+        if session.io.now() >= retry && session.io.now() < deadline {
+            for state in states.iter().filter(|s| !done[slot(s.id)]) {
+                let written = if opcode == BEGIN {
+                    session.write_begin(state.id, image, board)
                 } else {
-                    session.write(&command(opcode, state.id))?;
+                    session.write(&command(opcode, state.id))
+                };
+                if let Err(error) = written {
+                    break 'listen Err(error);
                 }
             }
             retry = session.io.now() + Duration::from_secs(3);
         }
+    };
+    if opcode == BEGIN {
+        let slots = states
+            .iter()
+            .filter(|s| s.id != RECEIVER_ID && !done[slot(s.id)])
+            .fold(stale_slots, |slots, state| slots | (1 << state.id));
+        if slots != 0 {
+            // DATA feeds one shared ring, irrespective of the slot in the HID
+            // report. A targeted ABORT is cleanup, not proof of its delivery.
+            return Err(fail_tracker_begin(
+                results,
+                states.iter().map(|state| state.index),
+                slots,
+                wait_result.as_ref().err().map(String::as_str),
+                session.cancel,
+            ));
+        }
     }
+    wait_result?;
     states.retain(|state| {
-        if done.contains(&state.id) {
+        if done[slot(state.id)] {
             true
         } else {
             results[state.index].outcome = UpdateOutcome::Failed(session.fail_and_abort(
@@ -1462,6 +1640,21 @@ fn phase<T: Transport>(
     Ok(())
 }
 
+fn refusal_outcome<T: Transport>(
+    session: &mut Session<'_, T>,
+    id: u8,
+    kind: OtaFailureKind,
+) -> UpdateOutcome {
+    let mut failure = OtaFailure::from(kind);
+    if kind == OtaFailureKind::TrackerBeginNeedsDirectLink {
+        // This receiver refused before admitting the tracker.
+        session.retire(id);
+    } else {
+        failure.abort_error = session.abort(id).err();
+    }
+    UpdateOutcome::OtaFailed(failure)
+}
+
 fn consume<T: Transport>(
     session: &mut Session<'_, T>,
     states: &mut Vec<TransferState>,
@@ -1473,9 +1666,17 @@ fn consume<T: Transport>(
     let (records, count) = session.records(timeout_ms)?;
     let mut advanced = false;
     for status in records[..count].iter().filter_map(Status::parse) {
+        if status.is_begin_busy() {
+            continue; // A queued BEGIN retry response is not DATA progress.
+        }
         let Some(position) = states.iter().position(|s| s.id == status.id) else {
             continue;
         };
+        if let Some(kind) = status.refusal(OtaStatusPhase::Transfer) {
+            let state = states.remove(position);
+            results[state.index].outcome = refusal_outcome(session, state.id, kind);
+            continue;
+        }
         let failure = status.failure().or_else(|| {
             if status.next > sent || status.bytes as usize > image.data.len() || status.ring > 128 {
                 Some("Device reported impossible OTA progress".into())
@@ -1611,25 +1812,30 @@ fn receiver_activation_status(
     record: &[u8; 16],
     image: &FirmwareImage,
     submission: &mut ActivationSubmission,
-) -> Result<bool, String> {
+) -> Result<bool, UpdateOutcome> {
     let Some(status) = Status::parse(record) else {
         return Ok(false);
     };
     if status.id != RECEIVER_ID {
         return if matches!(status.code, 5 | 6) {
-            Err("Activation status returned an unexpected receiver identity".into())
+            Err(UpdateOutcome::Failed(
+                "Activation status returned an unexpected receiver identity".into(),
+            ))
         } else {
             Ok(false)
         };
     }
+    if let Some(kind) = status.refusal(crate::update::OtaStatusPhase::Activate) {
+        return Err(UpdateOutcome::OtaFailed(kind.into()));
+    }
     if let Some(error) = status.failure() {
-        return Err(error);
+        return Err(UpdateOutcome::Failed(error));
     }
     if !matches!(status.code, 1..=3 | 5 | 6) || status.ring > 128 {
-        return Err(format!(
+        return Err(UpdateOutcome::Failed(format!(
             "Unexpected receiver activation status 0x{:02X}",
             status.code
-        ));
+        )));
     }
     if status.next > image.data.len().div_ceil(PAYLOAD)
         || status.bytes as usize > image.data.len()
@@ -1637,7 +1843,9 @@ fn receiver_activation_status(
             && (status.next != image.data.len().div_ceil(PAYLOAD)
                 || status.bytes as usize != image.data.len()))
     {
-        return Err("Receiver claimed activation status without the complete image".into());
+        return Err(UpdateOutcome::Failed(
+            "Receiver claimed activation status without the complete image".into(),
+        ));
     }
     if status.code == 5 {
         *submission = ActivationSubmission::Accepted;
@@ -1659,109 +1867,123 @@ fn activate_receiver<T: Transport>(
         Ok(()) => ActivationSubmission::Sent,
         Err(error) => ActivationSubmission::DeliveryUncertain(error),
     };
-    let mut availability = ReceiverAvailability::Unconfirmed(
-        "Receiver activation completion has not been confirmed".into(),
-    );
-    while session.io.now() < deadline {
-        let remaining = deadline.saturating_sub(session.io.now());
-        match session.records(remaining.as_millis().clamp(1, 100) as i32) {
-            Ok((records, count)) => {
-                for record in &records[..count] {
-                    match receiver_activation_status(record, image, &mut submission) {
-                        Ok(true) => return UpdateOutcome::Completed,
-                        Ok(false) => {}
-                        Err(error) => return UpdateOutcome::Failed(error),
-                    }
-                }
-            }
-            Err(error) => {
-                if session.cancel.load(Ordering::Relaxed) {
-                    return UpdateOutcome::ActivationUnconfirmed(ReceiverActivationReport {
-                        submission,
-                        availability: ReceiverAvailability::Unconfirmed(error),
-                    });
-                }
-                if !error.starts_with("HID read:") {
-                    return UpdateOutcome::Failed(error);
-                }
-                availability = ReceiverAvailability::Unconfirmed(error);
-                break;
-            }
-        }
-    }
-    while session.io.now() < deadline {
-        match session.io.reconnect(session.cancel, deadline) {
-            Ok(()) => {}
-            Err(ReceiverOpenError::Identity(error)) => return UpdateOutcome::Failed(error),
-            Err(ReceiverOpenError::Unavailable(error)) => {
-                availability = ReceiverAvailability::Unconfirmed(error);
-                break;
-            }
-        }
-        if session.io.now() >= deadline {
-            break;
-        }
-        if let Err(error) = session.write(&command(QUERY, RECEIVER_ID)) {
-            availability = ReceiverAvailability::Unconfirmed(error);
-            if session.cancel.load(Ordering::Relaxed) {
-                break;
-            }
-            continue;
-        }
-        let mut chunks = InfoChunks::new(RECEIVER_ID);
-        let mut current = None;
-        let mut unavailable = false;
-        while session.io.now() < deadline {
-            let remaining = deadline.saturating_sub(session.io.now());
-            match session.records(remaining.as_millis().clamp(1, 100) as i32) {
-                Ok((records, count)) => {
-                    for record in &records[..count] {
-                        match receiver_activation_status(record, image, &mut submission) {
-                            Ok(true) => return UpdateOutcome::Completed,
-                            Ok(false) => {}
-                            Err(error) => return UpdateOutcome::Failed(error),
-                        }
-                        if current.is_none() {
-                            match chunks.push(record) {
-                                Ok(Some(info)) => current = Some(info),
-                                Ok(None) => {}
-                                Err(error) => return UpdateOutcome::Failed(error),
-                            }
-                        }
-                    }
-                    if let Some(info) = &current {
-                        if info.board_target != target.info.board_target
-                            || info.bootloader != target.info.bootloader
-                            || info.protocol_version != target.info.protocol_version
-                        {
-                            return UpdateOutcome::Failed(
-                                "Receiver reconnected with unexpected firmware identity after activation".into(),
-                            );
-                        }
-                        availability = ReceiverAvailability::Responding;
-                    }
-                }
-                Err(error) => {
-                    if !session.cancel.load(Ordering::Relaxed) && !error.starts_with("HID read:") {
-                        return UpdateOutcome::Failed(error);
-                    }
-                    availability = ReceiverAvailability::Unconfirmed(error);
-                    unavailable = true;
+    let mut availability = None;
+    let mut pending_reason = "Receiver activation completion has not been confirmed";
+    let mut reopen = false;
+    'connection: while session.io.now() < deadline {
+        if reopen {
+            match session.io.reconnect(session.cancel, deadline) {
+                Ok(()) => {}
+                Err(ReceiverOpenError::Identity(error)) => return UpdateOutcome::Failed(error),
+                Err(ReceiverOpenError::Unavailable(error)) => {
+                    availability = Some(ReceiverAvailability::Unconfirmed(error));
                     break;
                 }
             }
         }
-        if session.cancel.load(Ordering::Relaxed) || !unavailable {
-            if current.is_none() && !unavailable {
-                availability = ReceiverAvailability::Unconfirmed(
-                    "Receiver did not return complete firmware information after activation".into(),
-                );
+        let mut queried = false;
+        let mut chunks = None;
+        while session.io.now() < deadline {
+            // The original handle already passed identity checks. Query it once
+            // after acceptance; reopen only if transport observation fails.
+            if !queried && (reopen || submission == ActivationSubmission::Accepted) {
+                queried = true;
+                match session.write(&command(QUERY, RECEIVER_ID)) {
+                    Ok(()) => {
+                        chunks = Some(InfoChunks::new(RECEIVER_ID));
+                        availability = None;
+                        pending_reason = "Receiver did not return complete firmware information after activation";
+                    }
+                    Err(error) => {
+                        availability = Some(ReceiverAvailability::Unconfirmed(error));
+                        if session.cancel.load(Ordering::Relaxed) {
+                            break 'connection;
+                        }
+                        if reopen {
+                            continue 'connection;
+                        }
+                        // A failed query write need not prevent late status reads.
+                    }
+                }
             }
-            break;
+            let remaining = deadline.saturating_sub(session.io.now());
+            if remaining.is_zero() {
+                break 'connection;
+            }
+            let (records, count) = match session.records(remaining.as_millis().clamp(1, 100) as i32)
+            {
+                Ok(frame) => frame,
+                Err(error) if session.cancel.load(Ordering::Relaxed) => {
+                    availability = Some(ReceiverAvailability::Unconfirmed(error));
+                    break 'connection;
+                }
+                Err(error) if error.starts_with("HID read:") => {
+                    availability = Some(ReceiverAvailability::Unconfirmed(error));
+                    reopen = true;
+                    continue 'connection;
+                }
+                Err(error) => return UpdateOutcome::Failed(error),
+            };
+            if session.io.now() > deadline {
+                break 'connection;
+            }
+            let records = &records[..count];
+            let mut complete = false;
+            let mut accepted_at = None;
+            // Check the entire report for status failures before deciding success.
+            for (index, record) in records.iter().enumerate() {
+                let was_accepted = submission == ActivationSubmission::Accepted;
+                match receiver_activation_status(record, image, &mut submission) {
+                    Ok(done) => complete |= done,
+                    Err(outcome) => return outcome,
+                }
+                if !was_accepted && submission == ActivationSubmission::Accepted {
+                    accepted_at = Some(index);
+                    if availability == Some(ReceiverAvailability::Responding) {
+                        availability = None;
+                    }
+                }
+            }
+            if let Some(assembler) = &mut chunks {
+                for (index, record) in records.iter().enumerate() {
+                    if accepted_at == Some(index) {
+                        // A reconnect probe may already be in flight. Do not
+                        // use its pre-acceptance fragments to confirm activation.
+                        *assembler = InfoChunks::new(RECEIVER_ID);
+                        continue;
+                    }
+                    let info = match assembler.push(record) {
+                        Ok(Some(info)) => info,
+                        Ok(None) => continue,
+                        Err(error) => return UpdateOutcome::Failed(error),
+                    };
+                    if info.board_target != target.info.board_target
+                        || info.bootloader != target.info.bootloader
+                        || info.protocol_version != target.info.protocol_version
+                    {
+                        return UpdateOutcome::Failed(
+                            "Receiver returned unexpected firmware identity after activation"
+                                .into(),
+                        );
+                    }
+                    if submission == ActivationSubmission::Accepted {
+                        complete |= accepted_at.is_none_or(|accepted| accepted < index);
+                    } else {
+                        availability = Some(ReceiverAvailability::Responding);
+                    }
+                    chunks = None;
+                    break;
+                }
+            }
+            if complete {
+                return UpdateOutcome::Completed;
+            }
         }
+        break;
     }
     UpdateOutcome::ActivationUnconfirmed(ReceiverActivationReport {
         submission,
-        availability,
+        availability: availability
+            .unwrap_or_else(|| ReceiverAvailability::Unconfirmed(pending_reason.into())),
     })
 }

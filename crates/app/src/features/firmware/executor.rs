@@ -8,7 +8,7 @@ use crate::{
     discovery,
     domain::{Inventory, ReceiverEndpoint, SerialEndpoint, TrackerLink, console_port_allowed},
     features::firmware::{ble_ota, esb_ota, opendfu, uf2},
-    update::{OtaPhase, OtaTargetProgress, Progress, UpdateOutcome},
+    update::{OtaPhase, OtaProgressError, OtaTargetProgress, Progress, UpdateOutcome},
 };
 use slimenrf_firmware_image::{
     image::{self as firmware, Uf2ImagePurpose},
@@ -452,11 +452,12 @@ fn finish_ota_target(
             {
                 OtaPhase::Cancelled
             }
-            UpdateOutcome::Failed(_) => OtaPhase::Failed,
+            UpdateOutcome::Failed(_) | UpdateOutcome::OtaFailed(_) => OtaPhase::Failed,
         };
         current.preparation = None;
         current.error = match result {
-            UpdateOutcome::Failed(error) => Some(error.clone()),
+            UpdateOutcome::Failed(error) => Some(OtaProgressError::Text(error.clone())),
+            UpdateOutcome::OtaFailed(failure) => Some(OtaProgressError::Failure(failure.clone())),
             UpdateOutcome::Uf2CopyUnconfirmed(_) => return,
             UpdateOutcome::Completed | UpdateOutcome::ActivationUnconfirmed(_) => None,
         };

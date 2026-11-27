@@ -5,6 +5,7 @@ pub enum UpdateOutcome {
     ActivationUnconfirmed(ReceiverActivationReport),
     Uf2CopyUnconfirmed(Uf2CopyReport),
     Failed(String),
+    OtaFailed(OtaFailure),
 }
 
 /// Full host-write acceptance with device disappearance during UF2 finalization.
@@ -46,6 +47,65 @@ pub enum ReceiverAvailability {
     Unconfirmed(String),
 }
 
+/// The OTA stage being observed when the firmware refused an operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OtaStatusPhase {
+    Begin,
+    Transfer,
+    Verify,
+    Activate,
+}
+
+/// ESB failures whose recovery or scope depends on the phase and wire status.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OtaFailureKind {
+    TrackerBeginNeedsDirectLink,
+    OperationRefused {
+        phase: OtaStatusPhase,
+        detail: u8,
+    },
+    BeginUnconfirmed,
+    /// Firmware data was withheld because these tracker slots were unconfirmed.
+    BeginPeerUnconfirmed {
+        slots: u16,
+    },
+    /// This batch did not begin because these slots in an earlier batch were unconfirmed.
+    BeginBatchSkipped {
+        slots: u16,
+    },
+}
+
+/// Retain the failure reason separately from transport and cleanup diagnostics.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OtaFailure {
+    pub kind: OtaFailureKind,
+    pub diagnostic: Option<String>,
+    pub abort_error: Option<String>,
+}
+
+impl From<OtaFailureKind> for OtaFailure {
+    fn from(kind: OtaFailureKind) -> Self {
+        Self {
+            kind,
+            diagnostic: None,
+            abort_error: None,
+        }
+    }
+}
+
+/// A terminal ESB progress row retains either protocol context or diagnostic text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OtaProgressError {
+    Failure(OtaFailure),
+    Text(String),
+}
+
+impl From<&str> for OtaProgressError {
+    fn from(text: &str) -> Self {
+        Self::Text(text.into())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OtaPhase {
     Queued,
@@ -72,7 +132,7 @@ pub struct OtaTargetProgress {
     pub id: u8,
     pub phase: OtaPhase,
     pub preparation: Option<OtaPreparation>,
-    pub error: Option<String>,
+    pub error: Option<OtaProgressError>,
     pub completed: u64,
     pub total: u64,
     pub bytes_per_second: Option<u64>,
@@ -450,8 +510,8 @@ mod tests {
         let rows = &job.progress.as_ref().unwrap().ota;
         assert_eq!(rows.len(), 2);
         assert_eq!(
-            rows[0].error.as_deref(),
-            Some("Target 0: CRC mismatch; OTA abort failed: disconnected")
+            rows[0].error,
+            Some("Target 0: CRC mismatch; OTA abort failed: disconnected".into())
         );
         assert_eq!(rows[1].preparation, Some(OtaPreparation::ReceiverRecovery));
         job.shutdown();

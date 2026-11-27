@@ -17,6 +17,11 @@ use std::{
     time::Duration,
 };
 
+#[path = "tests/batch_recovery.rs"]
+mod batch_recovery;
+#[path = "tests/begin_admission.rs"]
+mod begin_admission;
+
 fn failure(outcome: &UpdateOutcome) -> &str {
     match outcome {
         UpdateOutcome::Failed(error) => error,
@@ -184,7 +189,7 @@ struct Emulator {
     // system-workqueue handler while HID drain work cannot run. Hot ordinary
     // traffic reserves only two priority slots after terminal unsuppression.
     hot_after_complete: bool,
-    completed: usize,
+    completions: Vec<(u8, Duration)>,
     dropped_info_chunks: usize,
     reassign_after_complete: Option<(u8, usize)>,
     delayed_info: Option<(u8, Duration)>,
@@ -272,7 +277,7 @@ impl Emulator {
             data_since_read: 0,
             max_receiver_burst: 0,
             hot_after_complete: false,
-            completed: 0,
+            completions: Vec::new(),
             dropped_info_chunks: 0,
             reassign_after_complete: None,
             delayed_info: None,
@@ -376,7 +381,8 @@ impl Transport for Emulator {
                     if after_activation && let Some(record) = self.activation_query_status.take() {
                         records.push(record);
                     }
-                    if self.hot_after_complete && self.completed != 0 && id != RECEIVER_ID {
+                    if self.hot_after_complete && !self.completions.is_empty() && id != RECEIVER_ID
+                    {
                         // Capacity 32, with ordinary traffic filling 30 slots.
                         // No sender drain runs during this six-chunk handler.
                         let mut fifo = VecDeque::from(vec![[0x01; 16]; 30]);
@@ -610,7 +616,7 @@ impl Transport for Emulator {
             self.incoming.extend(records);
         }
         if let Some((slot, count)) = self.reassign_after_complete
-            && self.completed >= count
+            && self.completions.len() >= count
         {
             self.reassign_after_complete = None;
             self.queue_reassignment(slot);
@@ -675,7 +681,7 @@ impl Transport for Emulator {
             // session; host success cleanup must not create a new tombstone.
             if record[0] == STATUS && matches!(record[2], 4 | 6 | 0x10..=0x14) {
                 if record[2] == 6 {
-                    self.completed += 1;
+                    self.completions.push((record[1], self.time));
                 }
                 self.staging.remove(&record[1]);
             }
@@ -2013,7 +2019,11 @@ fn failed_target_is_aborted_once_and_next_group_waits_for_admission() {
         .find(|(id, _)| *id == 2)
         .unwrap()
         .1;
-    assert!(next_begin >= aborted_at + Duration::from_secs(10));
+    assert_eq!(
+        next_begin,
+        (aborted_at + Duration::from_secs(10))
+            .max(session.io.completions[0].1 + Duration::from_secs(2))
+    );
     let next_query = session
         .io
         .query_writes
@@ -2114,21 +2124,37 @@ fn cancellation_at_begin_gate_never_sends_begin_or_abort() {
 #[test]
 fn ambiguous_begin_and_abort_write_errors_are_preserved_without_duplicate_cleanup() {
     let cancel = AtomicBool::new(false);
-    let mut io = Emulator::new(&[0, 1]);
+    let mut io = Emulator::new(&[0, 1, 2]);
     io.begin_write_error = Some(0);
     io.abort_write_error = Some(0);
     let mut session = Session::new(io, &cancel);
     let outcomes = flash_with(
         &mut session,
-        &[target(0), target(1)],
+        &[target(0), target(1), target(2)],
         &image(3),
         &info().board_target,
         &mut |_| {},
     )
     .unwrap();
-    let error = failure(&outcomes[0].outcome);
-    assert!(error.contains("BEGIN failure"));
-    assert!(error.contains("ABORT failure"));
+    use crate::update::OtaFailureKind;
+    let error = begin_admission::ota_failure(&outcomes[0].outcome);
+    assert_eq!(error.kind, OtaFailureKind::BeginUnconfirmed);
+    assert!(error.diagnostic.as_ref().unwrap().contains("BEGIN failure"));
+    assert!(
+        error
+            .abort_error
+            .as_ref()
+            .unwrap()
+            .contains("ABORT failure")
+    );
+    assert_eq!(
+        begin_admission::ota_failure(&outcomes[1].outcome).kind,
+        OtaFailureKind::BeginPeerUnconfirmed { slots: 1 }
+    );
+    assert_eq!(
+        begin_admission::ota_failure(&outcomes[2].outcome).kind,
+        OtaFailureKind::BeginBatchSkipped { slots: 1 }
+    );
     assert_eq!(
         session
             .io
@@ -2210,9 +2236,10 @@ fn receiver_activation_acceptance_does_not_send_abort() {
     let cancel = AtomicBool::new(false);
     let mut io = Emulator::new(&[]);
     io.activating_only = true;
+    io.silent_activation_query = true;
     let mut session = Session::new(io, &cancel);
     let firmware = image(3);
-    let _outcomes = flash_with(
+    let outcomes = flash_with(
         &mut session,
         &[target(RECEIVER_ID)],
         &firmware,
@@ -2220,6 +2247,13 @@ fn receiver_activation_acceptance_does_not_send_abort() {
         &mut |_| {},
     )
     .unwrap();
+    assert!(matches!(
+        outcomes[0].outcome,
+        UpdateOutcome::ActivationUnconfirmed(ReceiverActivationReport {
+            submission: ActivationSubmission::Accepted,
+            availability: ReceiverAvailability::Unconfirmed(_),
+        })
+    ));
 
     let verify = session
         .io
@@ -2260,6 +2294,7 @@ fn activation_progress_or_incomplete_complete_is_never_success() {
             let mut io = Emulator::new(&[0]);
             io.partial_complete = incomplete_complete;
             io.activating_only = !incomplete_complete;
+            io.silent_activation_query = id == RECEIVER_ID && !incomplete_complete;
             let mut session = Session::new(io, &cancel);
             let outcomes = flash_with(
                 &mut session,
@@ -3316,7 +3351,7 @@ fn later_image_preflight_cannot_hide_change_to_pending_prepared_identity() {
 }
 
 #[test]
-fn prepared_future_slot_change_during_transfer_never_receives_image_data() {
+fn prepared_future_slot_change_during_recovery_never_begins() {
     let cancel = AtomicBool::new(false);
     let mut io = Emulator::new(&[0, 1, 2]);
     io.reassign_after_complete = Some((2, 2));
@@ -3336,23 +3371,7 @@ fn prepared_future_slot_change_during_transfer_never_receives_image_data() {
     );
     let error = failure(&outcomes[2].outcome);
     assert!(error.contains("reassigned"), "{error}");
-    assert!(error.contains("ABORT skipped"), "{error}");
-    // A queued registration can first be observed in the BEGIN reply frame;
-    // no data/activation may follow that contradiction.
-    assert!(
-        !session
-            .io
-            .writes
-            .iter()
-            .any(|r| r[0] == ACTIVATE && r[1] == 2)
-    );
-    let begin = session
-        .io
-        .writes
-        .iter()
-        .position(|r| r[0] == BEGIN && r[1] == 2)
-        .unwrap();
-    assert!(!session.io.writes[begin + 1..].iter().any(|r| r[0] == DATA));
+    assert!(session.io.begin_writes.iter().all(|(id, _)| *id != 2));
     assert!(session.io.abort_writes.is_empty());
 }
 
@@ -3376,12 +3395,15 @@ fn cleanup_skips_each_reassigned_slot_but_aborts_stable_started_peers() {
         .unwrap();
         for outcome in &outcomes {
             let id = outcome.target.id;
-            let error = failure(&outcome.outcome);
-            assert!(error.contains("reassigned"), "{error}");
+            let error = begin_admission::ota_failure(&outcome.outcome);
+            assert!(error.diagnostic.as_ref().unwrap().contains("reassigned"));
             assert_eq!(
-                error.contains("ABORT skipped"),
+                error
+                    .abort_error
+                    .as_deref()
+                    .is_some_and(|cleanup| cleanup.contains("ABORT skipped")),
                 changed.contains(&id),
-                "{error}"
+                "{error:?}"
             );
         }
         let mut expected = vec![(BEGIN, 0), (BEGIN, 1)];
@@ -3716,10 +3738,15 @@ fn every_receiver_tracker_plan_finishes_before_any_receiver_self_update() {
 
 #[test]
 fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
+    use crate::update::{OtaFailureKind, OtaPhase, OtaStatusPhase};
+
     #[derive(Clone, Copy, Debug)]
     enum Case {
         Complete,
         Accepted,
+        AcceptedResponding,
+        AcceptedReopened,
+        ResponseBeforeAcceptance,
         Silent,
         Responding,
         Disconnected,
@@ -3729,9 +3756,11 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
         ErroredWriteComplete,
         LateComplete,
         LateFailure,
+        Refused,
         NoQueryReply,
         Cancelled,
         WrongInfo,
+        MalformedInfo,
         WrongNativeIdentity,
         MalformedAccepted,
         MalformedComplete,
@@ -3740,6 +3769,9 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
     for case in [
         Case::Complete,
         Case::Accepted,
+        Case::AcceptedResponding,
+        Case::AcceptedReopened,
+        Case::ResponseBeforeAcceptance,
         Case::Silent,
         Case::Responding,
         Case::Disconnected,
@@ -3749,9 +3781,11 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
         Case::ErroredWriteComplete,
         Case::LateComplete,
         Case::LateFailure,
+        Case::Refused,
         Case::NoQueryReply,
         Case::Cancelled,
         Case::WrongInfo,
+        Case::MalformedInfo,
         Case::WrongNativeIdentity,
         Case::MalformedAccepted,
         Case::MalformedComplete,
@@ -3761,10 +3795,32 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
         let firmware = image(3);
         let mut io = Emulator::new(&[]);
         io.silent_activate = true;
+        let accepted = status(RECEIVER_ID, 5, 3, firmware.data.len());
         match case {
             Case::Complete => io.silent_activate = false,
             Case::Accepted => {
-                io.activation_status = Some(status(RECEIVER_ID, 5, 3, firmware.data.len()))
+                io.activation_status = Some(accepted);
+                io.silent_activation_query = true;
+            }
+            Case::AcceptedResponding => {
+                io.activation_status = Some(accepted);
+                let updated = FirmwareInfo {
+                    firmware_size: 13000,
+                    ..info()
+                };
+                io.query_replies
+                    .insert((RECEIVER_ID, 2), info_records(RECEIVER_ID, &updated));
+            }
+            Case::AcceptedReopened => {
+                io.activation_status = Some(accepted);
+                io.disconnect_after_activate = true;
+                io.activation_disconnect_delay = Duration::from_millis(100);
+                io.query_write_errors
+                    .insert((RECEIVER_ID, 2), "HID write: device disconnected".into());
+            }
+            Case::ResponseBeforeAcceptance => {
+                io.disconnect_after_activate = true;
+                io.activation_query_status = Some(accepted);
             }
             Case::Silent => {}
             Case::Responding => io.disconnect_after_activate = true,
@@ -3778,7 +3834,8 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
                 io.activation_write_error =
                     Some("Short HID write: 12/65 bytes; not retried".into());
                 if matches!(case, Case::ShortWriteAccepted) {
-                    io.activation_status = Some(status(RECEIVER_ID, 5, 3, firmware.data.len()));
+                    io.activation_status = Some(accepted);
+                    io.silent_activation_query = true;
                 }
             }
             Case::ErroredWrite | Case::ErroredWriteComplete => {
@@ -3787,18 +3844,19 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
                     io.activation_status = Some(status(RECEIVER_ID, 6, 3, firmware.data.len()));
                 }
             }
-            Case::LateComplete | Case::LateFailure => {
+            Case::LateComplete => {
                 io.disconnect_after_activate = true;
-                io.activation_query_status = Some(status(
-                    RECEIVER_ID,
-                    if matches!(case, Case::LateComplete) {
-                        6
-                    } else {
-                        0x12
-                    },
-                    3,
-                    firmware.data.len(),
-                ));
+                io.activation_query_status = Some(status(RECEIVER_ID, 6, 3, firmware.data.len()));
+            }
+            Case::LateFailure => {
+                io.activation_status = Some(accepted);
+                io.activation_query_status =
+                    Some(status(RECEIVER_ID, 0x12, 3, firmware.data.len()));
+            }
+            Case::Refused => {
+                let mut refused = status(RECEIVER_ID, 0x10, 3, firmware.data.len());
+                refused[11] = 7;
+                io.activation_status = Some(refused);
             }
             Case::NoQueryReply => {
                 io.disconnect_after_activate = true;
@@ -3806,8 +3864,14 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
             }
             Case::Cancelled => io.cancel_on_activate = Some(cancel.clone()),
             Case::WrongInfo => {
-                io.disconnect_after_activate = true;
+                io.activation_status = Some(accepted);
                 io.wrong_activation_info = true;
+            }
+            Case::MalformedInfo => {
+                io.activation_status = Some(accepted);
+                let mut records = info_records(RECEIVER_ID, &info());
+                records[4][8] ^= 1;
+                io.query_replies.insert((RECEIVER_ID, 2), records);
             }
             Case::WrongNativeIdentity => {
                 io.disconnect_after_activate = true;
@@ -3843,27 +3907,52 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
         .unwrap();
         let outcome = &outcomes[0].outcome;
         match case {
-            Case::Complete | Case::LateComplete | Case::ErroredWriteComplete => {
+            Case::Complete
+            | Case::LateComplete
+            | Case::ErroredWriteComplete
+            | Case::AcceptedResponding
+            | Case::AcceptedReopened => {
                 assert_eq!(outcome, &UpdateOutcome::Completed, "{case:?}");
+                assert_eq!(progress.last().unwrap().ota[0].phase, OtaPhase::Completed);
+                assert_eq!(progress.last().unwrap().completed, 1);
             }
+            Case::Refused => assert_eq!(
+                outcome,
+                &UpdateOutcome::OtaFailed(
+                    OtaFailureKind::OperationRefused {
+                        phase: OtaStatusPhase::Activate,
+                        detail: 7,
+                    }
+                    .into()
+                )
+            ),
             Case::LateFailure
             | Case::WrongInfo
+            | Case::MalformedInfo
             | Case::WrongNativeIdentity
             | Case::MalformedAccepted
             | Case::MalformedComplete
             | Case::WrongStatusIdentity => {
                 let error = failure(outcome);
-                assert!(!error.is_empty(), "{case:?}");
-                if matches!(case, Case::LateFailure) {
-                    assert!(error.contains("flash write failed"));
-                }
+                let expected = match case {
+                    Case::LateFailure => "flash write failed",
+                    Case::WrongInfo => "unexpected firmware identity",
+                    Case::MalformedInfo => "FW_INFO CRC mismatch",
+                    Case::WrongNativeIdentity => "Receiver identity changed",
+                    Case::MalformedAccepted | Case::MalformedComplete => {
+                        "without the complete image"
+                    }
+                    Case::WrongStatusIdentity => "unexpected receiver identity",
+                    _ => unreachable!(),
+                };
+                assert!(error.contains(expected), "{case:?}: {error}");
             }
             _ => {
                 let UpdateOutcome::ActivationUnconfirmed(report) = outcome else {
                     panic!("{case:?}: expected uncertainty, got {outcome:?}");
                 };
                 match case {
-                    Case::Accepted | Case::ShortWriteAccepted => {
+                    Case::Accepted | Case::ShortWriteAccepted | Case::ResponseBeforeAcceptance => {
                         assert_eq!(report.submission, ActivationSubmission::Accepted);
                     }
                     Case::ShortWrite => assert_eq!(
@@ -3890,7 +3979,10 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
                         };
                         let expected = match case {
                             Case::Cancelled => "cancelled",
-                            Case::NoQueryReply => "did not return complete firmware information",
+                            Case::Accepted
+                            | Case::ShortWriteAccepted
+                            | Case::ResponseBeforeAcceptance
+                            | Case::NoQueryReply => "did not return complete firmware information",
                             Case::Disconnected => "receiver disconnected",
                             _ => "activation completion has not been confirmed",
                         };
@@ -3899,10 +3991,28 @@ fn receiver_activation_outcomes_preserve_evidence_without_post_attempt_abort() {
                 }
                 assert_eq!(
                     progress.last().unwrap().ota[0].phase,
-                    crate::update::OtaPhase::ActivationUnconfirmed
+                    OtaPhase::ActivationUnconfirmed
                 );
                 assert_eq!(progress.last().unwrap().completed, 0);
             }
+        }
+        if matches!(case, Case::AcceptedResponding) {
+            assert_eq!(session.io.reconnects, 0);
+            let activation_at = session.io.activation_attempt_at.unwrap();
+            assert_eq!(
+                session
+                    .io
+                    .query_writes
+                    .iter()
+                    .filter(|(_, at)| *at > activation_at)
+                    .count(),
+                1
+            );
+        } else if matches!(
+            case,
+            Case::AcceptedReopened | Case::ResponseBeforeAcceptance
+        ) {
+            assert_eq!(session.io.reconnects, 1);
         }
         assert!(session.io.abort_writes.is_empty(), "{case:?}");
         assert_eq!(
@@ -4249,7 +4359,7 @@ fn receiver_activation_query_retries_share_the_original_availability_budget() {
 }
 
 #[test]
-fn receiver_activation_only_accepts_complete_within_the_observation_window() {
+fn receiver_activation_observes_complete_only_within_the_deadline() {
     for (delay_ms, completed) in [(2_900, true), (3_100, false)] {
         let cancel = AtomicBool::new(false);
         let firmware = image(3);

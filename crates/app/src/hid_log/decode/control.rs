@@ -119,6 +119,7 @@ pub enum Ota {
         next_sequence: u16,
         bytes: u32,
         ring: u8,
+        detail: u8,
     },
     Begin {
         target: u8,
@@ -148,6 +149,7 @@ impl Ota {
                 next_sequence: u16::from_be_bytes([b[3], b[4]]),
                 bytes: le32(b, 5),
                 ring: b[9],
+                detail: b[11],
             },
             _ => Self::Control {
                 opcode: b[0],

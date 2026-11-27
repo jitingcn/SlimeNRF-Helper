@@ -13,6 +13,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - Release builds use ThinLTO instead of fat LTO.
 
+### Fixed
+
+- Wireless tracker updates explain when the receiver requires a healthy direct radio link. Helper waits two seconds between tracker batches and withholds firmware data if a batch member's start is unconfirmed.
+- Receiver updates now count as complete when the receiver accepts activation and then answers a fresh firmware-info query, even if it does not send a final `COMPLETE`.
+
 ## [0.7.0] - 2026-11-27
 
 ### Added

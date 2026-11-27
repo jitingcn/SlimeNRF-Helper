@@ -1,4 +1,5 @@
 use super::FirmwareInfo;
+use crate::update::{OtaFailureKind, OtaStatusPhase};
 use slimenrf_firmware_image::image::FirmwareImage;
 
 pub(super) const QUERY: u8 = 0xf0;
@@ -10,6 +11,10 @@ pub(super) const VERIFY: u8 = 0xf5;
 pub(super) const ACTIVATE: u8 = 0xf6;
 pub(super) const ABORT: u8 = 0xf7;
 pub(super) const PAYLOAD: usize = 60;
+
+const UPDATE_NOT_ALLOWED: u8 = 0x10;
+const BEGIN_DIRECT_LINK_REQUIRED: u8 = 1;
+const BEGIN_BUSY: u8 = 2;
 
 pub(super) fn command(opcode: u8, id: u8) -> [u8; 64] {
     let mut packet = [0; 64];
@@ -55,6 +60,7 @@ pub(super) struct Status {
     pub next: usize,
     pub bytes: u32,
     pub ring: u8,
+    pub detail: u8,
 }
 
 impl Status {
@@ -65,13 +71,35 @@ impl Status {
             next: u16::from_be_bytes([record[3], record[4]]) as usize,
             bytes: u32::from_le_bytes(record[5..9].try_into().unwrap()),
             ring: record[9],
+            detail: record[11],
         })
+    }
+
+    pub fn refusal(self, phase: OtaStatusPhase) -> Option<OtaFailureKind> {
+        if self.code != UPDATE_NOT_ALLOWED {
+            return None;
+        }
+        // The receiver supplies this detail only when refusing a tracker BEGIN.
+        if phase == OtaStatusPhase::Begin
+            && self.id < super::SLOTS as u8
+            && self.detail == BEGIN_DIRECT_LINK_REQUIRED
+        {
+            Some(OtaFailureKind::TrackerBeginNeedsDirectLink)
+        } else {
+            Some(OtaFailureKind::OperationRefused {
+                phase,
+                detail: self.detail,
+            })
+        }
+    }
+
+    pub fn is_begin_busy(self) -> bool {
+        self.id < super::SLOTS as u8 && self.code == 0 && self.detail == BEGIN_BUSY
     }
 
     pub fn failure(self) -> Option<String> {
         let description = match self.code {
             4 => "firmware CRC verification failed",
-            0x10 => "firmware rejected OTA operation",
             0x11 => "board target mismatch",
             0x12 => "flash write failed",
             0x13 => "firmware image exceeds device capacity",

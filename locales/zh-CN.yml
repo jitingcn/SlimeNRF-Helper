@@ -1101,6 +1101,18 @@ firmware:
     dismiss: "关闭结果"
     exit_dfu_requested: "已请求退出 DFU；请重新连接并核对设备"
     operation_completed: "操作已完成；请重新连接并核对固件版本"
+    ota:
+      abort_failed: "中止无线更新失败：%{error}"
+      begin_unconfirmed: "未能确认此追踪器已开始更新，未发送固件数据。请检查无线连接后重试。"
+      batch_stopped: "未发送本批次的固件数据：未能确认追踪器（ID：%{slots}）已开始更新。"
+      batch_skipped: "先前批次的追踪器（ID：%{slots}）未确认开始更新，已跳过此追踪器，未向它发送固件数据。"
+      direct_link_required: "无线更新需要追踪器与 USB 接收器保持稳定的无线直连，不能经由中继。将追踪器移近接收器，等直连稳定后重试。"
+      operation_refused: "固件在%{phase}时拒绝了请求（状态 0x10，详情码 %{detail}）。"
+      phase:
+        begin: "启动更新"
+        transfer: "传输固件"
+        verify: "校验固件"
+        activate: "激活固件"
     title: "设备更新结果"
     uf2:
       pending: "复制待确认；尚未验证固件启动"
@@ -1423,6 +1435,8 @@ hid:
     expected: "预期"
     magnetic_disturbance: "可能表示磁场干扰"
     magnetometer: "磁力计"
+    ota_not_allowed: "不允许更新"
+    ota_receiver_busy: "接收器忙"
     receiver_observation: "接收器观测"
     short_write: "未完整写入"
     tracker_event: "追踪器事件"

@@ -106,7 +106,7 @@ fn prepare_operation(this: &mut Workbench, rows: &[(ResultIdentity, UpdateOutcom
                 phase: match outcome {
                     UpdateOutcome::Completed => OtaPhase::Completed,
                     UpdateOutcome::ActivationUnconfirmed(_) => OtaPhase::ActivationUnconfirmed,
-                    UpdateOutcome::Failed(_) => OtaPhase::Failed,
+                    UpdateOutcome::Failed(_) | UpdateOutcome::OtaFailed(_) => OtaPhase::Failed,
                     UpdateOutcome::Uf2CopyUnconfirmed(_) => {
                         unreachable!("UF2 outcome on ESB fixture")
                     }

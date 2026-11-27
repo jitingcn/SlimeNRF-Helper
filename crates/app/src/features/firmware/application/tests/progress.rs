@@ -90,10 +90,10 @@ fn live_terminal_groups_use_receiver_identity_and_preserve_failure_tooltips() {
     assert_eq!(groups["a"][0].phase, OtaPhase::Failed);
     assert_eq!(groups["b"][0].phase, OtaPhase::Cancelled);
     assert_eq!(
-        groups["a"][0].error.as_deref(),
-        Some("CRC mismatch; OTA abort failed: disconnected")
+        groups["a"][0].error,
+        Some("CRC mismatch; OTA abort failed: disconnected".into())
     );
-    assert_eq!(groups["b"][0].error.as_deref(), Some("cancelled"));
+    assert_eq!(groups["b"][0].error, Some("cancelled".into()));
     let identity = state
         .progress_identity(groups["a"][0])
         .unwrap()
@@ -116,6 +116,63 @@ fn live_terminal_groups_use_receiver_identity_and_preserve_failure_tooltips() {
         crate::application::flash::progress::ota_terminal_tooltip(&progress[0], identity.clone()),
         identity
     );
+}
+
+#[test]
+fn ota_failure_diagnoses_distinguish_refusal_and_missing_begin_in_both_locales() {
+    use crate::application::flash::progress::ota_failure_text;
+    use crate::update::{OtaFailureKind as Kind, OtaStatusPhase as Phase};
+
+    let slots = (1 << 2) | (1 << 13);
+    for (kind, en, zh) in [
+        (
+            Kind::OperationRefused {
+                phase: Phase::Begin,
+                detail: 0,
+            },
+            ["starting the update", "status 0x10, detail 0"],
+            ["启动更新时拒绝了请求", "状态 0x10，详情码 0"],
+        ),
+        (
+            Kind::OperationRefused {
+                phase: Phase::Verify,
+                detail: 1,
+            },
+            ["verifying firmware", "status 0x10, detail 1"],
+            ["校验固件时拒绝了请求", "状态 0x10，详情码 1"],
+        ),
+        (
+            Kind::BeginUnconfirmed,
+            [
+                "Could not confirm that this tracker started",
+                "No firmware data was sent",
+            ],
+            ["未能确认此追踪器已开始更新", "未发送固件数据"],
+        ),
+        (
+            Kind::BeginPeerUnconfirmed { slots },
+            [
+                "No firmware data was sent in this batch",
+                "tracker IDs 2, 13",
+            ],
+            ["未发送本批次的固件数据", "ID：2, 13"],
+        ),
+        (
+            Kind::BeginBatchSkipped { slots },
+            [
+                "tracker IDs 2, 13 in an earlier batch",
+                "No firmware data was sent to this tracker",
+            ],
+            ["先前批次的追踪器（ID：2, 13）", "未向它发送固件数据"],
+        ),
+    ] {
+        for (locale, parts) in [("en", en), ("zh-CN", zh)] {
+            let text = ota_failure_text(kind, locale);
+            for part in parts {
+                assert!(text.contains(part), "{locale} {kind:?}: {text}");
+            }
+        }
+    }
 }
 
 #[test]
@@ -221,16 +278,12 @@ fn query_completion_preserves_mixed_operation_terminal_snapshots() {
         OtaPhase::Cancelled
     );
     assert_eq!(
-        state.last_progress.as_ref().unwrap().ota[1]
-            .error
-            .as_deref(),
-        Some("VERIFY rejected; OTA abort failed: disconnected")
+        state.last_progress.as_ref().unwrap().ota[1].error,
+        Some("VERIFY rejected; OTA abort failed: disconnected".into())
     );
     assert_eq!(
-        state.last_progress.as_ref().unwrap().ota[2]
-            .error
-            .as_deref(),
-        Some("cancelled")
+        state.last_progress.as_ref().unwrap().ota[2].error,
+        Some("cancelled".into())
     );
 }
 
@@ -321,7 +374,7 @@ fn unconfirmed_activation_finishes_without_failure_activity_or_next_action() {
     progress.ota = vec![terminal];
     let report = ReceiverActivationReport {
         submission: ActivationSubmission::Accepted,
-        availability: ReceiverAvailability::Responding,
+        availability: ReceiverAvailability::Unconfirmed("reopen timed out".into()),
     };
     state.finish_job_progress(Some(progress));
     state.apply_joined_operation_results(
@@ -1178,6 +1231,105 @@ fn synthetic_uf2_progress_cancellation_and_results_survive_locales_and_resize(
         })
         .expect("inspect dismissed results");
     }
+}
+
+#[gpui_kit::test]
+fn ota_failure_guidance_is_visible_live_and_after_join(cx: &mut TestAppContext) {
+    use crate::application::flash::OtaPresentation;
+    use crate::update::{OtaFailure, OtaFailureKind, OtaPhase, OtaProgressError};
+
+    let runtime = AppRuntime::new().expect("create isolated I/O runtime");
+    let private_preferences = tempfile::tempdir().expect("create isolated preference directory");
+    let _ui_session = UiTestSession::new(cx);
+    let fixture = progress_fixture(
+        cx,
+        &runtime,
+        private_preferences.path().join("preferences.json"),
+    );
+    let device = target("a", 0, "board");
+    let identity = ResultTarget::ota(&device);
+    let failure = OtaFailure::from(OtaFailureKind::TrackerBeginNeedsDirectLink);
+    let mut row = ota_progress(&device);
+    row.phase = OtaPhase::Failed;
+    row.error = Some(OtaProgressError::Failure(failure.clone()));
+    let mut progress = Progress::stage("");
+    progress.total = 1;
+    progress.ota.push(row);
+    let (published, observe) = mpsc::channel();
+    let (release, wait) = mpsc::channel();
+    let job = Job::start(move |_, emit| {
+        emit(progress);
+        published.send(()).map_err(|error| error.to_string())?;
+        wait.recv_timeout(Duration::from_secs(5))
+            .map_err(|error| error.to_string())?;
+        Ok(Payload::Update(UpdateCompletion::Results(vec![(
+            ResultIdentity::Esb(device),
+            UpdateOutcome::OtaFailed(failure),
+        )])))
+    })
+    .expect("start the held OTA result worker");
+    observe
+        .recv_timeout(Duration::from_secs(3))
+        .expect("publish the live tracker failure");
+    fixture.workbench.update(cx, |this, cx| {
+        this.active_page = FeaturePage::Ota;
+        this.flash = FlashState {
+            mode: Mode::Esb,
+            activity_origin: Mode::Esb,
+            operation_origin: Mode::Esb,
+            activity_kind: ActivityKind::Operation,
+            operation_targets: vec![identity],
+            ota_presentation: OtaPresentation::Running,
+            job: Some(job),
+            ..FlashState::default()
+        };
+        assert!(this.poll_flash());
+        cx.notify();
+    });
+
+    let check_guidance = |cx: &mut TestAppContext, id: &'static str| {
+        for (locale, requirement, recovery) in [
+            (
+                "en",
+                "wireless link directly to the USB receiver, not through a relay",
+                "Move the tracker closer and retry once it connects directly",
+            ),
+            (
+                "zh-CN",
+                "与 USB 接收器保持稳定的无线直连，不能经由中继",
+                "将追踪器移近接收器，等直连稳定后重试",
+            ),
+        ] {
+            rust_i18n::set_locale(locale);
+            settle_progress(cx, &fixture);
+            cx.update_window(fixture.window, |_, window, _| {
+                let tracker = window.find(id);
+                let label = tracker.label().expect("localized guidance label");
+                assert!(label.contains(requirement), "{id} ({locale}): {label}");
+                assert!(label.contains(recovery), "{id} ({locale}): {label}");
+                assert!(tracker.visible());
+                assert_horizontal_containment(
+                    window,
+                    window.find("progress-fixture-viewport").bounds(),
+                    tracker.bounds(),
+                    id,
+                );
+            })
+            .expect("inspect OTA guidance in the offline firmware window");
+        }
+    };
+    check_guidance(cx, "ota-live-result-a-0");
+    release.send(()).expect("release the synthetic worker");
+    fixture.workbench.update(cx, |this, cx| {
+        crate::sessions::test_support::until(|| {
+            this.poll_flash();
+            this.flash.job.is_none()
+        });
+        assert!(!this.flash.shows_activity(Mode::Esb));
+        assert!(this.flash.shows_results(Mode::Esb));
+        cx.notify();
+    });
+    check_guidance(cx, "ota-failure-a-a:0");
 }
 
 #[gpui_kit::test]

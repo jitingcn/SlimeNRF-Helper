@@ -1,6 +1,10 @@
 use super::*;
-use crate::update::{Uf2CopyReport, Uf2FinalizationStage};
+use crate::update::{
+    OtaFailure, OtaFailureKind, OtaProgressError, OtaStatusPhase, Uf2CopyReport,
+    Uf2FinalizationStage,
+};
 use gpui_kit::component::progress::Progress as ProgressBar;
+use std::{borrow::Cow, fmt};
 
 pub(super) fn wired_transfer_percent(progress: &Progress) -> Option<f32> {
     if progress.total == 0 {
@@ -84,12 +88,85 @@ fn ota_progress_label(target: &OtaTargetProgress) -> &'static str {
     }
 }
 
+struct TrackerSlots(u16);
+
+impl fmt::Display for TrackerSlots {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut slots = self.0;
+        while slots != 0 {
+            let id = slots.trailing_zeros();
+            write!(f, "{id}")?;
+            slots ^= 1 << id;
+            if slots != 0 {
+                f.write_str(", ")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+pub(super) fn ota_failure_text(kind: OtaFailureKind, locale: &str) -> Cow<'static, str> {
+    match kind {
+        OtaFailureKind::TrackerBeginNeedsDirectLink => {
+            rust_i18n::t!("firmware.result.ota.direct_link_required", locale = locale)
+        }
+        OtaFailureKind::OperationRefused { phase, detail } => {
+            let key = match phase {
+                OtaStatusPhase::Begin => "firmware.result.ota.phase.begin",
+                OtaStatusPhase::Transfer => "firmware.result.ota.phase.transfer",
+                OtaStatusPhase::Verify => "firmware.result.ota.phase.verify",
+                OtaStatusPhase::Activate => "firmware.result.ota.phase.activate",
+            };
+            let phase = rust_i18n::t!(key, locale = locale);
+            rust_i18n::t!(
+                "firmware.result.ota.operation_refused",
+                locale = locale,
+                phase = phase,
+                detail = detail
+            )
+        }
+        OtaFailureKind::BeginUnconfirmed => {
+            rust_i18n::t!("firmware.result.ota.begin_unconfirmed", locale = locale)
+        }
+        OtaFailureKind::BeginPeerUnconfirmed { slots } => rust_i18n::t!(
+            "firmware.result.ota.batch_stopped",
+            locale = locale,
+            slots = TrackerSlots(slots)
+        ),
+        OtaFailureKind::BeginBatchSkipped { slots } => rust_i18n::t!(
+            "firmware.result.ota.batch_skipped",
+            locale = locale,
+            slots = TrackerSlots(slots)
+        ),
+    }
+}
+
+fn append_ota_failure_diagnostics(tooltip: &mut String, failure: &OtaFailure) {
+    if let Some(diagnostic) = &failure.diagnostic {
+        tooltip.push('\n');
+        tooltip.push_str(diagnostic);
+    }
+    if let Some(error) = &failure.abort_error {
+        tooltip.push('\n');
+        tooltip.push_str(&rust_i18n::t!(
+            "firmware.result.ota.abort_failed",
+            error = error
+        ));
+    }
+}
+
 pub(super) fn ota_terminal_tooltip(target: &OtaTargetProgress, mut identity: String) -> String {
-    if matches!(target.phase, OtaPhase::Failed | OtaPhase::Cancelled)
-        && let Some(error) = &target.error
-    {
-        identity.push('\n');
-        identity.push_str(error);
+    if matches!(target.phase, OtaPhase::Failed | OtaPhase::Cancelled) {
+        match &target.error {
+            Some(OtaProgressError::Text(error)) => {
+                identity.push('\n');
+                identity.push_str(error);
+            }
+            Some(OtaProgressError::Failure(failure)) => {
+                append_ota_failure_diagnostics(&mut identity, failure);
+            }
+            None => {}
+        }
     }
     identity
 }
@@ -748,16 +825,25 @@ impl Workbench {
             .map(|item| item.identity.clone())
             .unwrap_or_else(|| format!("{} · {label}", target.receiver_key));
         let tooltip = ota_terminal_tooltip(target, identity);
+        let details = match &target.error {
+            Some(OtaProgressError::Failure(failure)) => {
+                ota_failure_text(failure.kind, &rust_i18n::locale())
+            }
+            _ => rust_i18n::t!(ota_phase_label(target.phase)),
+        };
         let color = match target.phase {
             OtaPhase::Completed => cx.theme().success,
             OtaPhase::Failed => cx.theme().danger,
             _ => cx.theme().muted_foreground,
         };
-        div()
+        let message = format!("{label} · {details}");
+        let chip = div()
             .id(SharedString::from(format!(
                 "ota-live-result-{}-{}",
                 target.receiver_key, target.id
             )))
+            .min_w_0()
+            .max_w_full()
             .px_2()
             .py_1()
             .rounded_md()
@@ -765,9 +851,14 @@ impl Workbench {
             .border_color(color.opacity(0.45))
             .bg(color.opacity(0.10))
             .text_xs()
-            .tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx))
-            .child(format!("{label} · {}", tr(ota_phase_label(target.phase))))
-            .into_any_element()
+            .whitespace_normal()
+            .tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx));
+        #[cfg(test)]
+        let chip = chip
+            .role(Role::Label)
+            .aria_label(message.clone())
+            .test_support();
+        chip.child(message).into_any_element()
     }
 
     #[inline(never)]
@@ -906,6 +997,9 @@ impl Workbench {
                             tr("firmware.result.activation.unconfirmed"),
                         UpdateOutcome::Uf2CopyUnconfirmed(_) => tr("firmware.result.uf2.pending"),
                         UpdateOutcome::Failed(error) => error.clone(),
+                        UpdateOutcome::OtaFailed(failure) => {
+                            ota_failure_text(failure.kind, &rust_i18n::locale()).into_owned()
+                        }
                     }
                 )),
         );
@@ -1041,8 +1135,8 @@ impl Workbench {
                     .child(successes);
             }
             for (target, result) in targets {
-                match result {
-                    UpdateOutcome::Completed => {}
+                let (error, identity) = match result {
+                    UpdateOutcome::Completed => continue,
                     UpdateOutcome::ActivationUnconfirmed(report) => {
                         let tooltip = activation_report_tooltip(report, target.identity.clone());
                         group = group.child(
@@ -1074,36 +1168,41 @@ impl Workbench {
                                         .child(activation_report_label(report)),
                                 ),
                         );
+                        continue;
                     }
                     UpdateOutcome::Uf2CopyUnconfirmed(_) => {
                         group = group.child(self.flash_result_row(target, result, cx));
+                        continue;
                     }
                     UpdateOutcome::Failed(error) => {
-                        let identity = target.identity.clone();
-                        let message = format!(
-                            "{} · {}",
-                            self.registry_label(target.registry_key.as_ref(), target.label.clone()),
-                            error
-                        );
-                        let failure = div()
-                            .id(SharedString::from(format!(
-                                "ota-failure-{}-{}",
-                                receiver_key, target.key
-                            )))
-                            .text_sm()
-                            .text_color(cx.theme().danger)
-                            .whitespace_normal()
-                            .tooltip(move |window, cx| {
-                                Tooltip::new(identity.clone()).build(window, cx)
-                            });
-                        #[cfg(test)]
-                        let failure = failure
-                            .role(Role::Label)
-                            .aria_label(message.clone())
-                            .test_support();
-                        group = group.child(failure.child(message));
+                        (Cow::Borrowed(error.as_str()), target.identity.clone())
                     }
-                }
+                    UpdateOutcome::OtaFailed(failure) => {
+                        let mut identity = target.identity.clone();
+                        append_ota_failure_diagnostics(&mut identity, failure);
+                        let text = ota_failure_text(failure.kind, &rust_i18n::locale());
+                        (text, identity)
+                    }
+                };
+                let message = format!(
+                    "{} · {error}",
+                    self.registry_label(target.registry_key.as_ref(), target.label.clone())
+                );
+                let failure = div()
+                    .id(SharedString::from(format!(
+                        "ota-failure-{}-{}",
+                        receiver_key, target.key
+                    )))
+                    .text_sm()
+                    .text_color(cx.theme().danger)
+                    .whitespace_normal()
+                    .tooltip(move |window, cx| Tooltip::new(identity.clone()).build(window, cx));
+                #[cfg(test)]
+                let failure = failure
+                    .role(Role::Label)
+                    .aria_label(message.clone())
+                    .test_support();
+                group = group.child(failure.child(message));
             }
             results = results.child(group);
         }

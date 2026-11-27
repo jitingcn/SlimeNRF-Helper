@@ -1101,6 +1101,18 @@ firmware:
     dismiss: "Dismiss results"
     exit_dfu_requested: "Exit DFU requested; reconnect and verify the device"
     operation_completed: "Operation completed; reconnect and verify firmware version"
+    ota:
+      abort_failed: "OTA abort failed: %{error}"
+      begin_unconfirmed: "Could not confirm that this tracker started the update. No firmware data was sent. Check its wireless connection, then retry."
+      batch_stopped: "No firmware data was sent in this batch: update start was not confirmed for tracker IDs %{slots}."
+      batch_skipped: "This update did not start because tracker IDs %{slots} in an earlier batch did not confirm update start. No firmware data was sent to this tracker."
+      direct_link_required: "The update needs a stable wireless link directly to the USB receiver, not through a relay. Move the tracker closer and retry once it connects directly."
+      operation_refused: "Firmware refused the request while %{phase} (status 0x10, detail %{detail})."
+      phase:
+        begin: "starting the update"
+        transfer: "transferring firmware"
+        verify: "verifying firmware"
+        activate: "activating firmware"
     title: "Device results"
     uf2:
       pending: "Copy confirmation pending; firmware boot not verified"
@@ -1423,6 +1435,8 @@ hid:
     expected: "Expected"
     magnetic_disturbance: "May encode magnetic disturbance"
     magnetometer: "Magnetometer"
+    ota_not_allowed: "Update not allowed"
+    ota_receiver_busy: "Receiver busy"
     receiver_observation: "Receiver observation"
     short_write: "Short write"
     tracker_event: "Tracker event"

@@ -373,7 +373,7 @@ fn event_subscription_and_wom_ack_results_use_documented_endian() {
 #[test]
 fn ota_status_fragment_and_output_begin_have_distinct_layouts() {
     let b = [
-        0xf4, 3, 5, 0x12, 0x34, 0x78, 0x56, 0x34, 0x12, 9, 0, 0, 0, 0, 0, 0,
+        0xf4, 3, 5, 0x12, 0x34, 0x78, 0x56, 0x34, 0x12, 9, 0, 0x7a, 0, 0, 0, 0,
     ];
     let row = decode(&report(Interface::Main, Direction::In, &packet(b)))
         .next()
@@ -385,7 +385,8 @@ fn ota_status_fragment_and_output_begin_have_distinct_layouts() {
             code: 5,
             next_sequence: 0x1234,
             bytes: 0x12345678,
-            ring: 9
+            ring: 9,
+            detail: 0x7a,
         })
     ));
     let mut b = [0; 16];
@@ -422,6 +423,28 @@ fn ota_status_fragment_and_output_begin_have_distinct_layouts() {
             ..
         })
     ));
+}
+
+#[test]
+fn ota_hid_details_keep_busy_and_refused_status_distinct_and_preserve_raw_detail() {
+    for (code, detail, label_en, label_zh) in [
+        (0, 2, "Receiver busy (0x00)", "接收器忙 (0x00)"),
+        (0x10, 1, "Update not allowed (0x10)", "不允许更新 (0x10)"),
+        (0x10, 0, "Update not allowed (0x10)", "不允许更新 (0x10)"),
+        (0x10, 99, "Update not allowed (0x10)", "不允许更新 (0x10)"),
+    ] {
+        let mut b = [0; 16];
+        b[..3].copy_from_slice(&[0xf4, 3, code]);
+        b[11] = detail;
+        let record = report(Interface::Main, Direction::In, &packet(b));
+        let details = decode(&record).next().unwrap().details();
+        assert!(details.iter().any(|(label, value)| {
+            matches!(label.as_str(), "Status" | "状态") && (value == label_en || value == label_zh)
+        }));
+        assert!(details.iter().any(|(label, value)| {
+            matches!(label.as_str(), "Detail" | "详情") && value == &detail.to_string()
+        }));
+    }
 }
 #[test]
 fn raw_interface_is_one_report_and_wxyz_is_not_fused_xyzw() {

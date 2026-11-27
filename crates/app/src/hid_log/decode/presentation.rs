@@ -446,13 +446,24 @@ impl DecodedRecord {
                         field(&mut rows, "hid.field.fragment_bytes", hex(payload));
                     }
                     Ota::Status {
+                        target,
                         code,
                         next_sequence,
                         bytes,
                         ring,
-                        ..
+                        detail,
                     } => {
-                        field(&mut rows, "hid.field.status", code);
+                        let status = match (*code, *detail) {
+                            (0, 2) if *target < 16 => {
+                                format!("{} (0x00)", tr("hid.value.ota_receiver_busy"))
+                            }
+                            (0x10, _) => {
+                                format!("{} (0x10)", tr("hid.value.ota_not_allowed"))
+                            }
+                            _ => code.to_string(),
+                        };
+                        field(&mut rows, "hid.field.status", status);
+                        field(&mut rows, "hid.field.detail", detail);
                         field(&mut rows, "hid.field.next_sequence", next_sequence);
                         field(&mut rows, "hid.field.written_bytes", bytes);
                         field(&mut rows, "hid.field.ring", ring);
