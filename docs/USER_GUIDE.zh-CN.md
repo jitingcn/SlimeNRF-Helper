@@ -33,12 +33,12 @@ chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
 <a id="macos-preview"></a>
 ### 试用 macOS 预览版
 
-实验性无固件预览面向 macOS 15.0 及以上版本，只能从 GitHub Actions 下载，不作为 Release 附件提供，也不能通过应用内更新安装。
+实验性无固件预览版面向 macOS 15.0 及以上版本，不属于正式支持的版本，也不能通过应用内更新安装。
 
 1. 在**苹果菜单 → 关于本机**中查看芯片或处理器。Apple 芯片选 `arm64`，Intel 处理器选 `x64`。请测试与本机架构匹配的版本，不要在 Apple 芯片的 Mac 上用 Rosetta 运行 Intel 版来代替原生测试。
-2. 登录 GitHub，打开 [Actions → macOS preview](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/macos-preview.yml)，选择待测提交对应的成功运行记录。在 **Summary** 页的 **Artifacts** 中下载 `slimenrf-helper-<版本>-macos-arm64-no-firmware.dmg` 或 `slimenrf-helper-<版本>-macos-x64-no-firmware.dmg`。产物保留 14 天，受仓库策略限制。
+2. 试用 v0.6.0 时，从 [v0.6.0 发布页](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0)的 **Assets** 下载与本机架构匹配的 DMG，文件名含 `preview`。如需测试某个开发提交，请登录 GitHub，打开 [Actions → macOS preview](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/macos-preview.yml)，选择该提交对应的成功运行记录。在 **Summary** 页的 **Artifacts** 中下载 `slimenrf-helper-<版本>-macos-arm64-no-firmware.dmg` 或 `slimenrf-helper-<版本>-macos-x64-no-firmware.dmg`。Actions 产物保留 14 天，受仓库策略限制。
 3. 在访达中打开 DMG，将 **SlimeNRF Helper** 拖入**应用程序**，再推出磁盘映像。拔下 SlimeNRF USB 设备并关闭测试用追踪器，从**应用程序**打开已安装的 `SlimeNRF Helper.app`，不要从磁盘映像直接启动。
-4. 预览 App 只有临时签名（ad hoc），没有 Apple Developer ID 签名，也未公证。如果门禁提示开发者无法验证，或 Apple 无法检查 App，请先确认该次 Actions 运行和 DMG 下载来源可信。首次打开被拦截后，进入**系统设置 → 隐私与安全性 → 仍要打开**，只为这个 App 确认**打开**。参见 [Apple 的说明](https://support.apple.com/zh-cn/102445)。不要关闭门禁、修改全局安全策略，或绕过恶意软件或 App 损坏提示。如果系统未提供单 App 例外选项，请报告拦截情况。
+4. 预览 App 只有临时签名（ad hoc），没有 Apple Developer ID 签名，也未公证。如果门禁提示开发者无法验证，或 Apple 无法检查 App，请先确认 DMG 来自上面链接的发布页，或你选定的 Actions 运行记录。首次打开被拦截后，进入**系统设置 → 隐私与安全性 → 仍要打开**，只为这个 App 确认**打开**。参见 [Apple 的说明](https://support.apple.com/zh-cn/102445)。不要关闭门禁、修改全局安全策略，或绕过恶意软件或 App 损坏提示。如果系统未提供单 App 例外选项，请报告拦截情况。
 
 <a id="macos-preview-checks"></a>
 #### 不接设备，先检查启动
@@ -56,7 +56,7 @@ chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
 
 检查 UF2 时，macOS 可能要求为本应用开启**系统设置 → 隐私与安全性 → 文件和文件夹 → SlimeNRF Helper → 可移动宗卷**，与 BLE 扫描所需的**隐私与安全性 → 蓝牙**权限分开。仅为本应用允许本次检查所需的访问；若未授权，请在反馈中说明。不要授予完全磁盘访问权限，也不要以 root 身份运行。
 
-反馈时请附 Actions 运行链接和提交 ID、DMG 文件名、macOS 版本和构建号（`sw_vers`）、CPU 或芯片型号；能启动时也请附上**设置 → 关于**中显示的版本。写明操作、观察结果、警告或错误原文，以及未做的检查。分享截图或日志前，去掉设备序列号、RF 地址、蓝牙 UUID 和私有路径。启动和发现结果不能证明固件写入成功或实体设备已通过验收。
+欢迎试用并在 [GitHub Issues](https://github.com/jitingcn/SlimeNRF-Helper/issues) 反馈。请附发布标签，或 Actions 运行链接和提交 ID；另外请附 DMG 文件名、macOS 版本和构建号（`sw_vers`）、CPU 或芯片型号，若能启动，也请附上**设置 → 关于**中显示的版本。写明操作、观察结果、警告或错误原文，以及未做的检查。分享截图或日志前，去掉设备序列号、RF 地址、蓝牙 UUID 和私有路径。启动和发现结果不能证明固件写入成功或实体设备已通过验收。
 
 <a id="first-use"></a>
 ## 首次使用

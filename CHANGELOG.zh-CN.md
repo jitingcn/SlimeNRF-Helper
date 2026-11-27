@@ -9,9 +9,11 @@
 
 ## [未发布]
 
+## [0.6.0] - 2026-11-27
+
 ### 新增
 
-- 新增面向 Apple 芯片和 Intel Mac 的实验性无固件 DMG，通过 GitHub Actions 提供给协作者测试，不作为 Release 附件发布。
+- **macOS 预览版**支持在 macOS 15 及以上版本试用。请按处理器选择文件名带 `preview` 的无固件 DMG：Apple 芯片选 `arm64`，Intel 选 `x64`。应用仅有临时签名，未经 Apple 公证；硬件兼容性尚未验证。[欢迎反馈试用结果](https://github.com/jitingcn/SlimeNRF-Helper/issues)，请注明 Mac 型号、macOS 版本，以及哪些功能正常或遇到了什么问题。
 - 为 261120 的 Aero Tracker Ultra 应用固件添加精确的有线 UF2 板型与 OTA 目标映射。
 - 本地 Windows 含固件包可在窗口标题和「关于」显示内置应用固件的标签，不改变应用更新使用的版本号。
 
@@ -201,7 +203,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.5.0...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.4...v0.4.5

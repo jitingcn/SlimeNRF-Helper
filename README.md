@@ -25,7 +25,7 @@ Download the Windows x64 EXE or Linux x64 AppImage from [Releases](https://githu
 
 - The Windows EXE filename ends in `windows-x64-no-firmware.exe` and is UPX-compressed. Compression can trigger security software or compatibility problems; no uncompressed fallback is published. A local Cargo build retains the original uncompressed executable.
 - The Linux AppImage uses an Ubuntu 22.04 build baseline with glibc 2.35. It is not fully static and requires a compatible host graphics stack, fonts, desktop and device services, and USB, HID, and serial permissions.
-- macOS has experimental [Actions previews](docs/USER_GUIDE.md#macos-preview) as separate Apple Silicon and Intel disk images. They are for collaborator testing, not Release downloads. Hardware compatibility is not yet verified.
+- [v0.6.0 Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0) includes experimental no-firmware macOS preview DMGs for Apple Silicon and Intel. Hardware compatibility is not yet verified. See the [macOS preview guide](docs/USER_GUIDE.md#macos-preview) for trial instructions, development builds, and feedback.
 
 CI packages include the default configuration but omit firmware payloads. Full builds include bundled firmware. No-firmware builds can use local files, remote downloads, or explicitly selected external configuration.
 

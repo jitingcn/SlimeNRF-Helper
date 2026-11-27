@@ -9,9 +9,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-27
+
 ### Added
 
-- Add experimental no-firmware macOS disk images for Apple Silicon and Intel as GitHub Actions artifacts for collaborator testing. They are not GitHub Release assets.
+- Try the **macOS preview** on macOS 15 or later. Choose the no-firmware DMG marked `preview` for Apple Silicon (`arm64`) or Intel (`x64`). The app is ad hoc signed, not notarized; hardware compatibility has not been verified. [Feedback is welcome](https://github.com/jitingcn/SlimeNRF-Helper/issues): include your Mac model, macOS version and what worked or failed.
 - Map the 261120 Aero Tracker Ultra application to its exact UF2 Board-ID and OTA target.
 - Local Windows firmware packages can show the bundled application firmware tag in the window title and About without changing the app's update version.
 
@@ -201,7 +203,8 @@ Initial standalone application version, documented from the repository's initial
 - Gyroscope calibration guides, temperature calibration analysis with SVG export, and RSSI channel analysis.
 - English and Simplified Chinese interfaces, light and dark themes, and Windows and Linux packaging with full-firmware and no-firmware build modes.
 
-[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.4...v0.4.5
