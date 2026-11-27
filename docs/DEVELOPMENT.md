@@ -364,7 +364,6 @@ This is a broad-permission compatibility package, not a strict sandbox. To suppo
 The SDK cache defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<architecture>`. Change its location with `SLIMENRF_FLATPAK_CACHE` and parallelism with `SLIMENRF_FLATPAK_JOBS`, which defaults to 2. Do not mix it with native caches. If disk space is low, first move the cache to a Linux filesystem with more space. OSTree's reserved space can reject exports even when df reports free space. Do not automatically reduce this protection or clear other people's caches. For a single WSLg X11 diagnostic run, use `flatpak run --nosocket=wayland --socket=x11 io.github.jitingcn.SlimeNRFHelper`. Do not save a global override.
 
 <a id="macos"></a>
-<a id="macos-preview-development"></a>
 ## macOS development and packaging
 
 Use a native Apple Silicon or Intel Mac with macOS 15 or later, the pinned Rust toolchain, and an Apple SDK and Clang from the selected Command Line Tools or Xcode. See [GPUI Kit's prerequisites](https://gpui-kit.com/docs/installation). Install CMake and `jq` for packaging and cargo-nextest for the [quality checks](#checks-and-editor). The app embeds GPUI Fast's Metal source; the renderer compiles it at launch, so the build does not need a separate Metal Toolchain download.

@@ -364,7 +364,6 @@ SDK 构建通过同一个 Rust 库从暂存的已跟踪输入离线生成内嵌�
 SDK 缓存默认 `${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/flatpak/<架构>`，可用 `SLIMENRF_FLATPAK_CACHE` 改位置，`SLIMENRF_FLATPAK_JOBS` 改并行（默认 2）。不与原生缓存混用。磁盘不足优先换宽裕 Linux 文件系统；OSTree 的保留空间可使 df 仍有空间时拒绝导出，不自动降保护或清别人的缓存。WSLg 排查单次 X11 可用 `flatpak run --nosocket=wayland --socket=x11 io.github.jitingcn.SlimeNRFHelper`，不保存全局 override。
 
 <a id="macos"></a>
-<a id="macos-预览版开发"></a>
 ## macOS 开发与打包
 
 在运行 macOS 15 或更新版本的 Apple 芯片或 Intel Mac 上，使用仓库固定的 Rust 工具链，以及当前选定的 Command Line Tools 或 Xcode 提供的 Apple SDK 和 Clang。参见 [GPUI Kit 前置条件](https://gpui-kit.com/docs/installation)。打包需要 CMake 和 `jq`；[质量检查](#checks-and-editor)另需 cargo-nextest。App 内嵌 GPUI Fast 的 Metal 源码，渲染器启动时再编译，不需要单独下载 Metal Toolchain。
@@ -394,7 +393,7 @@ App 的 bundle ID 为 `io.github.jitingcn.SlimeNRFHelper`。App 采用临时签�
 
 Actions 产物保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。Mac 打包脚本校验并以只读方式挂载 DMG，检查其中的 Mach-O 架构、链接的最低系统版本（macOS 15.0）、系统库链接、包元数据、临时签名、许可证文件和**应用程序**链接，再卸载映像。CI 不启动 macOS 界面，也不验证实体设备。
 
-推送 `v<版本号>` 标签后，须等源码作业与四个原生作业全部通过，才会运行发布作业。标签必须匹配主应用的稳定 Cargo 版本以及英文 [CHANGELOG.md](../CHANGELOG.md) 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的中文更改日志。
+推送 `v<版本号>` 标签后，须等源码作业与四个原生作业全部通过，才会运行发布作业。标签必须匹配主应用的稳定 Cargo 版本以及英文 `CHANGELOG.md` 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
 
 发布作业按精确文件名从该标签的同一次工作流运行中下载四个产物，不重新编译。它确认远程标签指向触发工作流的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，不覆盖附件。公开前，工作流核对草稿的标签和提交、四个已上传附件的完整名称和大小，并再次确认远程标签仍指向触发工作流的提交。GitHub 按 legacy 创建日期及 SemVer 策略选择 latest。上传或验证失败可能留下草稿，重试前请人工检查。工作流不会覆盖或删除草稿。
 
