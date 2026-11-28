@@ -9,6 +9,10 @@
 
 ## [未发布]
 
+### 新增
+
+- Linux ARM64（`aarch64`）纳入原生 CI 和正式发布，提供独立的无固件 AppImage，原有的 Linux x64 AppImage 继续提供。
+
 ### 变更
 
 - Release 构建从 fat LTO 改用 ThinLTO。

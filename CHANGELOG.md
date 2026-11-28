@@ -9,6 +9,10 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+
+- Linux ARM64 (`aarch64`) joins native CI and standard releases with its own no-firmware AppImage, alongside the existing Linux x64 AppImage.
+
 ### Changed
 
 - Release builds use ThinLTO instead of fat LTO.

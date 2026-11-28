@@ -165,7 +165,7 @@ Controls 场景提供可选择的合成卡片、短/长内容和动态详情；T
 1. 修改版本要求前，检查上游发布说明和清单中的 MSRV。保持普通依赖与测试依赖的 `gpui-kit` 版本要求一致。
 2. 同步更新[应用清单](../crates/app/Cargo.toml)与 [Cargo.lock](../Cargo.lock)，使用定向的 `cargo update -p PACKAGE --precise VERSION`，不要无范围限制地更新全部依赖。更新 GPUI 时检查已发布的 Kit 清单，并同步更新完整的 Kit、Fast 与 gpui-pre 系列。只通过 `gpui_kit` 导出使用同一套 GPUI 类型。
    审查 [Kit 0.11.0](https://github.com/longbridge/gpui-kit/releases/tag/v0.11.0) 和 [Fast 0.1.19](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.19) 的发布说明（配套 gpui-pre 0.3.14），并核对锁定版本发布源码中的 API 签名。保留 Kit 默认启用的 `x11` feature，以支持 Linux X11。两个后端均为所有 `Element` 实现 `IntoElement`。按画布当前原点构建缓存的 `Path`；缓存不再平移构建好的路径。鼠标释放事件丢失后的选区恢复由 Base 负责，保留终端悬停、重新拖选和 Copy 回归测试。检查自定义 `Element` 的布局、prepaint 和 paint、状态所有者的通知和显式刷新、主题和语言切换、滚动或缩放时的图表位置，以及菜单焦点和滚动。
-3. 根据四个锁定目标的依赖图审查并刷新[许可证声明](#license-notices)，再运行质量检查。
+3. 根据五个锁定目标的依赖图审查并刷新[许可证声明](#license-notices)，再运行质量检查。
 4. 按平台运行[质量检查命令](#checks-and-editor)，覆盖完整固件和无固件两种模式。
 5. 运行原生应用，检查终端滚动、自动换行、文本选择、图表交互和远程固件加载。
 
@@ -238,11 +238,12 @@ cargo run --locked -p slimenrf-tools -- notices --refresh-inputs --check
 
 Cargo 输入、vendor 源码或许可材料变更时：
 
-1. 审查变更输入。workspace 成员或依赖变更时，即使第三方版本不变，也用以下命令获取四个锁定目标的依赖图。若 Cargo 缓存缺少对应归档，先按锁定版本下载；获取依赖图不需要安装目标 SDK。从 `slimenrf-helper` 沿 normal 和 build 边追踪，排除 dev 边。将 build 和 proc-macro 路径标为编译工具，保留已审查清单与生成器说明的保守并集和 feature 合并。
+1. 审查变更输入。workspace 成员或依赖变更时，即使第三方版本不变，也用以下命令获取五个 Cargo 目标的锁定依赖图。若 Cargo 缓存缺少对应归档，先按锁定版本下载；获取依赖图不需要安装目标 SDK。从 `slimenrf-helper` 沿 normal 和 build 边追踪，排除 dev 边。将 build 和 proc-macro 路径标为编译工具，保留已审查清单与生成器说明的保守并集和 feature 合并。
 
    ```bash
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-pc-windows-msvc
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-unknown-linux-gnu
+   cargo metadata --locked --offline --format-version 1 --filter-platform aarch64-unknown-linux-gnu
    cargo metadata --locked --offline --format-version 1 --filter-platform aarch64-apple-darwin
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-apple-darwin
    ```
@@ -327,16 +328,16 @@ cargo --config .cargo/mold.toml build --no-default-features
 
 ### AppImage
 
-除原生依赖还需 curl、`file`、`desktop-file-utils`；[packager](../crates/tools/src/packaging/appimage.rs) 固定 linuxdeploy/appimagetool 版本及 SHA-256，执行前校验，不接受可变 latest。x86-64 一次性准备：
+除原生依赖外，还需安装 curl、`file` 和 `desktop-file-utils`。[打包工具](../crates/tools/src/packaging/appimage.rs)固定 linuxdeploy 和 appimagetool 的版本及 SHA-256，在执行前校验，不使用可能变化的最新版。在与目标架构一致的 Linux 主机上构建，下载匹配的工具（x64 对应 `x86_64`，ARM64 对应 `aarch64`）：
 
 ```bash
-mkdir -p "$HOME/.cache/slimenrf-helper/appimage-tools/1-alpha-20251107-1" \
-  "$HOME/.cache/slimenrf-helper/appimage-tools/1.9.1"
-export SLIMENRF_LINUXDEPLOY="$HOME/.cache/slimenrf-helper/appimage-tools/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage"
-export SLIMENRF_APPIMAGETOOL="$HOME/.cache/slimenrf-helper/appimage-tools/1.9.1/appimagetool-x86_64.AppImage"
-curl -fL https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage -o "$SLIMENRF_LINUXDEPLOY"
-curl -fL https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage -o "$SLIMENRF_APPIMAGETOOL"
-chmod +x "$SLIMENRF_LINUXDEPLOY" "$SLIMENRF_APPIMAGETOOL"
+machine="$(uname -m)"
+tools="${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/appimage-tools"
+mkdir -p "$tools/1-alpha-20251107-1" "$tools/1.9.1"
+curl -fL "https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-${machine}.AppImage" \
+  -o "$tools/1-alpha-20251107-1/linuxdeploy-${machine}.AppImage"
+curl -fL "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-${machine}.AppImage" \
+  -o "$tools/1.9.1/appimagetool-${machine}.AppImage"
 bash ./package.sh --format appimage --no-firmware
 ```
 
@@ -380,16 +381,17 @@ App 的 bundle ID 为 `io.github.jitingcn.SlimeNRFHelper`。App 采用临时签�
 
 ## CI 与发布门槛
 
-[Native no-firmware CI](../.github/workflows/ci.yml) 在分支或标签推送、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括发布准备测试），并检查公开边界和冻结的版权输入。通过后，在 Windows x64、Linux x64 和 ARM64（Ubuntu 22.04）、Apple 芯片和 Intel Mac 上运行无固件质量检查。Linux ARM64 在 `ubuntu-22.04-arm` 上原生运行 Clippy、测试和 doctest；只有 Linux x64 打包 AppImage。Windows 还运行工具测试以覆盖原生 hook；两种 Mac 构建也单独运行工具测试。
+[Native no-firmware CI](../.github/workflows/ci.yml) 在分支或标签推送、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括发布准备测试），并检查公开边界和冻结的版权输入。通过后，在 Windows x64、Linux x64 和 ARM64、Apple 芯片和 Intel Mac 上运行无固件质量检查。Linux 的两种 AppImage 都在 Ubuntu 22.04 上原生构建和打包：x64 使用 `ubuntu-22.04`，ARM64 使用 `ubuntu-22.04-arm`。Windows 还运行工具测试以覆盖原生 hook；两种 Mac 构建也单独运行工具测试。
 
 源码和发布作业共用一个 Rust 缓存 key。原生应用构建仍按平台和架构使用独立缓存。编译器、环境与依赖哈希以及 GitHub 缓存作用域规则继续生效。
 
 两种 Mac 作业都在质量检查前恢复依赖缓存。每种架构的检查与 DMG 打包共用 `target`，debug 和 Release 产物仍保存在各自的目录中。
 
-每个打包作业直接上传一个带版本号的文件。正式发布必须包含以下四个文件，其中 `<版本>` 是应用的 Cargo 版本：
+五个打包作业各直接上传一个带版本号的文件。新的正式标签发布必须包含以下五个文件，其中 `<版本>` 是应用的 Cargo 版本：
 
 - `slimenrf-helper-<版本>-windows-x64-no-firmware.exe`（UPX 压缩）
 - `slimenrf-helper-<版本>-linux-x64-no-firmware.AppImage`
+- `slimenrf-helper-<版本>-linux-arm64-no-firmware.AppImage`
 - `slimenrf-helper-<版本>-macos-arm64-no-firmware.dmg`
 - `slimenrf-helper-<版本>-macos-x64-no-firmware.dmg`
 
@@ -397,7 +399,7 @@ Actions 产物保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也
 
 推送 `v<版本号>` 标签后，须等源码作业与所有原生检查通过，才会运行发布作业。标签必须匹配主应用的稳定 Cargo 版本以及英文 `CHANGELOG.md` 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
 
-发布作业按精确文件名从该标签的同一次工作流运行中下载四个产物，不重新编译。它确认远程标签指向触发工作流的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，不覆盖附件。公开前，工作流核对草稿的标签和提交、四个已上传附件的完整名称和大小，并再次确认远程标签仍指向触发工作流的提交。GitHub 按 legacy 创建日期及 SemVer 策略选择 latest。上传或验证失败可能留下草稿，重试前请人工检查。工作流不会覆盖或删除草稿。
+发布作业按精确文件名从该标签的同一次工作流运行中下载五个产物，不重新编译。它确认远程标签指向触发工作流的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，不覆盖附件。公开前，工作流核对草稿的标签和提交、五个已上传附件的完整名称和大小，并再次确认远程标签仍指向触发工作流的提交。GitHub 按 legacy 创建日期及 SemVer 策略选择 latest。上传或验证失败可能留下草稿，重试前请人工检查。工作流不会覆盖或删除草稿。
 
 仓库权限保持只读，仅发布作业拥有 `contents: write`。发布使用工作流令牌，不需要额外 secret。工作流不推送提交或标签。
 
@@ -409,14 +411,14 @@ Actions 产物保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也
 4. 创建与 Cargo 版本一致的附注标签。
 5. 一并推送 `main` 和标签。
 
-例如 Cargo 版本为 `0.7.0` 时，最后执行：
+将 `version` 设为待发布的 Cargo 版本，再执行：
 
 ```bash
-git tag -a v0.7.0 -m "SlimeNRF Helper 0.7.0"
-git push --atomic origin main v0.7.0
+git tag -a "v$version" -m "SlimeNRF Helper $version"
+git push --atomic origin main "v$version"
 ```
 
-等待对应标签的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 打开该标签的发布页，核对发布说明和 **Assets** 中的四个下载文件。不要移动已发布的标签或替换附件；[v0.6.0 发布页](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0)保留原有附件。
+等待对应标签的工作流完成。在 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 打开该标签的发布页，核对发布说明和 **Assets** 中的五个下载文件。不要移动已发布的标签或替换附件。[v0.7.0](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.7.0) 及更早版本保留原有附件。
 
 CI 成功只证明配置的检查与产物上传已完成。原生界面、目标发行版兼容性、Mac 下载包的 Gatekeeper 行为、USB 权限、性能和实体设备更新须分别验收。WSLg 渲染和本地源码构建不能替代下载包验收。应用自有材料的 MIT OR Apache-2.0 许可不能替代[上文](#license-notices)所述第三方材料、源码提供、固件和产物的独立审查。
 

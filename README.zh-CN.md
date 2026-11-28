@@ -21,10 +21,12 @@
 
 ## 下载与平台限制
 
-从 v0.7.0 起，正式发布包含 Windows x64 EXE、Linux x64 AppImage，以及 Apple 芯片和 Intel Mac 各自的 DMG。请从 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 下载对应平台的包。[v0.6.0 发布页](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0)保留原有的 macOS DMG，文件名带 `preview`。四种构建目标的开发包都可从成功的 [Native no-firmware CI](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/ci.yml) 运行记录下的 **Artifacts** 下载。
+请从 [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) 下载适合本机的包。新的正式标签发布须包含五个无固件包：Windows x64 EXE、Linux x64 和 ARM64 各自的 AppImage，以及 Apple 芯片和 Intel Mac 各自的 DMG。同样五种开发包可从当前 [Native no-firmware CI](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/ci.yml) 的成功运行记录下的 **Artifacts** 下载。
+
+v0.7.0 及更早版本不包含 Linux ARM64 AppImage。[v0.6.0 发布页](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0)保留原有的 macOS DMG，文件名带 `preview`。
 
 - Windows EXE 文件名以 `windows-x64-no-firmware.exe` 结尾，使用 UPX 压缩。压缩可能引发安全软件误报或兼容性问题；不发布未压缩的备用版本。本地 Cargo 构建仍保留未压缩的原始可执行文件。
-- Linux AppImage 以 Ubuntu 22.04 和 glibc 2.35 为构建基线，并非完全静态包。运行仍需兼容的宿主图形栈、字体、桌面与设备服务，以及 USB、HID 和串口权限。
+- 在 Linux 上运行 `uname -m`：输出 `x86_64` 时选 `linux-x64-no-firmware.AppImage`，输出 `aarch64` 时选 `linux-arm64-no-firmware.AppImage`。两者都以 Ubuntu 22.04 和 glibc 2.35 为构建基线，并非完全静态包。运行仍需兼容的宿主图形栈、字体、桌面与设备服务，以及 USB、HID 和串口权限。
 - macOS DMG 要求 macOS 15 或更新版本。Apple 芯片选 `arm64`，Intel 选 `x64`。App 采用临时签名（ad hoc），没有 Developer ID 签名，也未公证。Gatekeeper 提示和手动更新方法见 [macOS 安装](docs/USER_GUIDE.zh-CN.md#macos-installation)。
 
 发布包和 CI 包内置默认配置，但不包含固件载荷。完整构建包含随包固件。无固件构建可使用本地文件、远程下载或显式选择的外部配置。

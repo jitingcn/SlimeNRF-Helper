@@ -21,10 +21,12 @@ Start on **Home** and choose **Connect your devices** to check your receiver and
 
 ## Downloads and platform limits
 
-Starting with v0.7.0, official releases include a Windows x64 EXE, a Linux x64 AppImage, and separate macOS DMGs for Apple Silicon and Intel. Download the package for your platform from [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). The [v0.6.0 release](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0) keeps its original macOS DMGs marked `preview`. Development builds for all four targets are available under **Artifacts** in successful [Native no-firmware CI](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/ci.yml) runs.
+Download the package for your platform from [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases). New standard tagged releases require five no-firmware packages: one Windows x64 EXE, two Linux AppImages (x64 and ARM64), and two macOS DMGs (Apple Silicon and Intel). Development builds for the same five targets are available under **Artifacts** in successful runs of the current [Native no-firmware CI](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/ci.yml).
+
+The Linux ARM64 AppImage is not part of v0.7.0 or earlier releases. The [v0.6.0 release](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0) keeps its original macOS DMGs marked `preview`.
 
 - The Windows EXE filename ends in `windows-x64-no-firmware.exe` and is UPX-compressed. Compression can trigger security software or compatibility problems; no uncompressed fallback is published. A local Cargo build retains the original uncompressed executable.
-- The Linux AppImage uses an Ubuntu 22.04 build baseline with glibc 2.35. It is not fully static and requires a compatible host graphics stack, fonts, desktop and device services, and USB, HID, and serial permissions.
+- On Linux, choose `linux-x64-no-firmware.AppImage` if `uname -m` reports `x86_64`, or `linux-arm64-no-firmware.AppImage` if it reports `aarch64`. Both use an Ubuntu 22.04 build baseline with glibc 2.35. They are not fully static and require a compatible host graphics stack, fonts, desktop and device services, and USB, HID, and serial permissions.
 - The macOS DMGs require macOS 15 or later. Choose `arm64` for Apple Silicon or `x64` for Intel. The app is ad hoc signed, without Developer ID signing or notarization. See [macOS installation](docs/USER_GUIDE.md#macos-installation) for Gatekeeper and manual updates.
 
 Release and CI packages include the default configuration but omit firmware payloads. Full builds include bundled firmware. No-firmware builds can use local files, remote downloads, or explicitly selected external configuration.

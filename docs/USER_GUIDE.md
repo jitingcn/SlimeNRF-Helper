@@ -15,17 +15,22 @@ For a development build, open [Native no-firmware CI](https://github.com/jitingc
 
 On Windows, download the package whose filename ends in `windows-x64-no-firmware.exe` and run it directly. It is UPX-compressed, which can trigger security software or compatibility problems. No uncompressed fallback is published; a local Cargo build retains the original uncompressed executable.
 
-On Linux, download the x64 AppImage. Replace the example filename below with the actual filename. Run these commands in the directory that contains the file.
+On Linux, run `uname -m` and choose the AppImage with the matching filename suffix:
+
+- `x86_64`: `linux-x64-no-firmware.AppImage`
+- `aarch64`: `linux-arm64-no-firmware.AppImage`
+
+The ARM64 AppImage is a standard package for new releases; v0.7.0 and earlier do not include it. In the directory containing the download, replace `<AppImage filename>` with the actual filename:
 
 ```bash
-chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
-./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
+chmod +x "./<AppImage filename>"
+"./<AppImage filename>"
 ```
 
 If FUSE is unavailable, start the application with this command:
 
 ```bash
-./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage --appimage-extract-and-run
+"./<AppImage filename>" --appimage-extract-and-run
 ```
 
 The no-firmware package includes the default configuration but no firmware payloads. For updates, use local files, remote downloads, or an explicitly supplied external configuration. For Linux services, device permissions, and UF2 mount requirements, see [Linux device and runtime requirements](#linux-devices). For source builds, see [Development and packaging](DEVELOPMENT.md).

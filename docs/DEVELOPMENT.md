@@ -165,7 +165,7 @@ For drawing or scrolling diagnosis, see the single-launch [Fast switches](#clean
 1. Review upstream release notes and the manifest's MSRV before changing version requirements. Keep the normal and test `gpui-kit` requirements identical.
 2. Update the [application manifest](../crates/app/Cargo.toml) and [Cargo.lock](../Cargo.lock) together with targeted `cargo update -p PACKAGE --precise VERSION` commands, not a blanket update. For GPUI updates, inspect the published Kit manifests and update the complete Kit, Fast, and gpui-pre families together. Keep a single GPUI type universe through `gpui_kit` exports.
    Review [Kit 0.11.0](https://github.com/longbridge/gpui-kit/releases/tag/v0.11.0) and [Fast 0.1.19](https://github.com/longbridge/gpui-fast/releases/tag/v0.1.19), paired with gpui-pre 0.3.14, and verify API signatures in the locked published sources. Keep Kit's default `x11` feature for Linux X11 support. Both backends supply `IntoElement` for every `Element`. Build cached `Path`s at the current canvas origin; the cache no longer translates finished paths. Base owns selection recovery after a lost mouse release; keep the terminal hover, new-drag, and Copy regressions. Check custom `Element` layout, prepaint, and paint, owner notifications and explicit refresh, theme and locale changes, plot placement when scrolling or resizing, and menu focus and scrolling.
-3. Review and refresh the [license notices](#license-notices) from all four locked target graphs before running the gates.
+3. Review and refresh the [license notices](#license-notices) from all five locked target graphs before running the gates.
 4. Run the platform [quality commands](#checks-and-editor) in both full and no-firmware modes.
 5. Run the native application. Check terminal scrolling, wrapping, text selection, plot interaction, and remote firmware loading.
 
@@ -238,11 +238,12 @@ The semantic fingerprint excludes profile settings; workspace membership and dep
 
 When Cargo inputs, vendored sources, or license materials change:
 
-1. Review the changed inputs. For workspace membership or dependency changes, capture the four locked target graphs below even if third-party versions are unchanged. Fetch the locked archives first if they are missing from Cargo's cache; capturing these graphs does not require the target SDKs. Follow normal and build edges from `slimenrf-helper`, excluding dev edges. Mark build and proc-macro paths as compile tools, and preserve the conservative union and feature unification described in the reviewed inventory and renderer.
+1. Review the changed inputs. For workspace membership or dependency changes, capture all five locked Cargo target graphs below even if third-party versions are unchanged. Fetch the locked archives first if they are missing from Cargo's cache; capturing these graphs does not require the target SDKs. Follow normal and build edges from `slimenrf-helper`, excluding dev edges. Mark build and proc-macro paths as compile tools, and preserve the conservative union and feature unification described in the reviewed inventory and renderer.
 
    ```bash
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-pc-windows-msvc
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-unknown-linux-gnu
+   cargo metadata --locked --offline --format-version 1 --filter-platform aarch64-unknown-linux-gnu
    cargo metadata --locked --offline --format-version 1 --filter-platform aarch64-apple-darwin
    cargo metadata --locked --offline --format-version 1 --filter-platform x86_64-apple-darwin
    ```
@@ -327,16 +328,16 @@ This selects Clang with `-fuse-ld=mold`; it does not change CI or Flatpak defaul
 
 ### AppImage
 
-In addition to native dependencies, install curl, `file`, and `desktop-file-utils`. The [packager](../crates/tools/src/packaging/appimage.rs) pins linuxdeploy and appimagetool versions and SHA-256 hashes and verifies them before execution. Mutable latest versions are not accepted. For one-time x86-64 setup:
+In addition to native dependencies, install curl, `file`, and `desktop-file-utils`. The [packager](../crates/tools/src/packaging/appimage.rs) pins linuxdeploy and appimagetool versions and SHA-256 hashes and verifies them before execution. Mutable latest versions are not accepted. Build on a native Linux host of the intended architecture, and download the matching tools (`x86_64` for x64, `aarch64` for ARM64):
 
 ```bash
-mkdir -p "$HOME/.cache/slimenrf-helper/appimage-tools/1-alpha-20251107-1" \
-  "$HOME/.cache/slimenrf-helper/appimage-tools/1.9.1"
-export SLIMENRF_LINUXDEPLOY="$HOME/.cache/slimenrf-helper/appimage-tools/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage"
-export SLIMENRF_APPIMAGETOOL="$HOME/.cache/slimenrf-helper/appimage-tools/1.9.1/appimagetool-x86_64.AppImage"
-curl -fL https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage -o "$SLIMENRF_LINUXDEPLOY"
-curl -fL https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage -o "$SLIMENRF_APPIMAGETOOL"
-chmod +x "$SLIMENRF_LINUXDEPLOY" "$SLIMENRF_APPIMAGETOOL"
+machine="$(uname -m)"
+tools="${XDG_CACHE_HOME:-$HOME/.cache}/slimenrf-helper/appimage-tools"
+mkdir -p "$tools/1-alpha-20251107-1" "$tools/1.9.1"
+curl -fL "https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-${machine}.AppImage" \
+  -o "$tools/1-alpha-20251107-1/linuxdeploy-${machine}.AppImage"
+curl -fL "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-${machine}.AppImage" \
+  -o "$tools/1.9.1/appimagetool-${machine}.AppImage"
 bash ./package.sh --format appimage --no-firmware
 ```
 
@@ -380,16 +381,17 @@ The bundle ID is `io.github.jitingcn.SlimeNRFHelper`. The app uses an ad hoc sig
 
 ## CI and release acceptance
 
-[Native no-firmware CI](../.github/workflows/ci.yml) runs on branch and tag pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including release preparation tests, and checks publication boundaries and frozen notice inputs. The native jobs then run the no-firmware quality checks on Windows x64, Linux x64 and ARM64 (Ubuntu 22.04), and macOS Apple Silicon and Intel. Linux ARM64 runs Clippy, tests and doctests natively on `ubuntu-22.04-arm`; only Linux x64 packages an AppImage. Windows also runs the tools tests for native hook coverage; both Mac jobs run the tools tests separately.
+[Native no-firmware CI](../.github/workflows/ci.yml) runs on branch and tag pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including release preparation tests, and checks publication boundaries and frozen notice inputs. The native jobs then run the no-firmware quality checks on Windows x64, Linux x64 and ARM64, and macOS Apple Silicon and Intel. Both Linux jobs build and package AppImages natively on Ubuntu 22.04: x64 on `ubuntu-22.04` and ARM64 on `ubuntu-22.04-arm`. Windows also runs the tools tests for native hook coverage; both Mac jobs run the tools tests separately.
 
 The source and release jobs share a Rust cache key. Native application build caches stay separate by platform and architecture. Compiler, environment, and dependency hashes and GitHub's cache scope rules still apply.
 
 Both macOS jobs restore dependencies before the quality checks. Within each architecture, checks and DMG packaging share `target`; debug and Release build artifacts stay in separate profile directories.
 
-Each packaging job uploads one file directly under its versioned filename. A standard release requires this exact set, where `<version>` is the application's Cargo version:
+Each of the five packaging jobs uploads one file directly under its versioned filename. A new standard tagged release requires this exact set, where `<version>` is the application's Cargo version:
 
 - `slimenrf-helper-<version>-windows-x64-no-firmware.exe` (UPX-compressed)
 - `slimenrf-helper-<version>-linux-x64-no-firmware.AppImage`
+- `slimenrf-helper-<version>-linux-arm64-no-firmware.AppImage`
 - `slimenrf-helper-<version>-macos-arm64-no-firmware.dmg`
 - `slimenrf-helper-<version>-macos-x64-no-firmware.dmg`
 
@@ -397,7 +399,7 @@ Actions artifacts are retained for 14 days, subject to repository policy. CI doe
 
 A `v<version>` tag push runs the release job only after the source job and all native checks pass. The tag must match the application's stable Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md); SemVer prerelease versions are rejected. Release notes use that entry and link to the Chinese changelog at the same commit.
 
-The publisher downloads all four exact-name artifacts from that tag's workflow run without rebuilding them. It checks that the remote tag resolves to the event commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files without overwriting assets. Before publishing, the workflow checks the draft tag and commit, the exact set of four uploaded asset names and sizes, and that the remote tag still points to the event commit. GitHub selects latest using its legacy creation-date and SemVer policy. A failed upload or verification can leave a draft; inspect it manually before retrying. The workflow does not overwrite or delete it.
+The publisher downloads all five exact-name artifacts from that tag's workflow run without rebuilding them. It checks that the remote tag resolves to the event commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files without overwriting assets. Before publishing, the workflow checks the draft tag and commit, the exact set of five uploaded asset names and sizes, and that the remote tag still points to the event commit. GitHub selects latest using its legacy creation-date and SemVer policy. A failed upload or verification can leave a draft; inspect it manually before retrying. The workflow does not overwrite or delete it.
 
 Repository permissions remain read-only except for `contents: write` on the release job. Publication uses the workflow token and needs no additional secret. The workflow never pushes commits or tags.
 
@@ -409,14 +411,14 @@ Repository permissions remain read-only except for `contents: write` on the rele
 4. Create an annotated tag that matches the Cargo version.
 5. Push `main` and the tag together.
 
-For example, if the Cargo version is `0.7.0`, the final commands are:
+Set `version` to the Cargo version of the new release, then run:
 
 ```bash
-git tag -a v0.7.0 -m "SlimeNRF Helper 0.7.0"
-git push --atomic origin main v0.7.0
+git tag -a "v$version" -m "SlimeNRF Helper $version"
+git push --atomic origin main "v$version"
 ```
 
-Wait for the exact tag's workflow to finish. Open that tag's page from [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) and check the release notes and all four downloads under **Assets**. Do not move published tags or replace their assets; the [v0.6.0 release](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0) retains its original assets.
+Wait for the exact tag's workflow to finish. Open that tag's page from [Releases](https://github.com/jitingcn/SlimeNRF-Helper/releases) and check the release notes and all five downloads under **Assets**. Do not move published tags or replace their assets. [v0.7.0](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.7.0) and earlier releases retain their original assets.
 
 Successful CI confirms only the configured checks and uploaded artifacts. Native GUI behavior, target distribution compatibility, Gatekeeper on downloaded Mac builds, USB permissions, performance, and physical device updates require separate acceptance. WSLg rendering and local source builds do not substitute for testing the downloaded package. The application-owned MIT OR Apache-2.0 license does not replace the separate third-party, source-availability, firmware, and artifact reviews described [above](#license-notices).
 

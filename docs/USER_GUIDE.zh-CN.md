@@ -15,17 +15,22 @@
 
 Windows 下载文件名以 `windows-x64-no-firmware.exe` 结尾的包，下载完成后直接运行。该文件使用 UPX 压缩，可能引发安全软件误报或兼容性问题。不发布未压缩的备用版本；本地 Cargo 构建仍保留未压缩的原始可执行文件。
 
-Linux 下载 x64 AppImage。将以下示例文件名替换为实际下载文件名。在文件所在目录执行以下命令。
+在 Linux 上运行 `uname -m`，按输出选择对应文件名后缀的 AppImage：
+
+- `x86_64`：`linux-x64-no-firmware.AppImage`
+- `aarch64`：`linux-arm64-no-firmware.AppImage`
+
+ARM64 AppImage 是新版本的正式发布包，v0.7.0 及更早版本不包含它。在下载文件所在目录执行下列命令，将 `<AppImage 文件名>` 替换为实际文件名：
 
 ```bash
-chmod +x ./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
-./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage
+chmod +x "./<AppImage 文件名>"
+"./<AppImage 文件名>"
 ```
 
 如果没有 FUSE，使用以下命令启动：
 
 ```bash
-./slimenrf-helper-0.3.2-linux-x64-no-firmware.AppImage --appimage-extract-and-run
+"./<AppImage 文件名>" --appimage-extract-and-run
 ```
 
 无固件包内置默认配置，但不包含固件载荷。更新时使用本地文件、远程下载或显式外部配置。Linux 的服务、设备权限与 UF2 挂载条件见 [Linux 设备与运行条件](#linux-devices)。源码构建见[开发与打包](DEVELOPMENT.zh-CN.md)。
