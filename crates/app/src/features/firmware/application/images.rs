@@ -131,13 +131,12 @@ fn parse_sd_req(value: &str) -> Result<Vec<u32>, String> {
 pub(super) fn firmware_filter_matches(
     hints: &[board_catalog::FirmwareHint],
     variant: &str,
-    targets: &[(String, Option<board_catalog::EsbOtaKind>)],
+    targets: &[FirmwareFilterTarget],
     matched_only: bool,
     variant_filter: Option<&str>,
 ) -> bool {
     variant_filter.is_none_or(|filter| filter == variant)
         && (!matched_only
-            || targets.is_empty()
             || hints.iter().any(|hint| {
                 targets.iter().any(|(board, kind)| {
                     *board == board_catalog::canonical_board(&hint.board_target)
@@ -509,7 +508,7 @@ impl Workbench {
         }
     }
 
-    pub(super) fn flash_filter_targets(&self) -> Vec<(String, Option<board_catalog::EsbOtaKind>)> {
+    pub(super) fn flash_filter_targets(&self) -> Vec<FirmwareFilterTarget> {
         let mut targets = Vec::new();
         match self.flash_mode() {
             Mode::Esb => {
@@ -521,8 +520,12 @@ impl Workbench {
                         && self.flash.active_group.as_deref()
                             == Some(ota_assignment_key(target).as_str())
                     {
+                        let board = board_catalog::canonical_board(&target.info.board_target);
+                        if board.is_empty() {
+                            continue;
+                        }
                         targets.push((
-                            board_catalog::canonical_board(&target.info.board_target),
+                            board,
                             Some(if target.id == esb_ota::RECEIVER_ID {
                                 board_catalog::EsbOtaKind::Receiver
                             } else {

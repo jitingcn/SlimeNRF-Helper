@@ -21,6 +21,18 @@ pub(super) fn run(future: impl Future<Output = ()>) {
         .block_on(future);
 }
 
+const LATEST_CI_CUTOFF: &str = "2026-08-30";
+
+fn latest_test_date() -> chrono::NaiveDate {
+    chrono::NaiveDate::from_ymd_opt(2026, 11, 28).unwrap()
+}
+
+fn recent_ci_url(api: &str, branch: &str) -> String {
+    format!(
+        "{api}/actions/runs?branch={branch}&status=success&created=%3E%3D{LATEST_CI_CUTOFF}&per_page=100&page=1"
+    )
+}
+
 type FixtureReply = (String, Result<Vec<u8>, String>);
 
 struct Fixture {
@@ -211,6 +223,179 @@ fn release_versions_preserve_receivers_and_variants_not_executables() {
 }
 
 #[test]
+fn release_latest_ranks_all_pages_and_reuses_embedded_directory() {
+    run(async {
+        let config = RemoteConfig::default();
+        let channel = SourceChannel::Release;
+        let api = channel.api(&config);
+        let asset = |id, name: &str, state: &str| {
+            json!({
+                "id":id, "name":name, "size":3, "state":state,
+                "browser_download_url":format!("https://github.com/assets/{id}")
+            })
+        };
+        let release = |id, date: &str, assets| {
+            json!({
+                "id":id, "tag_name":format!("261010-{id}"), "published_at":date,
+                "html_url":format!("https://github.com/releases/{id}"), "assets":assets
+            })
+        };
+        let first: Vec<_> = (1..=100)
+            .map(|id| {
+                release(
+                    id,
+                    if id == 100 {
+                        "2026-10-10"
+                    } else {
+                        "2026-10-08"
+                    },
+                    json!([asset(id, "old.hex", "uploaded")]),
+                )
+            })
+            .collect();
+        let mut winner = release(
+            101,
+            "2026-10-10",
+            json!([
+                asset(7, "receiver.hex", "uploaded"),
+                asset(8, "unfinished.uf2", "starter"),
+                asset(9, "tracker.uf2", "uploaded"),
+                asset(10, "tool.exe", "uploaded"),
+            ]),
+        );
+        winner["prerelease"] = json!(true);
+        winner["assets"][0]["digest"] = json!(format!("sha256:{}", "A".repeat(64)));
+        let source = Fixture::new(vec![
+            (format!("{api}/releases?per_page=100&page=1"), json!(first)),
+            (
+                format!("{api}/releases?per_page=100&page=2"),
+                json!([
+                    release(
+                        102,
+                        "2026-10-09",
+                        json!([asset(11, "older.hex", "uploaded")])
+                    ),
+                    winner
+                ]),
+            ),
+        ]);
+        let (version, artifacts) = latest_with(
+            &config,
+            &source,
+            channel,
+            BootloaderNamePolicy::CanonicalOnly,
+            &AtomicBool::new(false),
+            &mut |_| {},
+            latest_test_date,
+        )
+        .await
+        .unwrap();
+        assert_eq!(version.id, 101);
+        assert_eq!(version.name, "261010-101 (prerelease)");
+        assert_eq!(artifacts.iter().map(|a| a.id).collect::<Vec<_>>(), [7, 9]);
+        assert_eq!(artifacts[0].url, "https://github.com/assets/7");
+        assert_eq!(
+            artifacts[0].sha256.as_deref(),
+            Some("a".repeat(64).as_str())
+        );
+        assert!(artifacts.iter().all(|a| a.version.id == version.id));
+        assert!(source.replies.lock().unwrap().is_empty());
+    });
+}
+
+#[test]
+fn release_latest_lists_full_embedded_directory_before_publishing() {
+    run(async {
+        let config = RemoteConfig::default();
+        let channel = SourceChannel::Release;
+        let api = channel.api(&config);
+        let first: Vec<_> = (1..=100)
+            .map(|id| {
+                json!({
+                    "id":id, "name":format!("tool-{id}.exe"), "size":3,
+                    "browser_download_url":format!("https://github.com/assets/{id}")
+                })
+            })
+            .collect();
+        let source = Fixture::new(vec![
+            (
+                format!("{api}/releases?per_page=100&page=1"),
+                json!([{
+                    "id":42, "tag_name":"261010", "published_at":"2026-10-10",
+                    "html_url":"https://github.com/release/42", "assets":first
+                }]),
+            ),
+            (
+                format!("{api}/releases/42/assets?per_page=100&page=1"),
+                json!(first),
+            ),
+            (
+                format!("{api}/releases/42/assets?per_page=100&page=2"),
+                json!([{"id":101,"name":"receiver.hex","size":3,"browser_download_url":"https://github.com/image.hex"}]),
+            ),
+        ]);
+        let (version, artifacts) = latest_with(
+            &config,
+            &source,
+            channel,
+            BootloaderNamePolicy::CanonicalOnly,
+            &AtomicBool::new(false),
+            &mut |_| {},
+            latest_test_date,
+        )
+        .await
+        .unwrap();
+        assert_eq!(version.id, 42);
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].id, 101);
+        assert!(source.replies.lock().unwrap().is_empty());
+    });
+}
+
+#[test]
+fn release_latest_rejects_invalid_embedded_artifact_metadata() {
+    run(async {
+        let config = RemoteConfig::default();
+        let channel = SourceChannel::Release;
+        let api = channel.api(&config);
+        for (url, digest, expected) in [
+            (
+                "https://example.org/image.uf2",
+                None,
+                "approved HTTPS upstream",
+            ),
+            (
+                "https://github.com/image.uf2",
+                Some("invalid"),
+                "malformed SHA-256",
+            ),
+        ] {
+            let source = Fixture::new(vec![(
+                format!("{api}/releases?per_page=100&page=1"),
+                json!([{
+                    "id":42, "tag_name":"261010", "published_at":"2026-10-10",
+                    "html_url":"https://github.com/release/42",
+                    "assets":[{"id":9,"name":"image.uf2","size":3,"browser_download_url":url,"digest":digest}]
+                }]),
+            )]);
+            let error = latest_with(
+                &config,
+                &source,
+                channel,
+                BootloaderNamePolicy::CanonicalOnly,
+                &AtomicBool::new(false),
+                &mut |_| {},
+                latest_test_date,
+            )
+            .await
+            .unwrap_err();
+            assert!(error.contains(expected), "{error}");
+            assert!(source.replies.lock().unwrap().is_empty());
+        }
+    });
+}
+
+#[test]
 fn artifact_pagination_keeps_all_variants_and_digests() {
     run(async {
         let v = version(SourceChannel::ReceiverCi);
@@ -262,19 +447,12 @@ fn latest_skips_expired_ci_and_ignores_other_workflows() {
         let api = channel.api(&RemoteConfig::default());
         let source = Fixture::new(vec![
             (
-                format!(
-                    "{api}/actions/runs?branch=dev&event=push&status=success&per_page=100&page=1"
-                ),
-                json!({"workflow_runs":[
-        run(44,90,".github/workflows/docs.yml","2026-10-10"),
-        run(43,89,".github/workflows/workflow.yml","2026-10-09"),
-        run(42,88,".github/workflows/workflow.yml","2026-10-08")]}),
-            ),
-            (
-                format!(
-                    "{api}/actions/runs?branch=dev&event=workflow_dispatch&status=success&per_page=100&page=1"
-                ),
-                json!({"workflow_runs":[]}),
+                recent_ci_url(&api, "dev"),
+                json!({"total_count":3,"workflow_runs":[
+                    run(44,90,".github/workflows/docs.yml","2026-10-10"),
+                    run(43,89,".github/workflows/workflow.yml","2026-10-09"),
+                    run(42,88,".github/workflows/workflow.yml","2026-10-08"),
+                ]}),
             ),
             (
                 format!("{api}/actions/runs/43/artifacts?per_page=100&page=1"),
@@ -285,20 +463,21 @@ fn latest_skips_expired_ci_and_ignores_other_workflows() {
                 json!({"artifacts":[{"id":2,"name":"Receiver_DataCollect_CDC","size_in_bytes":1,"expired":false}]}),
             ),
         ]);
-        assert_eq!(
-            latest_with(
-                &RemoteConfig::default(),
-                &source,
-                channel,
-                BootloaderNamePolicy::CanonicalOnly,
-                &AtomicBool::new(false),
-                &mut |_| {}
-            )
-            .await
-            .unwrap()
-            .id,
-            42
-        );
+        let (version, artifacts) = latest_with(
+            &RemoteConfig::default(),
+            &source,
+            channel,
+            BootloaderNamePolicy::CanonicalOnly,
+            &AtomicBool::new(false),
+            &mut |_| {},
+            latest_test_date,
+        )
+        .await
+        .unwrap();
+        assert_eq!(version.id, 42);
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].name, "Receiver_DataCollect_CDC");
+        assert!(source.replies.lock().unwrap().is_empty());
     });
 }
 
@@ -334,52 +513,40 @@ fn latest_skips_oversized_artifacts_but_accepts_exact_download_limit() {
                 "created_at":date,"head_sha":"abcdef","head_branch":"dev","event":"push",
                 "status":"completed","conclusion":"success","path":".github/workflows/workflow.yml","html_url":"https://github.com/run"})
                     };
-                    vec![
-                        (
-                            format!(
-                                "{api}/actions/runs?branch=dev&event=push&status=success&per_page=100&page=1"
-                            ),
-                            json!({"workflow_runs":[run(43, "2026-10-10"), run(42, "2026-10-09")]}),
-                        ),
-                        (
-                            format!(
-                                "{api}/actions/runs?branch=dev&event=workflow_dispatch&status=success&per_page=100&page=1"
-                            ),
-                            json!({"workflow_runs":[]}),
-                        ),
-                    ]
+                    vec![(
+                        recent_ci_url(&api, "dev"),
+                        json!({"total_count":2,"workflow_runs":[run(43, "2026-10-10"), run(42, "2026-10-09")]}),
+                    )]
                 };
-                let listed_ids = if newest_size > limit {
-                    vec![43, 42]
-                } else {
-                    vec![43]
-                };
-                for id in listed_ids {
-                    let asset = metadata(id, if id == 43 { newest_size } else { limit });
-                    replies.push(if channel == SourceChannel::Release {
-                        (
-                            format!("{api}/releases/{id}/assets?per_page=100&page=1"),
-                            json!([asset]),
-                        )
+                if !channel.is_release() {
+                    let ids = if newest_size > limit {
+                        &[43, 42][..]
                     } else {
-                        (
+                        &[43][..]
+                    };
+                    for &id in ids {
+                        let asset = metadata(id, if id == 43 { newest_size } else { limit });
+                        replies.push((
                             format!("{api}/actions/runs/{id}/artifacts?per_page=100&page=1"),
                             json!({"artifacts":[asset]}),
-                        )
-                    });
+                        ));
+                    }
                 }
                 let source = Fixture::new(replies);
-                let chosen = latest_with(
+                let (chosen, artifacts) = latest_with(
                     &RemoteConfig::default(),
                     &source,
                     channel,
                     BootloaderNamePolicy::CanonicalOnly,
                     &AtomicBool::new(false),
                     &mut |_| {},
+                    latest_test_date,
                 )
                 .await
                 .unwrap();
                 assert_eq!(chosen.id, if newest_size > limit { 42 } else { 43 });
+                assert_eq!(artifacts.len(), 1);
+                assert_eq!(artifacts[0].size, limit);
                 assert!(source.replies.lock().unwrap().is_empty());
             }
             // Deliberate selection remains explicit and performs no network request.
@@ -400,6 +567,158 @@ fn latest_skips_oversized_artifacts_but_accepts_exact_download_limit() {
                 .contains("64 MiB")
             );
         }
+    });
+}
+
+#[test]
+fn latest_ci_falls_back_to_versions_older_than_the_recent_window() {
+    run(async {
+        let mut config = RemoteConfig::default();
+        config.bootloader.ci = GithubRepository {
+            owner: "configured-owner".into(),
+            name: "configured-ci".into(),
+        };
+        let channel = SourceChannel::BootloaderCi;
+        let api = channel.api(&config);
+        let source = Fixture::new(vec![
+            (
+                recent_ci_url(&api, "master"),
+                json!({"total_count":1,"workflow_runs":[
+                    bootloader_ci_run(50, 15, "2026-10-25", "push")
+                ]}),
+            ),
+            (
+                format!("{api}/actions/runs/50/artifacts?per_page=100&page=1"),
+                json!({"artifacts":[{"id":1,"name":"Promicro","size_in_bytes":3,"expired":true}]}),
+            ),
+            (
+                format!(
+                    "{api}/actions/runs?branch=master&event=push&status=success&created=%3C{LATEST_CI_CUTOFF}&per_page=100&page=1"
+                ),
+                json!({"workflow_runs":[bootloader_ci_run(42, 10, "2026-08-29", "push")]}),
+            ),
+            (
+                format!(
+                    "{api}/actions/runs?branch=master&event=workflow_dispatch&status=success&created=%3C{LATEST_CI_CUTOFF}&per_page=100&page=1"
+                ),
+                json!({"workflow_runs":[bootloader_ci_run(43, 11, "2026-08-29", "workflow_dispatch")]}),
+            ),
+            (
+                format!("{api}/actions/runs/43/artifacts?per_page=100&page=1"),
+                json!({"artifacts":[{"id":7,"name":"Promicro #1","size_in_bytes":3,"expired":false}]}),
+            ),
+        ]);
+        let (version, artifacts) = latest_with(
+            &config,
+            &source,
+            channel,
+            BootloaderNamePolicy::CanonicalOnly,
+            &AtomicBool::new(false),
+            &mut |_| {},
+            latest_test_date,
+        )
+        .await
+        .unwrap();
+        assert_eq!(version.id, 43);
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(
+            artifacts[0].url,
+            "https://nightly.link/configured-owner/configured-ci/actions/runs/43/Promicro%20%231.zip"
+        );
+        assert!(source.replies.lock().unwrap().is_empty());
+    });
+}
+
+#[test]
+fn latest_ci_incomplete_window_uses_paginated_event_search_and_complete_artifacts() {
+    run(async {
+        let config = RemoteConfig::default();
+        let channel = SourceChannel::BootloaderCi;
+        let api = channel.api(&config);
+        let mut first: Vec<_> = (100..200)
+            .map(|id| {
+                let mut unrelated = bootloader_ci_run(id, 10, "2026-10-09", "push");
+                unrelated["path"] = json!(".github/workflows/docs.yml");
+                unrelated
+            })
+            .collect();
+        first[0] = bootloader_ci_run(41, 15, "2026-10-10", "push");
+        let artifact = |id, expired| json!({"id":id,"name":format!("board-{id}"),"size_in_bytes":3,"expired":expired});
+        let first_artifacts: Vec<_> = (1..=100).map(|id| artifact(id, id != 1)).collect();
+        let source = Fixture::new(vec![
+            (
+                recent_ci_url(&api, "master"),
+                json!({"total_count":1001,"workflow_runs":first}),
+            ),
+            (
+                format!(
+                    "{api}/actions/runs?branch=master&event=push&status=success&per_page=100&page=1"
+                ),
+                json!({"workflow_runs":first}),
+            ),
+            (
+                format!(
+                    "{api}/actions/runs?branch=master&event=push&status=success&per_page=100&page=2"
+                ),
+                json!({"workflow_runs":[bootloader_ci_run(42, 16, "2026-10-11", "push")]}),
+            ),
+            (
+                format!(
+                    "{api}/actions/runs?branch=master&event=workflow_dispatch&status=success&per_page=100&page=1"
+                ),
+                json!({"workflow_runs":[bootloader_ci_run(40, 14, "2026-10-09", "workflow_dispatch")]}),
+            ),
+            (
+                format!("{api}/actions/runs/42/artifacts?per_page=100&page=1"),
+                json!({"artifacts":first_artifacts}),
+            ),
+            (
+                format!("{api}/actions/runs/42/artifacts?per_page=100&page=2"),
+                json!({"artifacts":[artifact(101, false)]}),
+            ),
+        ]);
+        let (version, artifacts) = latest_with(
+            &config,
+            &source,
+            channel,
+            BootloaderNamePolicy::CanonicalOnly,
+            &AtomicBool::new(false),
+            &mut |_| {},
+            latest_test_date,
+        )
+        .await
+        .unwrap();
+        assert_eq!(version.id, 42);
+        assert_eq!(artifacts.iter().map(|a| a.id).collect::<Vec<_>>(), [1, 101]);
+        assert!(source.replies.lock().unwrap().is_empty());
+    });
+}
+
+#[test]
+fn latest_ci_preserves_rate_limit_error_without_retrying() {
+    run(async {
+        let config = RemoteConfig::default();
+        let channel = SourceChannel::TrackerCi;
+        let source = Fixture {
+            replies: Mutex::new(VecDeque::from([(
+                recent_ci_url(&channel.api(&config), "dev"),
+                Err(status_error(403, Some("0"), Some("1234"))),
+            )])),
+            token: false,
+        };
+        let error = latest_with(
+            &config,
+            &source,
+            channel,
+            BootloaderNamePolicy::CanonicalOnly,
+            &AtomicBool::new(false),
+            &mut |_| {},
+            latest_test_date,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.contains("rate limit exceeded (reset Unix time: 1234)"));
+        assert!(source.replies.lock().unwrap().is_empty());
     });
 }
 
@@ -1162,12 +1481,16 @@ fn bootloader_latest_uses_configured_release_assets_and_skips_unavailable_versio
         let api = "https://api.github.com/repos/boot-owner/boot-fork";
         let mut oversized = bootloader_asset_metadata();
         oversized["size"] = json!(super::MAX_DOWNLOAD as u64 + 1);
+        let mut unavailable = bootloader_release(44, "0.13.0", "2026-10-10");
+        unavailable["assets"] = json!(vec![bootloader_asset_metadata(); 100]);
+        let mut over_limit = bootloader_release(43, "0.12.0", "2026-10-09");
+        over_limit["assets"] = json!([oversized]);
         let source = Fixture::new(vec![
             (
                 format!("{api}/releases?per_page=100&page=1"),
                 json!([
-                    bootloader_release(44, "0.13.0", "2026-10-10"),
-                    bootloader_release(43, "0.12.0", "2026-10-09"),
+                    unavailable,
+                    over_limit,
                     bootloader_release(407199605, "0.11.1-slimenrf", "2026-10-08"),
                 ]),
             ),
@@ -1175,27 +1498,22 @@ fn bootloader_latest_uses_configured_release_assets_and_skips_unavailable_versio
                 format!("{api}/releases/44/assets?per_page=100&page=1"),
                 json!([]),
             ),
-            (
-                format!("{api}/releases/43/assets?per_page=100&page=1"),
-                json!([oversized]),
-            ),
-            (
-                format!("{api}/releases/407199605/assets?per_page=100&page=1"),
-                json!([bootloader_asset_metadata()]),
-            ),
         ]);
-        let latest = latest_with(
+        let (latest, artifacts) = latest_with(
             &config,
             &source,
             SourceChannel::BootloaderRelease,
             BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
+            latest_test_date,
         )
         .await
         .unwrap();
         assert_eq!(latest.id, 407199605);
         assert_eq!(latest.name, "0.11.1-slimenrf");
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].name, BOOTLOADER_NAME);
         assert!(source.replies.lock().unwrap().is_empty());
     });
 }
@@ -1215,7 +1533,8 @@ fn bootloader_latest_empty_releases_never_fall_back_to_ci() {
                 SourceChannel::BootloaderRelease,
                 BootloaderNamePolicy::CanonicalOnly,
                 &AtomicBool::new(false),
-                &mut |_| {}
+                &mut |_| {},
+                latest_test_date,
             )
             .await
             .is_err()
@@ -1485,19 +1804,11 @@ fn bootloader_ci_latest_skips_expired_newest_and_keeps_container_metadata() {
         ]});
         let source = Fixture::new(vec![
             (
-                format!(
-                    "{api}/actions/runs?branch=master&event=push&status=success&per_page=100&page=1"
-                ),
-                json!({"workflow_runs":[
+                recent_ci_url(&api, "master"),
+                json!({"total_count":2,"workflow_runs":[
                     bootloader_ci_run(47, 47, "2026-10-25", "push"),
-                    bootloader_ci_run(45, 45, "2026-10-24", "push"),
+                    bootloader_ci_run(45, 45, "2026-10-24", "workflow_dispatch"),
                 ]}),
-            ),
-            (
-                format!(
-                    "{api}/actions/runs?branch=master&event=workflow_dispatch&status=success&per_page=100&page=1"
-                ),
-                json!({"workflow_runs":[]}),
             ),
             (
                 format!("{api}/actions/runs/47/artifacts?per_page=100&page=1"),
@@ -1507,34 +1818,21 @@ fn bootloader_ci_latest_skips_expired_newest_and_keeps_container_metadata() {
             ),
             (
                 format!("{api}/actions/runs/45/artifacts?per_page=100&page=1"),
-                active_artifacts.clone(),
-            ),
-            (
-                format!("{api}/actions/runs/45/artifacts?per_page=100&page=1"),
                 active_artifacts,
             ),
         ]);
-        let latest = latest_with(
+        let (latest, artifacts) = latest_with(
             &config,
             &source,
             channel,
             BootloaderNamePolicy::CanonicalOnly,
             &AtomicBool::new(false),
             &mut |_| {},
+            latest_test_date,
         )
         .await
         .unwrap();
         assert_eq!(latest.id, 45);
-        let artifacts = list_artifacts_with(
-            &config,
-            &source,
-            &latest,
-            BootloaderNamePolicy::CanonicalOnly,
-            &AtomicBool::new(false),
-            &mut |_| {},
-        )
-        .await
-        .unwrap();
         assert_eq!(artifacts.len(), 2);
         assert_eq!(artifacts[0].name, "slimenrf_promicro");
         assert_eq!(artifacts[0].variant, "Bootloader");
@@ -1864,22 +2162,28 @@ fn bootloader_release_name_policy_controls_versions_artifacts_and_downloads() {
             );
 
             let latest_id = expected_versions[0];
-            let latest_assets = if latest_id == 43 {
-                json!([known_metadata.clone(), unknown_metadata.clone()])
-            } else {
-                json!([canonical.clone()])
-            };
-            let source = Fixture::new(vec![
-                (release_url.clone(), releases.clone()),
-                (
-                    format!("{api}/releases/{latest_id}/assets?per_page=100&page=1"),
-                    latest_assets,
-                ),
-            ]);
-            let latest = latest_with(&config, &source, channel, policy, &cancel, &mut |_| {})
-                .await
-                .unwrap();
+            let source = Fixture::new(vec![(release_url.clone(), releases.clone())]);
+            let (latest, artifacts) = latest_with(
+                &config,
+                &source,
+                channel,
+                policy,
+                &cancel,
+                &mut |_| {},
+                latest_test_date,
+            )
+            .await
+            .unwrap();
             assert_eq!(latest.id, latest_id);
+            let names: Vec<_> = artifacts
+                .iter()
+                .map(|artifact| artifact.name.as_str())
+                .collect();
+            if latest_id == 43 {
+                assert_eq!(names, [known, unknown]);
+            } else {
+                assert_eq!(names, [BOOTLOADER_NAME]);
+            }
             assert!(source.replies.lock().unwrap().is_empty());
 
             let mut assets = vec![

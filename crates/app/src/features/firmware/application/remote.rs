@@ -44,24 +44,6 @@ impl FlashState {
         self.remote_view = remote;
     }
 
-    pub(super) fn apply_latest(
-        // The caller's request generation is checked before this cache update.
-        &mut self,
-        mode: Mode,
-        destination: ImageDestination,
-        version: source::Version,
-    ) {
-        if self.remote_current(mode)
-            && self.remote_destination == destination
-            && self.channel == version.channel
-        {
-            self.latest_version = Some((version.channel, version.id));
-            self.versions = vec![version];
-            self.artifacts.clear();
-            self.selected_version = None;
-        }
-    }
-
     pub(super) fn is_latest(&self, mode: Mode, version: &source::Version) -> bool {
         self.remote_current(mode)
             && self.channel == version.channel
@@ -88,8 +70,7 @@ impl FlashState {
     }
 
     fn remote_current(&self, mode: Mode) -> bool {
-        self.destination(mode).as_ref() == Some(&self.remote_destination)
-            && self.remote_category == self.remote_category_for(mode)
+        self.remote_category == self.remote_category_for(mode)
             && self.channel.is_bootloader() == (self.remote_category == ImageCategory::Bootloader)
     }
 
@@ -106,7 +87,7 @@ impl FlashState {
     pub(super) fn clear_remote(&mut self) {
         self.remote_generation += 1;
         self.versions.clear();
-        self.artifacts.clear();
+        self.artifacts = None;
         self.selected_version = None;
         self.latest_version = None;
     }
@@ -133,21 +114,19 @@ impl FlashState {
 
     pub(super) fn prepare_remote(&mut self, mode: Mode, destination: &ImageDestination) {
         self.explicit_image_intent(destination);
-        let category = self.remote_category_for(mode);
-        if self.remote_destination != *destination || self.remote_category != category {
+        if !self.remote_current(mode) {
+            let channel = self.source_channel(mode);
             self.clear_remote();
-            self.remote_category = category;
-            self.channel = if category == ImageCategory::Bootloader {
-                source::SourceChannel::BootloaderRelease
-            } else {
-                self.application_channel
-            };
-            self.remote_destination = destination.clone();
+            self.remote_category = self.remote_category_for(mode);
+            self.channel = channel;
+            self.variant_filter = None;
         }
     }
 
     pub(super) fn select_channel(&mut self, channel: source::SourceChannel) {
-        if channel.is_bootloader() != (self.remote_category == ImageCategory::Bootloader) {
+        if self.channel == channel
+            || channel.is_bootloader() != (self.remote_category == ImageCategory::Bootloader)
+        {
             return;
         }
         self.channel = channel;
@@ -164,10 +143,8 @@ impl FlashState {
         }
     }
 
-    fn remote_request(&self, mode: Mode) -> RemoteRequest {
+    fn remote_request(&self) -> RemoteRequest {
         RemoteRequest {
-            mode,
-            destination: self.remote_destination.clone(),
             category: self.remote_category,
             channel: self.channel,
             name_policy: self.bootloader_name_policy(),
@@ -176,56 +153,113 @@ impl FlashState {
         }
     }
 
-    fn accepts_remote(&self, mode: Mode, request: &RemoteRequest) -> bool {
-        request.mode == mode
-            && self.remote_current(mode)
-            && self.destination_exists(&request.destination)
-            && request.destination == self.remote_destination
-            && request.category == self.remote_category
+    // The directory belongs to the selected upstream source, not to an update target.
+    fn accepts_remote_catalog(&self, request: &RemoteRequest) -> bool {
+        request.category == self.remote_category
             && request.channel == self.channel
             && request.name_policy == self.bootloader_name_policy()
             && request.generation == self.remote_generation
             && request.version == self.selected_version
     }
 
+    fn remote_target_revision(
+        &self,
+        mode: Mode,
+        destination: &ImageDestination,
+    ) -> Option<RemoteTargetRevision> {
+        match destination {
+            ImageDestination::Ota { key, .. } => Some(RemoteTargetRevision::Ota {
+                focus: self.ota_focus_generation,
+                members: self.group_epochs.get(key)?.revision,
+            }),
+            ImageDestination::Global if mode == Mode::Uf2 => {
+                Some(RemoteTargetRevision::Uf2(self.uf2_selection_generation))
+            }
+            ImageDestination::Global => Some(RemoteTargetRevision::Global),
+        }
+    }
+
+    fn begin_remote_image(&mut self, mode: Mode) -> Option<RemoteImageRequest> {
+        if !self.remote_current(mode) {
+            return None;
+        }
+        let destination = self.destination(mode)?;
+        self.explicit_image_intent(&destination);
+        Some(RemoteImageRequest {
+            catalog: self.remote_request(),
+            mode,
+            target_revision: self.remote_target_revision(mode, &destination)?,
+            destination,
+            generation: self.remote_download_generation,
+        })
+    }
+
+    fn accepts_remote_image(&self, mode: Mode, request: &RemoteImageRequest) -> bool {
+        request.mode == mode
+            && self.remote_current(mode)
+            && self.accepts_remote_catalog(&request.catalog)
+            && request.generation == self.remote_download_generation
+            && match &request.destination {
+                ImageDestination::Global => true,
+                ImageDestination::Ota { key, .. } => {
+                    self.active_group.as_ref() == Some(key)
+                        && self.destination_exists(&request.destination)
+                }
+            }
+            && self.remote_target_revision(mode, &request.destination)
+                == Some(request.target_revision)
+    }
+
     pub(super) fn apply_remote(&mut self, mode: Mode, payload: Payload) {
         match payload {
             Payload::Versions(request, versions)
-                if self.accepts_remote(mode, &request)
+                if self.accepts_remote_catalog(&request)
                     && versions
                         .iter()
                         .all(|version| version.channel == request.channel) =>
             {
                 self.versions = versions;
-                self.artifacts.clear();
+                self.artifacts = None;
                 self.selected_version = None;
             }
-            Payload::Latest(request, version)
-                if self.accepts_remote(mode, &request) && version.channel == request.channel =>
+            Payload::Latest(request, version, artifacts)
+                if self.accepts_remote_catalog(&request)
+                    && version.channel == request.channel
+                    && artifacts.iter().all(|artifact| {
+                        artifact.version.channel == request.channel
+                            && artifact.version.id == version.id
+                    }) =>
             {
-                self.apply_latest(mode, request.destination, version);
+                self.latest_version = Some((version.channel, version.id));
+                self.selected_version = Some(version.id);
+                self.versions = vec![version];
+                self.artifacts = Some(artifacts);
             }
             Payload::Artifacts(request, artifacts)
-                if self.accepts_remote(mode, &request)
+                if self.accepts_remote_catalog(&request)
                     && artifacts.iter().all(|artifact| {
                         artifact.version.channel == request.channel
                             && Some(artifact.version.id) == request.version
                     }) =>
             {
-                self.artifacts = artifacts;
+                self.artifacts = Some(artifacts);
             }
-            Payload::RemoteImages(request, images) if self.accepts_remote(mode, &request) => {
+            Payload::RemoteImages(request, images) if self.accepts_remote_image(mode, &request) => {
                 self.apply_images(request.destination, images);
             }
             _ => {}
         }
     }
 
-    pub(super) fn select_version(&mut self, id: u64) {
+    pub(super) fn select_version(&mut self, id: u64) -> bool {
+        if self.selected_version == Some(id) && self.artifacts.is_some() {
+            return false;
+        }
         self.remote_generation += 1;
         // A failed or cancelled request must never expose the previous version's files.
-        self.artifacts.clear();
+        self.artifacts = None;
         self.selected_version = Some(id);
+        true
     }
 }
 
@@ -233,6 +267,7 @@ impl Workbench {
     #[inline(never)]
     pub(super) fn flash_remote_picker(&self, cx: &mut Context<Self>) -> AnyElement {
         let current = self.flash.remote_current(self.flash_mode());
+        let targets = self.flash_filter_targets();
         let mut panel = flash_panel(cx).child(
             div()
                 .text_xs()
@@ -245,9 +280,12 @@ impl Workbench {
         if current && !self.flash.versions.is_empty() {
             panel = panel.child(self.flash_remote_versions(cx));
         }
-        panel = panel.child(self.flash_firmware_filters(cx));
-        if current && !self.flash.artifacts.is_empty() {
-            panel = panel.child(self.flash_remote_artifacts(cx));
+        panel = panel.child(self.flash_firmware_filters(&targets, cx));
+        if current
+            && (!self.flash.matched_only || !targets.is_empty())
+            && let Some(artifacts) = self.flash.artifacts.as_deref()
+        {
+            panel = panel.child(self.flash_remote_artifacts(artifacts, &targets, cx));
         }
         panel.into_any_element()
     }
@@ -269,10 +307,14 @@ impl Workbench {
             cx,
         )
         .on_click(cx.listener(move |this, _, _, cx| {
-            let Some(destination) = this.flash.destination(this.flash_mode()) else {
+            let mode = this.flash_mode();
+            if this.flash.remote_current(mode) && this.flash.channel == channel {
+                return;
+            }
+            let Some(destination) = this.flash.destination(mode) else {
                 return;
             };
-            this.flash.prepare_remote(this.flash_mode(), &destination);
+            this.flash.prepare_remote(mode, &destination);
             this.flash.select_channel(channel);
             cx.notify();
         }))
@@ -337,13 +379,13 @@ impl Workbench {
                     .label(tr("firmware.remote.load_versions"))
                     .disabled(busy)
                     .on_click(cx.listener(|this, _, _, cx| {
-                        let channel = this.flash.source_channel(this.flash_mode());
-                        let Some(destination) = this.flash.destination(this.flash_mode()) else {
+                        let mode = this.flash_mode();
+                        let Some(destination) = this.flash.destination(mode) else {
                             return;
                         };
-                        this.flash.prepare_remote(this.flash_mode(), &destination);
+                        this.flash.prepare_remote(mode, &destination);
                         this.flash.clear_remote();
-                        let request = this.flash.remote_request(this.flash_mode());
+                        let request = this.flash.remote_request();
                         let Some(sources) = this.flash.remote_sources() else {
                             return;
                         };
@@ -352,7 +394,7 @@ impl Workbench {
                             source::list_versions(
                                 &client,
                                 sources.as_ref(),
-                                channel,
+                                request.channel,
                                 request.name_policy,
                                 &cancel,
                                 &mut |value| reporter.emit(value),
@@ -370,13 +412,13 @@ impl Workbench {
                     .label(tr("firmware.remote.latest_available"))
                     .disabled(busy)
                     .on_click(cx.listener(|this, _, _, cx| {
-                        let channel = this.flash.source_channel(this.flash_mode());
-                        let Some(destination) = this.flash.destination(this.flash_mode()) else {
+                        let mode = this.flash_mode();
+                        let Some(destination) = this.flash.destination(mode) else {
                             return;
                         };
-                        this.flash.prepare_remote(this.flash_mode(), &destination);
+                        this.flash.prepare_remote(mode, &destination);
                         this.flash.clear_remote();
-                        let request = this.flash.remote_request(this.flash_mode());
+                        let request = this.flash.remote_request();
                         let Some(sources) = this.flash.remote_sources() else {
                             return;
                         };
@@ -385,13 +427,15 @@ impl Workbench {
                             source::latest(
                                 &client,
                                 sources.as_ref(),
-                                channel,
+                                request.channel,
                                 request.name_policy,
                                 &cancel,
                                 &mut |value| reporter.emit(value),
                             )
                             .await
-                            .map(|version| Payload::Latest(request, version))
+                            .map(|(version, artifacts)| {
+                                Payload::Latest(request, version, artifacts)
+                            })
                         });
                         cx.notify();
                     })),
@@ -471,29 +515,33 @@ impl Workbench {
             cx,
         )
         .on_click(cx.listener(move |this, _, _, cx| {
-            if let Some(version) = this.flash.versions.get(index).cloned() {
-                if !this.flash.remote_current(this.flash_mode()) {
-                    return;
-                }
-                let Some(sources) = this.flash.remote_sources() else {
-                    return;
-                };
-                this.flash.select_version(version.id);
-                let request = this.flash.remote_request(this.flash_mode());
-                let client = this.async_io.http_client();
-                this.start_flash_async(move |cancel, reporter| async move {
-                    source::list_artifacts(
-                        &client,
-                        sources.as_ref(),
-                        &version,
-                        request.name_policy,
-                        &cancel,
-                        &mut |value| reporter.emit(value),
-                    )
-                    .await
-                    .map(|artifacts| Payload::Artifacts(request, artifacts))
-                });
+            if !this.flash.remote_current(this.flash_mode()) {
+                return;
             }
+            let Some(id) = this.flash.versions.get(index).map(|version| version.id) else {
+                return;
+            };
+            let Some(sources) = this.flash.remote_sources() else {
+                return;
+            };
+            if !this.flash.select_version(id) {
+                return;
+            }
+            let version = this.flash.versions[index].clone();
+            let request = this.flash.remote_request();
+            let client = this.async_io.http_client();
+            this.start_flash_async(move |cancel, reporter| async move {
+                source::list_artifacts(
+                    &client,
+                    sources.as_ref(),
+                    &version,
+                    request.name_policy,
+                    &cancel,
+                    &mut |value| reporter.emit(value),
+                )
+                .await
+                .map(|artifacts| Payload::Artifacts(request, artifacts))
+            });
             cx.notify();
         }))
         .into_any_element()
@@ -516,9 +564,13 @@ impl Workbench {
     }
 
     #[inline(never)]
-    fn flash_remote_artifact(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+    fn flash_remote_artifact(
+        &self,
+        index: usize,
+        artifact: &source::Artifact,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let busy = self.flash.busy();
-        let artifact = &self.flash.artifacts[index];
         Button::new(SharedString::from(format!(
             "firmware-artifact-{:?}-{}-{}",
             artifact.version.channel, artifact.version.id, artifact.id
@@ -590,28 +642,33 @@ impl Workbench {
         )
         .disabled(busy)
         .on_click(cx.listener(move |this, _, _, cx| {
-            if let Some(artifact) = this.flash.artifacts.get(index).cloned() {
-                if !this.flash.remote_current(this.flash_mode()) {
-                    return;
-                }
+            if let Some(artifact) = this
+                .flash
+                .artifacts
+                .as_ref()
+                .and_then(|artifacts| artifacts.get(index))
+                .cloned()
+            {
                 let Some(sources) = this.flash.remote_sources() else {
                     return;
                 };
-                let request = this.flash.remote_request(this.flash_mode());
+                let Some(request) = this.flash.begin_remote_image(this.flash_mode()) else {
+                    return;
+                };
+                let name_policy = request.catalog.name_policy;
                 let client = this.async_io.http_client();
                 this.start_flash_async(move |cancel, reporter| async move {
                     let files = source::download(
                         &client,
                         sources.as_ref(),
                         &artifact,
-                        request.name_policy,
+                        name_policy,
                         &cancel,
                         &mut |value| reporter.emit(value),
                     )
                     .await?;
                     // Firmware decoding and image construction must not stall the
                     // shared network/BLE driver; retain its join through cancel.
-                    let name_policy = request.name_policy;
                     let images = tokio::task::spawn_blocking(move || {
                         files
                             .into_iter()
@@ -642,8 +699,15 @@ impl Workbench {
     }
 
     #[inline(never)]
-    fn flash_remote_artifacts(&self, cx: &mut Context<Self>) -> AnyElement {
-        let targets = self.flash_filter_targets();
+    fn flash_remote_artifacts(
+        &self,
+        directory: &[source::Artifact],
+        targets: &[FirmwareFilterTarget],
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let variant_filter = self
+            .flash
+            .visible_variant_filter(self.flash_mode(), targets);
         let query = self.firmware_search.read(cx).value().trim().to_lowercase();
         let searching = !query.is_empty();
         let mut eligible_count = 0;
@@ -656,7 +720,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_1();
-        for (index, artifact) in self.flash.artifacts.iter().enumerate() {
+        for (index, artifact) in directory.iter().enumerate() {
             let hints = self
                 .flash
                 .catalog
@@ -667,15 +731,9 @@ impl Workbench {
                 && firmware_filter_matches(
                     &hints,
                     &artifact.variant,
-                    &targets,
+                    targets,
                     self.flash.matched_only,
-                    if self.flash_mode() == Mode::Uf2
-                        && self.flash.category == ImageCategory::Bootloader
-                    {
-                        None
-                    } else {
-                        self.flash.variant_filter.as_deref()
-                    },
+                    variant_filter,
                 )
             {
                 eligible_count += 1;
@@ -688,13 +746,13 @@ impl Workbench {
                     continue;
                 }
                 count += 1;
-                artifacts = artifacts.child(self.flash_remote_artifact(index, cx));
+                artifacts = artifacts.child(self.flash_remote_artifact(index, artifact, cx));
             }
         }
         artifacts = artifacts.child(
             div()
                 .text_xs()
-                .child(format!("{count} / {}", self.flash.artifacts.len())),
+                .child(format!("{count} / {}", directory.len())),
         );
         if eligible_count == 0 {
             let message = tr("firmware.image.no_compatible");

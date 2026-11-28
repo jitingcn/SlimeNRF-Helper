@@ -176,8 +176,12 @@ impl FlashState {
     }
 
     pub(super) fn apply_volumes(&mut self, volumes: Vec<uf2::Uf2Volume>) {
+        let selected_count = self.selected_volumes.len();
         self.selected_volumes
             .retain(|identity| volumes.iter().any(|volume| &volume.identity == identity));
+        if self.selected_volumes.len() != selected_count {
+            self.uf2_selection_generation += 1;
+        }
         let stale_review = match &self.review {
             Some(Action::Uf2(frozen, _, _) | Action::Reboot(frozen)) => frozen.iter().any(|old| {
                 !volumes

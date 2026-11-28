@@ -4,6 +4,32 @@ use super::*;
 #[path = "image_page/tests.rs"]
 mod tests;
 
+impl FlashState {
+    fn variant_filter_is_available(
+        &self,
+        mode: Mode,
+        targets: &[FirmwareFilterTarget],
+        variant: &str,
+    ) -> bool {
+        !(mode == Mode::Uf2 && self.category == ImageCategory::Bootloader)
+            && (variant != "DataCollect CDC"
+                || targets.is_empty()
+                || targets
+                    .iter()
+                    .any(|(_, kind)| *kind != Some(board_catalog::EsbOtaKind::Tracker)))
+    }
+
+    pub(super) fn visible_variant_filter(
+        &self,
+        mode: Mode,
+        targets: &[FirmwareFilterTarget],
+    ) -> Option<&str> {
+        self.variant_filter
+            .as_deref()
+            .filter(|variant| self.variant_filter_is_available(mode, targets, variant))
+    }
+}
+
 impl Workbench {
     #[inline(never)]
     pub(super) fn flash_columns(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -523,6 +549,9 @@ impl Workbench {
     #[inline(never)]
     fn flash_image_choices(&self, cx: &mut Context<Self>) -> AnyElement {
         let targets = self.flash_filter_targets();
+        let variant_filter = self
+            .flash
+            .visible_variant_filter(self.flash_mode(), &targets);
         let mut list = div()
             .id("firmware-image-choices")
             .min_w_0()
@@ -538,14 +567,8 @@ impl Workbench {
                     &image.hints,
                     &source::variant(&image.name),
                     &targets,
-                    self.flash.matched_only,
-                    if self.flash_mode() == Mode::Uf2
-                        && self.flash.category == ImageCategory::Bootloader
-                    {
-                        None
-                    } else {
-                        self.flash.variant_filter.as_deref()
-                    },
+                    self.flash.matched_only && !targets.is_empty(),
+                    variant_filter,
                 )
             {
                 count += 1;
@@ -763,23 +786,32 @@ impl Workbench {
     }
 
     #[inline(never)]
-    pub(super) fn flash_firmware_filters(&self, cx: &mut Context<Self>) -> AnyElement {
-        let known = !self.flash_filter_targets().is_empty();
+    pub(super) fn flash_firmware_filters(
+        &self,
+        targets: &[FirmwareFilterTarget],
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let mut panel = div().min_w_0().flex().flex_col().gap_2().child(
             Checkbox::new("firmware-matched")
                 .label(tr("firmware.filter.matching_boards"))
-                .checked(self.flash.matched_only && known)
-                .disabled(self.flash.busy() || !known)
+                .checked(self.flash.matched_only)
+                .disabled(self.flash.busy())
                 .on_click(cx.listener(|this, checked: &bool, _, cx| {
                     this.flash.matched_only = *checked;
                     cx.notify();
                 })),
         );
-        if !known {
+        if targets.is_empty() && self.flash.matched_only {
+            let message = tr("firmware.filter.known_target_required");
             panel = panel.child(
                 div()
+                    .id("firmware-filter-unknown-target")
+                    .role(Role::Status)
+                    .aria_label(message.clone())
+                    .test_support()
                     .text_xs()
-                    .child(tr("firmware.filter.known_target_required")),
+                    .whitespace_normal()
+                    .child(message),
             );
         }
         panel = panel.child(
@@ -789,7 +821,7 @@ impl Workbench {
                 .flex_wrap()
                 .items_center()
                 .gap_2()
-                .child(self.flash_variant_filters(cx))
+                .child(self.flash_variant_filters(targets, cx))
                 .child(
                     Button::new("firmware-clear-filters")
                         .small()
@@ -811,18 +843,18 @@ impl Workbench {
     }
 
     #[inline(never)]
-    fn flash_variant_filters(&self, cx: &mut Context<Self>) -> AnyElement {
-        if self.flash_mode() == Mode::Uf2 && self.flash.category == ImageCategory::Bootloader {
-            return div().into_any_element();
-        }
+    fn flash_variant_filters(
+        &self,
+        targets: &[FirmwareFilterTarget],
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let mut row = div().min_w_0().flex().flex_wrap().gap_1();
-        let targets = self.flash_filter_targets();
-        let receivers_allowed = targets.is_empty()
-            || targets
-                .iter()
-                .any(|(_, kind)| *kind != Some(board_catalog::EsbOtaKind::Tracker));
+        let mode = self.flash_mode();
         for (index, variant) in ["Standard", "DataCollect CDC"].into_iter().enumerate() {
-            if variant == "DataCollect CDC" && !receivers_allowed {
+            if !self
+                .flash
+                .variant_filter_is_available(mode, targets, variant)
+            {
                 continue;
             }
             row = row.child(

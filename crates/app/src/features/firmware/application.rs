@@ -210,14 +210,30 @@ pub(super) enum ImageDestination {
 
 #[derive(Clone)]
 pub(super) struct RemoteRequest {
-    mode: Mode,
-    destination: ImageDestination,
     category: ImageCategory,
     channel: source::SourceChannel,
     name_policy: source::BootloaderNamePolicy,
     generation: u64,
     version: Option<u64>,
 }
+
+#[derive(Clone)]
+pub(super) struct RemoteImageRequest {
+    catalog: RemoteRequest,
+    mode: Mode,
+    destination: ImageDestination,
+    generation: u64,
+    target_revision: RemoteTargetRevision,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RemoteTargetRevision {
+    Global,
+    Uf2(u64),
+    Ota { focus: u64, members: u64 },
+}
+
+type FirmwareFilterTarget = (String, Option<board_catalog::EsbOtaKind>);
 
 #[derive(Default)]
 struct OtaDefault {
@@ -233,9 +249,9 @@ pub(super) enum Payload {
     OtaBatch(OtaBatchPrepared),
     Images(ImageDestination, Vec<Image>),
     Versions(RemoteRequest, Vec<source::Version>),
-    Latest(RemoteRequest, source::Version),
+    Latest(RemoteRequest, source::Version, Vec<source::Artifact>),
     Artifacts(RemoteRequest, Vec<source::Artifact>),
-    RemoteImages(RemoteRequest, Vec<Image>),
+    RemoteImages(RemoteImageRequest, Vec<Image>),
     Ble(Vec<ble_ota::BleDevice>),
     Update(firmware_update::UpdateCompletion),
 }
@@ -429,15 +445,17 @@ pub(super) struct FlashState {
     image: Option<Image>,
     images: Vec<Image>,
     images_destination: ImageDestination,
-    remote_destination: ImageDestination,
     remote_view: bool,
     latest_version: Option<(source::SourceChannel, u64)>,
     channel: source::SourceChannel,
     versions: Vec<source::Version>,
-    artifacts: Vec<source::Artifact>,
+    artifacts: Option<Vec<source::Artifact>>,
     selected_version: Option<u64>,
     remote_category: ImageCategory,
     remote_generation: u64,
+    remote_download_generation: u64,
+    ota_focus_generation: u64,
+    uf2_selection_generation: u64,
     application_channel: source::SourceChannel,
     matched_only: bool,
     variant_filter: Option<String>,
@@ -514,15 +532,17 @@ impl Default for FlashState {
             image: None,
             images: vec![],
             images_destination: ImageDestination::Global,
-            remote_destination: ImageDestination::Global,
             remote_view: false,
             latest_version: None,
             channel: source::SourceChannel::Release,
             versions: vec![],
-            artifacts: vec![],
+            artifacts: None,
             selected_version: None,
             remote_category: ImageCategory::Application,
             remote_generation: 0,
+            remote_download_generation: 0,
+            ota_focus_generation: 0,
+            uf2_selection_generation: 0,
             application_channel: source::SourceChannel::Release,
             matched_only: true,
             variant_filter: None,
@@ -749,7 +769,6 @@ impl FlashState {
             self.acknowledged = false;
             self.risk_acknowledged = false;
             self.auto_requested = false;
-            self.matched_only = policy == ConfirmationPolicy::Standard;
             self.clear_remote();
         }
     }
@@ -782,7 +801,7 @@ impl FlashState {
     }
 
     pub(super) fn navigation_changed(&mut self) {
-        self.remote_generation += 1;
+        self.remote_download_generation += 1;
         self.serial_dfu.warning = None;
         self.review = None;
         self.acknowledged = false;
@@ -829,7 +848,7 @@ impl FlashState {
 
     fn transition_mode(&mut self, mode: Mode) {
         if self.mode != mode {
-            self.remote_generation += 1;
+            self.remote_download_generation += 1;
         }
         self.mode = mode;
         self.serial_dfu.warning = None;

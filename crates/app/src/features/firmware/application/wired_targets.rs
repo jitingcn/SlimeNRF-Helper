@@ -14,10 +14,13 @@ impl Workbench {
                 .checked(self.flash.selected_volumes.contains(&identity))
                 .disabled(busy || self.flash.auto)
                 .on_click(cx.listener(move |this, checked: &bool, _, cx| {
-                    if *checked {
-                        this.flash.selected_volumes.insert(identity.clone());
+                    let changed = if *checked {
+                        this.flash.selected_volumes.insert(identity.clone())
                     } else {
-                        this.flash.selected_volumes.remove(&identity);
+                        this.flash.selected_volumes.remove(&identity)
+                    };
+                    if changed {
+                        this.flash.uf2_selection_generation += 1;
                     }
                     this.flash.review = None;
                     cx.notify();

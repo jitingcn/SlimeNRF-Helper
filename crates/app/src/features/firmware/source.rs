@@ -115,8 +115,8 @@ pub async fn list_versions(
     .await
 }
 
-/// Latest means the newest successful version with an available firmware artifact.
-/// In particular, an expired CI run never becomes a fabricated latest download.
+/// Returns the newest usable version and its complete artifact directory.
+/// Expired CI artifacts do not make a version available.
 pub async fn latest(
     client: &reqwest::Client,
     config: &RemoteConfig,
@@ -124,7 +124,7 @@ pub async fn latest(
     name_policy: BootloaderNamePolicy,
     cancel: &AtomicBool,
     progress: &mut (dyn FnMut(Progress) + Send),
-) -> Result<Version, String> {
+) -> Result<(Version, Vec<Artifact>), String> {
     latest_with(
         config,
         &Network::new(client.clone()),
@@ -132,6 +132,7 @@ pub async fn latest(
         name_policy,
         cancel,
         progress,
+        || chrono::Utc::now().date_naive(),
     )
     .await
 }

@@ -43,7 +43,7 @@ impl FlashState {
             .or_else(|| self.active_group.clone().filter(|key| keys.contains(key)))
             .or_else(|| keys.first().cloned());
         if active != self.active_group {
-            self.latest_version = None;
+            self.ota_focus_generation += 1;
             self.active_group = active;
             self.variant_filter = None;
             if self.error_origin == Mode::Esb {

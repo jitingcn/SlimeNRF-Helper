@@ -144,7 +144,7 @@ fn removing_and_readding_group_drops_old_async_result_and_hides_stale_image() {
 }
 
 #[test]
-fn package_members_and_remote_version_selection_are_scoped_to_original_group() {
+fn package_members_stay_with_their_group_while_the_remote_version_is_retained() {
     let a = target("a", 0, "one");
     let b = target("b", 0, "two");
     let mut state = FlashState {
@@ -163,9 +163,8 @@ fn package_members_and_remote_version_selection_are_scoped_to_original_group() {
     assert!(state.displayed_image(Mode::Esb).is_none());
     state.reconcile_groups(Some(ota_assignment_key(&b)));
     assert!(state.destination(Mode::Esb).as_ref() != Some(&state.images_destination));
-    assert!(state.destination(Mode::Esb).as_ref() != Some(&state.remote_destination));
     state.prepare_remote(Mode::Esb, &state.destination(Mode::Esb).unwrap());
-    assert!(state.selected_version.is_none());
+    assert_eq!(state.selected_version, Some(123));
     state.reconcile_groups(Some(ota_assignment_key(&a)));
     assert!(state.destination(Mode::Esb).as_ref() == Some(&state.images_destination));
     state

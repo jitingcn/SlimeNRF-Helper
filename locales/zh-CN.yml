@@ -997,7 +997,7 @@ firmware:
     writes_pending: "此端口仍在发送命令，请等待完成后重试"
   filter:
     clear: "清除筛选"
-    known_target_required: "选择已识别的目标后可启用板型筛选"
+    known_target_required: "选择已识别的目标，或取消勾选「仅显示匹配板型」查看所有文件。"
     matching_boards: "仅显示匹配板型"
   image:
     choose_help: "选择本地文件或在线版本以继续。"

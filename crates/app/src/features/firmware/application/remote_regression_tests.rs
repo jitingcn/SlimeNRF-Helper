@@ -1,7 +1,7 @@
 use super::{
     Action, ConfirmationPolicy, FlashState, ImageCategory, ImageDestination, Mode, Payload,
     artifact_firmware_hints, firmware_filter_matches, firmware_page_matches, make_image,
-    ota_target_key, validate_ota_image,
+    ota_assignment_key, ota_target_key, validate_ota_image,
 };
 use crate::application::{FeaturePage, Workbench};
 use crate::features::firmware::{
@@ -42,7 +42,7 @@ fn bootloader_category_reconciles_all_remote_caches_and_restores_application_cha
     state.prepare_remote(Mode::Uf2, &ImageDestination::Global);
     state.select_channel(SourceChannel::TrackerCi);
     state.versions = vec![version(SourceChannel::TrackerCi, 42)];
-    state.artifacts = vec![artifact(SourceChannel::TrackerCi, 42)];
+    state.artifacts = Some(vec![artifact(SourceChannel::TrackerCi, 42)]);
     state.selected_version = Some(42);
     state.latest_version = Some((SourceChannel::TrackerCi, 42));
     state.variant_filter = Some("Standard".into());
@@ -60,7 +60,7 @@ fn bootloader_category_reconciles_all_remote_caches_and_restores_application_cha
         state.source_channel(Mode::OpenDfu),
         SourceChannel::TrackerCi
     );
-    assert!(state.versions.is_empty() && state.artifacts.is_empty());
+    assert!(state.versions.is_empty() && state.artifacts.is_none());
     assert!(state.latest_version.is_none() && state.selected_version.is_none());
     assert!(state.variant_filter.is_none());
     assert!(state.review.is_none() && !state.acknowledged && !state.auto && !state.auto_requested);
@@ -78,7 +78,7 @@ fn bootloader_category_reconciles_all_remote_caches_and_restores_application_cha
     );
     state.select_category(ImageCategory::Application);
     assert_eq!(state.source_channel(Mode::Uf2), SourceChannel::TrackerCi);
-    assert!(state.versions.is_empty() && state.artifacts.is_empty());
+    assert!(state.versions.is_empty() && state.artifacts.is_none());
     for channel in [
         SourceChannel::BootloaderRelease,
         SourceChannel::BootloaderCi,
@@ -97,7 +97,8 @@ fn bootloader_category_reconciles_all_remote_caches_and_restores_application_cha
 fn category_round_trip_rejects_late_application_payloads_without_revoking_new_review() {
     let mut state = FlashState::default();
     state.prepare_remote(Mode::Uf2, &ImageDestination::Global);
-    let old = state.remote_request(Mode::Uf2);
+    let old = state.remote_request();
+    let old_image = state.begin_remote_image(Mode::Uf2).unwrap();
     state.select_category(ImageCategory::Bootloader);
     state.select_category(ImageCategory::Application);
     let chosen = make_image(
@@ -116,14 +117,18 @@ fn category_round_trip_rejects_late_application_payloads_without_revoking_new_re
     );
     state.apply_remote(
         Mode::Uf2,
-        Payload::Latest(old.clone(), version(SourceChannel::Release, 42)),
+        Payload::Latest(
+            old.clone(),
+            version(SourceChannel::Release, 42),
+            vec![artifact(SourceChannel::Release, 42)],
+        ),
     );
     state.apply_remote(
         Mode::Uf2,
-        Payload::Artifacts(old.clone(), vec![artifact(SourceChannel::Release, 42)]),
+        Payload::Artifacts(old, vec![artifact(SourceChannel::Release, 42)]),
     );
-    state.apply_remote(Mode::Uf2, Payload::RemoteImages(old, vec![]));
-    assert!(state.versions.is_empty() && state.artifacts.is_empty());
+    state.apply_remote(Mode::Uf2, Payload::RemoteImages(old_image, vec![]));
+    assert!(state.versions.is_empty() && state.artifacts.is_none());
     assert!(state.latest_version.is_none());
     assert_eq!(state.image.as_ref().unwrap().digest, "chosen-digest");
     assert!(state.review.is_some() && state.acknowledged);
@@ -135,51 +140,84 @@ fn current_bootloader_latest_and_artifacts_are_admitted_but_other_source_is_not(
     state.select_category(ImageCategory::Bootloader);
     state.prepare_remote(Mode::Uf2, &ImageDestination::Global);
     let latest = version(SourceChannel::BootloaderRelease, 42);
-    let request = state.remote_request(Mode::Uf2);
+    let request = state.remote_request();
     state.apply_remote(
         Mode::Uf2,
-        Payload::Latest(request.clone(), version(SourceChannel::Release, 42)),
+        Payload::Latest(
+            request.clone(),
+            version(SourceChannel::Release, 42),
+            vec![artifact(SourceChannel::Release, 42)],
+        ),
     );
     assert!(state.versions.is_empty());
-    state.apply_remote(Mode::Uf2, Payload::Latest(request, latest.clone()));
-    assert!(state.is_latest(Mode::Uf2, &latest));
-    assert!(!state.is_latest(Mode::OpenDfu, &latest));
-    state.select_version(42);
-    let request = state.remote_request(Mode::Uf2);
+    let channel = SourceChannel::BootloaderRelease;
     state.apply_remote(
         Mode::Uf2,
-        Payload::Artifacts(request.clone(), vec![artifact(SourceChannel::Release, 42)]),
+        Payload::Latest(request.clone(), latest.clone(), vec![artifact(channel, 43)]),
     );
-    assert!(state.artifacts.is_empty());
+    assert!(state.selected_version.is_none());
+    state.apply_remote(
+        Mode::Uf2,
+        Payload::Latest(request, latest.clone(), vec![artifact(channel, 42)]),
+    );
+    assert!(state.is_latest(Mode::Uf2, &latest));
+    assert!(!state.is_latest(Mode::OpenDfu, &latest));
+    assert_eq!(state.selected_version, Some(42));
+    assert_eq!(
+        state.artifacts.as_ref().unwrap()[0].name,
+        artifact(channel, 42).name
+    );
+    assert!(!state.select_version(42));
+    assert!(state.select_version(43));
+    let request = state.remote_request();
+    state.apply_remote(
+        Mode::Uf2,
+        Payload::Artifacts(request.clone(), vec![artifact(SourceChannel::Release, 43)]),
+    );
+    assert!(state.artifacts.is_none());
     state.apply_remote(
         Mode::Uf2,
         Payload::Artifacts(
             request,
-            vec![artifact(SourceChannel::BootloaderRelease, 42)],
+            vec![artifact(SourceChannel::BootloaderRelease, 43)],
         ),
     );
-    assert_eq!(state.artifacts.len(), 1);
+    assert_eq!(state.artifacts.as_ref().unwrap().len(), 1);
 }
 
 #[test]
-fn changed_version_source_and_update_method_reject_original_async_request() {
+fn catalog_and_download_requests_invalidate_on_different_changes() {
     let mut state = FlashState::default();
-    state.prepare_remote(Mode::Uf2, &ImageDestination::Global);
     state.select_version(42);
-    let original = state.remote_request(Mode::Uf2);
-    assert!(!state.accepts_remote(Mode::OpenDfu, &original));
+    let original = state.remote_request();
+    let original_image = state.begin_remote_image(Mode::Uf2).unwrap();
+    assert!(!state.accepts_remote_image(Mode::OpenDfu, &original_image));
     state.select_version(43);
-    assert!(!state.accepts_remote(Mode::Uf2, &original));
+    assert!(!state.accepts_remote_catalog(&original));
     state.select_version(42);
-    assert!(!state.accepts_remote(Mode::Uf2, &original));
-    let before_source = state.remote_request(Mode::Uf2);
+    assert!(!state.accepts_remote_catalog(&original));
+    assert!(!state.accepts_remote_image(Mode::Uf2, &original_image));
+    let before_source = state.remote_request();
     state.select_channel(SourceChannel::TrackerCi);
     state.select_channel(SourceChannel::Release);
-    assert!(!state.accepts_remote(Mode::Uf2, &before_source));
-    let before_mode = state.remote_request(Mode::Uf2);
+    assert!(!state.accepts_remote_catalog(&before_source));
+
+    let catalog = state.remote_request();
+    let download = state.begin_remote_image(Mode::Uf2).unwrap();
     state.transition_mode(Mode::OpenDfu);
     state.transition_mode(Mode::Uf2);
-    assert!(!state.accepts_remote(Mode::Uf2, &before_mode));
+    assert!(state.accepts_remote_catalog(&catalog));
+    assert!(!state.accepts_remote_image(Mode::Uf2, &download));
+    let download = state.begin_remote_image(Mode::Uf2).unwrap();
+    state.navigation_changed();
+    assert!(state.accepts_remote_catalog(&catalog));
+    assert!(!state.accepts_remote_image(Mode::Uf2, &download));
+
+    state.selected_volumes.insert("selected-volume".into());
+    let download = state.begin_remote_image(Mode::Uf2).unwrap();
+    state.apply_volumes(vec![]);
+    assert!(state.accepts_remote_catalog(&catalog));
+    assert!(!state.accepts_remote_image(Mode::Uf2, &download));
 }
 
 #[test]
@@ -260,7 +298,7 @@ fn remote_worker_finishes_and_joins_after_category_change_without_installing_old
     };
     let mut state = FlashState::default();
     state.prepare_remote(Mode::Uf2, &ImageDestination::Global);
-    let request = state.remote_request(Mode::Uf2);
+    let request = state.remote_request();
     let (release, wait) = mpsc::channel();
     state.job = Some(
         Job::start(move |_, _| {
@@ -311,13 +349,14 @@ fn bootloader_release_ci_switches_reject_stale_results_and_accept_only_current_c
         state.prepare_remote(Mode::Uf2, &ImageDestination::Global);
         state.select_channel(previous);
         state.select_version(42);
-        let stale = state.remote_request(Mode::Uf2);
+        let stale = state.remote_request();
+        let stale_image = state.begin_remote_image(Mode::Uf2).unwrap();
         state.versions = vec![version(previous, 42)];
-        state.artifacts = vec![artifact(previous, 42)];
+        state.artifacts = Some(vec![artifact(previous, 42)]);
         state.latest_version = Some((previous, 42));
 
         state.select_channel(current);
-        assert!(state.versions.is_empty() && state.artifacts.is_empty());
+        assert!(state.versions.is_empty() && state.artifacts.is_none());
         assert!(state.selected_version.is_none() && state.latest_version.is_none());
         state.select_version(42);
         state.review = Some(Action::Reboot(vec![]));
@@ -328,42 +367,54 @@ fn bootloader_release_ci_switches_reject_stale_results_and_accept_only_current_c
         );
         state.apply_remote(
             Mode::Uf2,
-            Payload::Latest(stale.clone(), version(previous, 42)),
+            Payload::Latest(
+                stale.clone(),
+                version(previous, 42),
+                vec![artifact(previous, 42)],
+            ),
         );
         state.apply_remote(
             Mode::Uf2,
-            Payload::Artifacts(stale.clone(), vec![artifact(previous, 42)]),
+            Payload::Artifacts(stale, vec![artifact(previous, 42)]),
         );
-        state.apply_remote(Mode::Uf2, Payload::RemoteImages(stale, vec![]));
-        assert!(state.versions.is_empty() && state.artifacts.is_empty());
+        state.apply_remote(Mode::Uf2, Payload::RemoteImages(stale_image, vec![]));
+        assert!(state.versions.is_empty() && state.artifacts.is_none());
         assert!(state.latest_version.is_none());
         assert!(state.review.is_some() && state.acknowledged);
 
-        let request = state.remote_request(Mode::Uf2);
+        let request = state.remote_request();
         state.apply_remote(
             Mode::Uf2,
-            Payload::Latest(request.clone(), version(previous, 42)),
+            Payload::Latest(
+                request.clone(),
+                version(previous, 42),
+                vec![artifact(previous, 42)],
+            ),
         );
         assert!(state.versions.is_empty());
-        state.apply_remote(Mode::Uf2, Payload::Latest(request, version(current, 42)));
+        state.apply_remote(
+            Mode::Uf2,
+            Payload::Latest(request, version(current, 42), vec![artifact(current, 42)]),
+        );
         assert!(state.is_latest(Mode::Uf2, &version(current, 42)));
         assert!(!state.is_latest(Mode::OpenDfu, &version(current, 42)));
-        state.select_version(42);
-        let request = state.remote_request(Mode::Uf2);
+        assert!(!state.select_version(42));
+        state.select_version(43);
+        let request = state.remote_request();
         state.apply_remote(
             Mode::Uf2,
-            Payload::Artifacts(request.clone(), vec![artifact(previous, 42)]),
+            Payload::Artifacts(request.clone(), vec![artifact(previous, 43)]),
         );
-        assert!(state.artifacts.is_empty());
+        assert!(state.artifacts.is_none());
         state.apply_remote(
             Mode::Uf2,
-            Payload::Artifacts(request, vec![artifact(current, 42)]),
+            Payload::Artifacts(request, vec![artifact(current, 43)]),
         );
-        assert_eq!(state.artifacts.len(), 1);
-        let before_category = state.remote_request(Mode::Uf2);
+        assert_eq!(state.artifacts.as_ref().unwrap().len(), 1);
+        let before_category = state.remote_request();
         state.select_category(ImageCategory::Application);
         state.select_category(ImageCategory::Bootloader);
-        assert!(!state.accepts_remote(Mode::Uf2, &before_category));
+        assert!(!state.accepts_remote_catalog(&before_category));
         assert_eq!(
             state.source_channel(Mode::Uf2),
             SourceChannel::BootloaderRelease
@@ -1246,6 +1297,12 @@ impl ArtifactSearchFixture {
                 "DataCollect CDC",
                 64,
             ),
+            artifact(
+                105,
+                "FoxApplication_FoxSnackLiteV3_Tracker.hex",
+                "Standard",
+                64,
+            ),
         ];
         let mut flash = FlashState {
             mode,
@@ -1281,11 +1338,8 @@ impl ArtifactSearchFixture {
             .destination(mode)
             .expect("firmware destination exists");
         flash.prepare_remote(mode, &destination);
-        let request = flash.remote_request(mode);
-        flash.apply_remote(mode, Payload::Latest(request, version));
-        flash.select_version(42);
-        let request = flash.remote_request(mode);
-        flash.apply_remote(mode, Payload::Artifacts(request, artifacts.clone()));
+        let request = flash.remote_request();
+        flash.apply_remote(mode, Payload::Latest(request, version, artifacts.clone()));
         flash.images_destination = destination.clone();
         let selected_volumes = flash.selected_volumes.clone();
         let selected_targets = flash.selected_targets.clone();
@@ -1371,7 +1425,6 @@ impl ArtifactSearchFixture {
         assert_eq!(state.latest_version, Some((SourceChannel::Release, 42)));
         assert_eq!(state.remote_generation, self.remote_generation);
         assert_eq!(state.channel, SourceChannel::Release);
-        assert!(state.remote_destination.eq(&self.destination));
         assert!(state.images_destination.eq(&self.destination));
         assert_eq!(state.selected_volumes, self.selected_volumes);
         assert_eq!(state.selected_targets, self.selected_targets);
@@ -1386,8 +1439,12 @@ impl ArtifactSearchFixture {
         assert_eq!(state.tracker_selection, self.tracker_selection);
         assert_eq!(state.active_group, self.active_group);
         assert_eq!(state.group_generations, self.group_generations);
-        assert_eq!(state.artifacts.len(), self.artifacts.len());
-        for (actual, expected) in state.artifacts.iter().zip(&self.artifacts) {
+        let directory = state
+            .artifacts
+            .as_ref()
+            .expect("firmware files remain loaded");
+        assert_eq!(directory.len(), self.artifacts.len());
+        for (actual, expected) in directory.iter().zip(&self.artifacts) {
             assert_eq!(actual.id, expected.id);
             assert_eq!(actual.name, expected.name);
             assert_eq!(actual.url, expected.url);
@@ -1469,7 +1526,7 @@ fn replace_artifact_query(window: &mut Window, cx: &mut gpui_kit::App, query: &s
 
 fn exercise_artifact_search(cx: &mut TestAppContext, mode: Mode) {
     let _ui_session = crate::test_support::UiTestSession::new(cx);
-    let mut fixture = ArtifactSearchFixture::new(cx, mode);
+    let fixture = ArtifactSearchFixture::new(cx, mode);
     cx.update_window(fixture.window, |_, window, cx| {
         window.render_frame(cx);
         assert!(window.find("firmware-artifact-search").visible());
@@ -1515,11 +1572,6 @@ fn exercise_artifact_search(cx: &mut TestAppContext, mode: Mode) {
         assert!(fixture.workbench.read(cx).inventory_task.is_none());
         window.click(firmware_page, cx);
         assert_eq!(
-            fixture.workbench.read(cx).flash.remote_generation,
-            fixture.remote_generation + 2
-        );
-        fixture.remote_generation += 2;
-        assert_eq!(
             window.find("firmware-artifact-search").value(),
             Some("  sTaNdArD  ")
         );
@@ -1537,11 +1589,6 @@ fn exercise_artifact_search(cx: &mut TestAppContext, mode: Mode) {
         window.click("settings-language-english", cx);
         assert!(fixture.workbench.read(cx).inventory_task.is_none());
         window.click(firmware_page, cx);
-        assert_eq!(
-            fixture.workbench.read(cx).flash.remote_generation,
-            fixture.remote_generation + 2
-        );
-        fixture.remote_generation += 2;
         assert_eq!(
             window.find("firmware-artifact-search").value(),
             Some(" 普通 ")
@@ -1685,12 +1732,15 @@ fn acquisition_policy_is_frozen_and_stale_results_cannot_outlive_a_setting_chang
     state.category = ImageCategory::Bootloader;
     state.remote_category = ImageCategory::Bootloader;
     state.channel = SourceChannel::BootloaderRelease;
-    let request = state.remote_request(Mode::Uf2);
-    assert_eq!(request.name_policy, BootloaderNamePolicy::AllowUnclassified);
-    assert!(state.accepts_remote(Mode::Uf2, &request));
+    let request = state.begin_remote_image(Mode::Uf2).unwrap();
+    assert_eq!(
+        request.catalog.name_policy,
+        BootloaderNamePolicy::AllowUnclassified
+    );
+    assert!(state.accepts_remote_image(Mode::Uf2, &request));
 
     state.set_confirmation_policy(false);
-    assert!(!state.accepts_remote(Mode::Uf2, &request));
+    assert!(!state.accepts_remote_image(Mode::Uf2, &request));
     let image = make_image(
         "unclassified.uf2".into(),
         vec![],
@@ -1702,7 +1752,221 @@ fn acquisition_policy_is_frozen_and_stale_results_cannot_outlive_a_setting_chang
     assert!(state.images.is_empty());
     assert!(state.image.is_none());
     assert_eq!(
-        state.remote_request(Mode::Uf2).name_policy,
+        state.remote_request().name_policy,
         BootloaderNamePolicy::CanonicalOnly,
     );
+}
+
+#[test]
+fn matching_only_defaults_on_and_user_override_survives_confirmation_setting() {
+    let mut state = FlashState::from_confirmation_preference(true);
+    assert!(state.matched_only);
+    state.matched_only = false;
+    state.set_confirmation_policy(false);
+    assert!(!state.matched_only);
+    state.set_confirmation_policy(true);
+    assert!(!state.matched_only);
+}
+
+#[test]
+fn empty_remote_directory_is_reused_but_an_unfinished_request_can_retry() {
+    let mut state = FlashState::default();
+    assert!(state.select_version(7));
+    assert!(
+        state.select_version(7),
+        "an unfinished request can be retried"
+    );
+    let request = state.remote_request();
+    state.apply_remote(Mode::Uf2, Payload::Artifacts(request, vec![]));
+    assert!(
+        !state.select_version(7),
+        "the empty directory is already loaded"
+    );
+}
+
+fn fox_tracker() -> crate::features::firmware::esb_ota::Target {
+    let mut target = chrysalis_tracker();
+    target.id = 1;
+    target.address = Some("112233445501".into());
+    target.info.board_target = "foxsnacklitev3_uf2/nrf52840".into();
+    target
+}
+
+#[test]
+fn remote_catalog_lands_across_retarget_and_close_but_old_download_never_applies() {
+    let first = chrysalis_tracker();
+    let second = fox_tracker();
+    let first_key = ota_assignment_key(&first);
+    let second_key = ota_assignment_key(&second);
+    let mut state = FlashState {
+        mode: Mode::Esb,
+        selected_targets: [ota_target_key(&first), ota_target_key(&second)].into(),
+        targets: vec![first, second],
+        ..FlashState::default()
+    };
+    state.reconcile_groups(Some(first_key.clone()));
+    state.prepare_remote(Mode::Esb, &state.destination(Mode::Esb).unwrap());
+    state.select_channel(SourceChannel::TrackerCi);
+
+    let build = chrysalis_ci_artifact();
+    let request = state.remote_request();
+    state.reconcile_groups(Some(second_key.clone()));
+    state.apply_remote(
+        Mode::Esb,
+        Payload::Versions(request, vec![build.version.clone()]),
+    );
+    assert!(state.select_version(build.version.id));
+    let request = state.remote_request();
+    state.show_remote(false);
+    state.navigation_changed();
+    state.apply_remote(Mode::Uf2, Payload::Artifacts(request, vec![build.clone()]));
+    state.show_remote(true);
+    assert_eq!(state.source_channel(Mode::Esb), SourceChannel::TrackerCi);
+    assert_eq!(state.selected_version, Some(build.version.id));
+    assert!(!state.select_version(build.version.id));
+
+    state.reconcile_groups(Some(first_key.clone()));
+    let stale = state.begin_remote_image(Mode::Esb).unwrap();
+    state.reconcile_groups(Some(second_key.clone()));
+    let rejected = make_image(
+        "stale.uf2".into(),
+        vec![],
+        "fixture".into(),
+        "stale".into(),
+        false,
+    );
+    state.apply_remote(
+        Mode::Esb,
+        Payload::RemoteImages(stale.clone(), vec![rejected.clone()]),
+    );
+    assert!(state.images.is_empty());
+    state.reconcile_groups(Some(first_key));
+    state.apply_remote(Mode::Esb, Payload::RemoteImages(stale, vec![rejected]));
+    assert!(
+        state.images.is_empty(),
+        "returning to the old group cannot revive its request"
+    );
+
+    state.reconcile_groups(Some(second_key.clone()));
+    let current = state.begin_remote_image(Mode::Esb).unwrap();
+    assert!(state.ota_defaults[&second_key].explicit);
+    let name = "FoxApplication_FoxSnackLiteV3_Tracker.hex";
+    let image = make_image(
+        name.into(),
+        b":0410000001020304E2\n:00000001FF\n".to_vec(),
+        "fixture".into(),
+        "current".into(),
+        false,
+    );
+    state.catalog = Some(Catalog::load_embedded().unwrap());
+    state.apply_remote(Mode::Esb, Payload::RemoteImages(current, vec![image]));
+    assert_eq!(state.images[0].name, name);
+    assert!(state.images_destination == state.destination(Mode::Esb).unwrap());
+    assert_eq!(state.artifacts.as_ref().unwrap()[0].id, build.id);
+}
+
+#[test]
+fn remote_download_rejects_new_members_of_the_same_tracker_model() {
+    let first = chrysalis_tracker();
+    let mut second = first.clone();
+    second.id = 1;
+    second.address = Some("112233445501".into());
+    let first_target = ota_target_key(&first);
+    let second_target = ota_target_key(&second);
+    let mut state = FlashState {
+        selected_targets: [first_target].into(),
+        targets: vec![first, second],
+        ..FlashState::default()
+    };
+    state.reconcile_groups(None);
+    let destination = state.destination(Mode::Esb).unwrap();
+    let stale = state.begin_remote_image(Mode::Esb).unwrap();
+    state.selected_targets = [second_target].into();
+    state.reconcile_groups(None);
+    assert!(state.destination(Mode::Esb).unwrap() == destination);
+    assert!(!state.accepts_remote_image(Mode::Esb, &stale));
+}
+
+#[gpui_kit::test]
+fn esb_online_picker_retains_directory_and_refilters_when_switching_models(
+    cx: &mut TestAppContext,
+) {
+    let _ui_session = crate::test_support::UiTestSession::new(cx);
+    let fixture = ArtifactSearchFixture::new(cx, Mode::Esb);
+    let first_key = fixture.active_group.as_ref().unwrap();
+    let second = fox_tracker();
+    let second_key = ota_assignment_key(&second);
+    fixture.workbench.update(cx, |this, cx| {
+        let target_key = ota_target_key(&second);
+        let tracker_key = format!("tracker:{target_key}");
+        this.selected.insert(tracker_key.clone());
+        this.flash.tracker_selection.insert(tracker_key);
+        this.flash.selected_targets.insert(target_key);
+        this.flash.targets.push(second);
+        this.flash.reconcile_groups(None);
+        cx.notify();
+    });
+    cx.update_window(fixture.window, |_, window, cx| {
+        window.render_frame(cx);
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        window.click(("firmware-variant-filter", 0usize), cx);
+
+        window.click(format!("ota-group-{second_key}"), cx);
+        assert_eq!(
+            window.find("firmware-version-Release-42").checked(),
+            Some(true)
+        );
+        assert_eq!(window.find("firmware-matched").checked(), Some(true));
+        assert_artifact_rows(window, &fixture, &[4]);
+        let state = &fixture.workbench.read(cx).flash;
+        assert!(state.variant_filter.is_none());
+        assert!(state.displayed_image(Mode::Esb).is_none());
+
+        window.click("firmware-matched", cx);
+        window.click("firmware-source-local", cx);
+        assert!(window.try_find("firmware-version-Release-42").is_none());
+        window.click("firmware-source-remote", cx);
+        window.click(("firmware-channel", 0usize), cx);
+        assert_eq!(
+            window.find("firmware-version-Release-42").checked(),
+            Some(true)
+        );
+        assert_artifact_rows(window, &fixture, &[4]);
+        window.click(format!("ota-group-{first_key}"), cx);
+        assert_artifact_rows(window, &fixture, &[0, 1]);
+        assert_eq!(window.find("firmware-matched").checked(), Some(false));
+        assert!(fixture.workbench.read(cx).flash.job.is_none());
+    })
+    .expect("switch active firmware groups in the real OTA picker");
+}
+
+#[gpui_kit::test]
+fn unknown_uf2_target_shows_no_online_files_until_explicit_override(cx: &mut TestAppContext) {
+    let _ui_session = crate::test_support::UiTestSession::new(cx);
+    let fixture = ArtifactSearchFixture::new(cx, Mode::Uf2);
+    let volume_id = format!("uf2-target-{}", fixture.selected_volumes.first().unwrap());
+    cx.update_window(fixture.window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click(volume_id, cx);
+        assert_eq!(
+            window.find("firmware-version-Release-42").checked(),
+            Some(true)
+        );
+        assert_eq!(window.find("firmware-matched").checked(), Some(true));
+        assert_eq!(
+            window.find("firmware-filter-unknown-target").role(),
+            Some(Role::Status)
+        );
+        assert_artifact_rows(window, &fixture, &[]);
+
+        window.click("firmware-matched", cx);
+        assert_eq!(window.find("firmware-matched").checked(), Some(false));
+        assert!(window.try_find("firmware-filter-unknown-target").is_none());
+        replace_artifact_query(window, cx, "1.2.3");
+        assert_artifact_rows(window, &fixture, &[1]);
+        window.click("firmware-matched", cx);
+        assert_artifact_rows(window, &fixture, &[]);
+        assert!(fixture.workbench.read(cx).flash.job.is_none());
+    })
+    .expect("override the matching filter without a recognized UF2 target");
 }

@@ -299,9 +299,11 @@ The remote application catalog offers Tracker repository releases, which also in
 
 For a bootloader, choose **Bootloader firmware**, then **Remote firmware**. Select **Bootloader releases** or **Bootloader CI**. The CI channel lists successful builds from the repository's `master` branch and loads only self-update UF2 files.
 
-Click **Load versions** or **Latest available**. Choose a version and the exact board and variant. If a downloaded package has several members, select one explicitly. Latest means the newest version in that channel with artifacts still available. It does not guarantee that your board is included, flash automatically, or mean that the device is already up to date.
+Choose **Load versions** to browse the channel, or **Latest available** to open its newest version with downloadable files. Neither action downloads firmware. Choose the file for your board and variant; if a package contains several members, select one explicitly. The newest version may not include your board.
 
-**Only matching boards** and variant filters narrow the list. They do not replace checks of the board, role, format, bootloader, or addresses. The currently visible variants are Standard and receiver DataCollect (CDC). The catalog does not claim to offer tracker DataCollect or HID artifacts. HEX, UF2, MCUboot BIN, Secure DFU ZIP, and Legacy DFU ZIP are not interchangeable by renaming their extensions.
+**Only matching boards** is on by default. When updating several tracker models over ESB OTA, switch firmware groups to see the matches for the next model in the version you already opened. You do not need to reload the version or its file list. If no board is recognized, the filtered list is empty. Turn off the filter to browse files for other boards.
+
+Board and variant filters do not replace checks of the board, role, format, bootloader, or addresses. The currently visible variants are Standard and receiver DataCollect (CDC). The catalog does not claim to offer tracker DataCollect or HID artifacts. HEX, UF2, MCUboot BIN, Secure DFU ZIP, and Legacy DFU ZIP are not interchangeable by renaming their extensions.
 
 Both wired and wireless **Remote firmware** lists offer **Search firmware files**. Search matches filenames and displayed variants without case sensitivity, within the existing compatibility and variant filters. Clearing it restores the list; searching does not download a file or change selected firmware.
 

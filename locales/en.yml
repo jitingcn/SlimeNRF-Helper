@@ -997,7 +997,7 @@ firmware:
     writes_pending: "Commands are still sending on this port; wait for them to finish and try again"
   filter:
     clear: "Clear filters"
-    known_target_required: "Select a known target to enable board filtering"
+    known_target_required: "Select a recognized target, or turn off “Only matching boards” to browse all files."
     matching_boards: "Only matching boards"
   image:
     choose_help: "Choose a local file or a remote version to continue."

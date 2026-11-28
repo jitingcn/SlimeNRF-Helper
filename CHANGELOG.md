@@ -16,11 +16,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Changed
 
 - Release builds use ThinLTO instead of fat LTO.
+- The online firmware picker shows matching boards by default. Switching between tracker models in an ESB OTA session keeps the open version and filters its files for the new group without querying GitHub again.
 
 ### Fixed
 
 - Wireless tracker updates explain when the receiver requires a healthy direct radio link. Helper waits two seconds between tracker batches and withholds firmware data if a batch member's start is unconfirmed.
 - Receiver updates now count as complete when the receiver accepts activation and then answers a fresh firmware-info query, even if it does not send a final `COMPLETE`.
+- **Latest available** opens the newest usable release or CI build with its file list, without a second request for the same files.
+- Wireless firmware-info refreshes skip trackers that replied successfully in the last 30 seconds and keep their information visible while newly online trackers are queried.
 
 ## [0.7.0] - 2026-11-27
 

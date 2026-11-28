@@ -6,7 +6,7 @@ use crate::application::flash::{
 use crate::features::firmware::esb_ota::RECEIVER_ID;
 
 #[test]
-fn firmware_filters_combine_board_role_variant_and_unknown_fallback() {
+fn firmware_filters_require_known_board_role_and_variant_when_matching_only() {
     use crate::features::firmware::board_catalog::{EsbOtaKind, FirmwareHint};
     let hints = [FirmwareHint {
         board_target: "board-one".into(),
@@ -38,7 +38,13 @@ fn firmware_filters_combine_board_role_variant_and_unknown_fallback() {
     assert!(!firmware_filter_matches(
         &hints, "Standard", &receiver, true, None
     ));
-    assert!(firmware_filter_matches(&hints, "Standard", &[], true, None));
+    assert!(!firmware_filter_matches(
+        &hints,
+        "Standard",
+        &[],
+        true,
+        None
+    ));
     assert!(!firmware_filter_matches(
         &[],
         "Standard",
@@ -49,7 +55,7 @@ fn firmware_filters_combine_board_role_variant_and_unknown_fallback() {
     assert!(firmware_filter_matches(
         &hints, "Standard", &other, false, None
     ));
-    assert!(firmware_filter_matches(&[], "Standard", &[], true, None));
+    assert!(!firmware_filter_matches(&[], "Standard", &[], true, None));
     let mut unknown_role = hints[0].clone();
     unknown_role.kind = None;
     assert!(!firmware_filter_matches(
