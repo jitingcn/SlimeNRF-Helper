@@ -9,6 +9,8 @@
 
 ## [未发布]
 
+## [0.7.1] - 2026-11-28
+
 ### 新增
 
 - Linux ARM64（`aarch64`）纳入原生 CI 和正式发布，提供独立的无固件 AppImage，原有的 Linux x64 AppImage 继续提供。
@@ -237,7 +239,8 @@
 - 陀螺仪校准指引、支持 SVG 导出的温度校准分析，以及 RSSI 信道分析。
 - 英文与简体中文界面、深浅主题，以及支持完整固件和无固件构建模式的 Windows 与 Linux 打包。
 
-[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.7.0...HEAD
+[未发布]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/jitingcn/SlimeNRF-Helper/compare/v0.4.6...v0.5.0
