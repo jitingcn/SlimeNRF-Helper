@@ -385,7 +385,7 @@ The bundle ID is `io.github.jitingcn.SlimeNRFHelper`. The app uses an ad hoc sig
 
 [Native no-firmware CI](../.github/workflows/ci.yml) runs on branch and tag pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including release preparation tests, and checks publication boundaries and frozen notice inputs. The native jobs then run the no-firmware quality checks on Windows x64, Linux x64 and ARM64, and macOS Apple Silicon and Intel. Both Linux jobs build and package AppImages natively on Ubuntu 22.04: x64 on `ubuntu-22.04` and ARM64 on `ubuntu-22.04-arm`. Windows also runs the tools tests for native hook coverage; both Mac jobs run the tools tests separately.
 
-The source and release jobs share a Rust cache key. Native application build caches stay separate by platform and architecture. Compiler, environment, and dependency hashes and GitHub's cache scope rules still apply.
+Only `main` saves Rust dependency caches. Tags, pull requests, and other branches can restore a compatible cache without saving a ref-specific copy against the repository quota. The source and release jobs share a key; native builds keep separate keys per platform and architecture. A workspace version bump alone does not invalidate third-party dependencies. Each release still compiles the versioned application and packages it from the tagged source.
 
 Both macOS jobs restore dependencies before the quality checks. Within each architecture, checks and DMG packaging share `target`; debug and Release build artifacts stay in separate profile directories.
 

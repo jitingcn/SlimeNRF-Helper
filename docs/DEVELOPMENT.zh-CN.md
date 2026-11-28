@@ -385,7 +385,7 @@ App 的 bundle ID 为 `io.github.jitingcn.SlimeNRFHelper`。App 采用临时签�
 
 [Native no-firmware CI](../.github/workflows/ci.yml) 在分支或标签推送、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括发布准备测试），并检查公开边界和冻结的版权输入。通过后，在 Windows x64、Linux x64 和 ARM64、Apple 芯片和 Intel Mac 上运行无固件质量检查。Linux 的两种 AppImage 都在 Ubuntu 22.04 上原生构建和打包：x64 使用 `ubuntu-22.04`，ARM64 使用 `ubuntu-22.04-arm`。Windows 还运行工具测试以覆盖原生 hook；两种 Mac 构建也单独运行工具测试。
 
-源码和发布作业共用一个 Rust 缓存 key。原生应用构建仍按平台和架构使用独立缓存。编译器、环境与依赖哈希以及 GitHub 缓存作用域规则继续生效。
+只有 `main` 写入 Rust 依赖缓存。标签、PR 和其他分支可恢复兼容的缓存，不额外写入占用仓库配额的副本。源码和发布作业共用缓存键，原生构建按平台和架构分开。仅提升工作区版本号不会使第三方依赖缓存失效；每次发布仍从对应标签的源码编译应用并打包。
 
 两种 Mac 作业都在质量检查前恢复依赖缓存。每种架构的检查与 DMG 打包共用 `target`，debug 和 Release 产物仍保存在各自的目录中。
 

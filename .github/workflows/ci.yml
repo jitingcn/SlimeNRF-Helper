@@ -50,6 +50,7 @@ jobs:
           # Preserve the existing source-job prefix and share it with publication.
           shared-key: ubuntu-24.04-x64-tools-source
           cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Test source tools without building the application
         run: cargo nextest run --locked -p slimenrf-tools
@@ -106,6 +107,7 @@ jobs:
           workspaces: '. -> target'
           key: windows-2022-x64-no-firmware
           cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Test source tools on Windows
         run: |
@@ -210,6 +212,7 @@ jobs:
           workspaces: '. -> target'
           key: ubuntu-22.04-${{ matrix.arch }}-no-firmware
           cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Check formatting, strict workspace Clippy, tests and doctests
         run: bash ./quality.sh --no-firmware
@@ -313,6 +316,7 @@ jobs:
           workspaces: '. -> target'
           key: macos-26-${{ matrix.arch }}-no-firmware-check-and-package
           cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Check formatting, strict workspace Clippy, tests and doctests
         run: |
@@ -374,6 +378,7 @@ jobs:
           # Match the source job instead of adding a separate release job key.
           shared-key: ubuntu-24.04-x64-tools-source
           cache-bin: false
+          save-if: false
 
       - name: Prepare exact-version changelog notes
         id: release
