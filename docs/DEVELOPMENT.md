@@ -43,7 +43,7 @@ Repeated setup from the editor's developer terminal preserves the effective stat
 ./build.ps1 -Action check -NoFirmware
 ./build.ps1 -Action test -NoFirmware
 ./build.ps1 -Action run -Release -NoFirmware  # Explicitly run Release
-./package.ps1 -NoFirmware                    # Single-file release package
+./package.ps1 -NoFirmware                    # Uncompressed single-file Release package
 ./quality.ps1 -NoFirmware                    # Format check -> strict Clippy -> tests
 ./quality.ps1 -FormatOnly                    # Check formatting without changes; no VS needed
 ./build.ps1 -Action fmt                      # Explicitly apply formatting
@@ -266,7 +266,7 @@ Keep MPL-2.0 covered source available separately as the notice document instruct
 
 ## Package Windows releases
 
-`package.ps1` builds and publishes the UPX-compressed `dist/slimenrf-helper-<version>-windows-x64.exe`. `-NoFirmware` publishes `-no-firmware.exe`, which still embeds default configuration. The Cargo-built original remains uncompressed in the build cache and is not published; there is no published uncompressed fallback. Do not publish the whole target directory, PDB files, or test programs. A static CRT does not prove acceptance on a fresh Windows installation or acceptance of signing.
+By default, `package.ps1` publishes the Cargo-built Release executable unchanged as `dist/slimenrf-helper-<version>-windows-x64.exe`. With `-NoFirmware`, it publishes `dist/slimenrf-helper-<version>-windows-x64-no-firmware.exe`, which still embeds the default configuration. Do not publish the whole target directory, PDB files, or test programs. A static CRT does not prove acceptance on a fresh Windows installation or acceptance of signing.
 
 ```powershell
 ./package.ps1 -NoFirmware
@@ -274,15 +274,17 @@ Keep MPL-2.0 covered source available separately as the notice document instruct
 
 To label a local firmware package, set `SLIMENRF_FIRMWARE_ROOT` to the populated staging directory, then run `./package.ps1 -FirmwareTag 261120`. For app version `0.5.0` this displays `0.5.0+fw.261120` and leaves the executable filename and update version unchanged. `-FirmwareTag` cannot be combined with `-NoFirmware` or `-OfficialReleaseTag`. Follow the [bundled firmware packaging skill](../.agents/skills/slimenrf-helper-bundled-firmware/SKILL.md) to stage and verify the release.
 
-`package.ps1` invokes the internal [UPX helper](../scripts/package-upx.ps1) with explicit mandatory `-InputPath` and `-OutputPath`. The helper pins the tool version and hash and uses `--best --lzma --strip-relocs=0` without `--exact`. Before publication, it runs UPX's integrity check and decompresses to a separate temporary file. Decompression may produce different executable bytes; the Cargo-built input remains unchanged.
+For a local compressed package, explicitly pass `-Upx` (for example, `./package.ps1 -NoFirmware -Upx`). It publishes `dist/slimenrf-helper-<version>-windows-x64-upx.exe` or `dist/slimenrf-helper-<version>-windows-x64-no-firmware-upx.exe`, leaving the canonical package and the Cargo build output unchanged. `-Upx` cannot be combined with `-OfficialReleaseTag`.
+
+Only `-Upx` invokes the internal [UPX helper](../scripts/package-upx.ps1) with explicit `-InputPath` and `-OutputPath`. The helper pins the tool version and hash and uses `--best --lzma --strip-relocs=0` without `--exact`. Before publication, it runs UPX's integrity check and decompresses to a separate temporary file. Decompression may produce different executable bytes.
 
 Compression can add startup overhead or antivirus false positives. Compression changes EXE bytes and invalidates any existing Authenticode signature. If you sign, sign after final compression and repeat acceptance checks. CI does not sign packages.
 
-The helper uses the [shared atomic publisher](../scripts/publish-file.ps1). An identical existing output is kept. Different content requires explicit `-Force` on `package.ps1`. The publisher stages on the destination volume, then moves or replaces the destination instead of overwriting its bytes. This preserves the input and other hardlinks to the old output. It refuses symlinks and reparse points in publication paths. File locks allow readers but deny writers, and input locks also deny deletion. If a required lock cannot be acquired, publication fails without replacing the output. These checks do not promise safety against every hostile filesystem race.
+Both packaging modes use the [shared atomic publisher](../scripts/publish-file.ps1). An identical existing output is kept. Different content requires explicit `-Force` on `package.ps1`. The publisher stages on the destination volume, then moves or replaces the destination instead of overwriting its bytes. This preserves the input and other hardlinks to the old output. It refuses symlinks and reparse points in publication paths. File locks allow readers but deny writers, and input locks also deny deletion. If a required lock cannot be acquired, publication fails without replacing the output. These checks do not promise safety against every hostile filesystem race.
 
 Application self-update eligibility is stamped only by the tagged official Windows packaging job, which passes `-OfficialReleaseTag` to `package.ps1`. Ordinary local, branch, pull-request, debug, and custom-resource builds remain check-only. The [build marker validation](../crates/app/build_support/official_release.rs) checks the package version, target, profile, repository, tag, and GitHub event; it is a distribution policy, not a cryptographic signature. Do not set the marker in ordinary development commands.
 
-The updater reads the paginated GitHub Releases API rather than `/latest` so it can compare eligible stable and optional prerelease versions. Published Windows assets must retain the exact version/architecture/firmware-variant naming above and expose GitHub's SHA-256 digest. It does not fall back to historical `-upx.exe` names or another firmware variant. Check-only builds select release metadata without requiring a Windows asset and open the corresponding release page. Changing release naming or channel publication requires corresponding updater review. See [Application updates](USER_GUIDE.md#app-updates) for the user flow and recovery limits.
+The updater reads the paginated GitHub Releases API rather than `/latest` so it can compare eligible stable and optional prerelease versions. Published Windows assets must retain the canonical version/architecture/firmware-variant naming above and expose GitHub's SHA-256 digest. The updater does not accept `-upx.exe` names or fall back to another firmware variant. Check-only builds select release metadata without requiring a Windows asset and open the corresponding release page. Changing release naming or channel publication requires corresponding updater review. See [Application updates](USER_GUIDE.md#app-updates) for the user flow and recovery limits.
 
 <a id="linux"></a>
 ## Linux
@@ -389,13 +391,13 @@ Both macOS jobs restore dependencies before the quality checks. Within each arch
 
 Each of the five packaging jobs uploads one file directly under its versioned filename. A new standard tagged release requires this exact set, where `<version>` is the application's Cargo version:
 
-- `slimenrf-helper-<version>-windows-x64-no-firmware.exe` (UPX-compressed)
+- `slimenrf-helper-<version>-windows-x64-no-firmware.exe` (uncompressed Cargo executable)
 - `slimenrf-helper-<version>-linux-x64-no-firmware.AppImage`
 - `slimenrf-helper-<version>-linux-arm64-no-firmware.AppImage`
 - `slimenrf-helper-<version>-macos-arm64-no-firmware.dmg`
 - `slimenrf-helper-<version>-macos-x64-no-firmware.dmg`
 
-Actions artifacts are retained for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets. The Mac packager verifies the DMG, attaches it read-only, checks the mounted app's Mach-O architecture, linked deployment target (macOS 15.0), system library linkage, metadata, ad hoc signature, license files, and the **Applications** link, then detaches it. CI does not launch the macOS GUI or verify physical devices.
+Actions artifacts are retained for 14 days, subject to repository policy. CI does not download or run UPX, build Flatpak, or upload caches as release assets. The Mac packager verifies the DMG, attaches it read-only, checks the mounted app's Mach-O architecture, linked deployment target (macOS 15.0), system library linkage, metadata, ad hoc signature, license files, and the **Applications** link, then detaches it. CI does not launch the macOS GUI or verify physical devices.
 
 A `v<version>` tag push runs the release job only after the source job and all native checks pass. The tag must match the application's stable Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md); SemVer prerelease versions are rejected. Release notes use that entry and link to the Chinese changelog at the same commit.
 

@@ -22,8 +22,8 @@ description: Package SlimeNRF Helper with selected Tracker/Receiver and Bootload
 ## 3. 构建并核验成品
 
 - 使用 [项目工具链和质量入口](../../../docs/DEVELOPMENT.md#checks-and-editor)。涉及映射、资源或构建规则时，两种固件模式均跑质量检查；无固件检查不设置 `SLIMENRF_FIRMWARE_TAG`。Release notices 必须通过，不能用开发模式绕过；对外分发前另行做[固件与产物许可审查](../../../docs/DEVELOPMENT.md#license-notices)。
-- Windows：`$env:SLIMENRF_FIRMWARE_ROOT` 指向已核验的暂存目录，再运行 `./package.ps1 -FirmwareTag $trackerTag`，其中 `$trackerTag` 是实际应用固件 tag。不传 `-NoFirmware` 或 `-OfficialReleaseTag`。标题和「关于」显示 `<应用版本>+fw.<应用固件 tag>`，相同应用版本的 EXE 文件名不变；只在确定允许替换同名包时使用 `-Force`。其他平台按 [开发文档](../../../docs/DEVELOPMENT.md#linux) 的原生入口打包，本地含固件构建显式设置 `SLIMENRF_FIRMWARE_TAG` 和 `SLIMENRF_FIRMWARE_ROOT`。
-- 核对最终产物，不只核对下载目录。用项目所固定的 UPX 从最终 Windows EXE 解压到独立临时文件，定位其中与当前 Release `OUT_DIR/firmware_bundle.zip` 字节一致的 ZIP。比较 ZIP 的完整成员集合（固件清单 + `slimenrf-helper.yaml`）、逐成员大小和 SHA-256；检查生成索引的缺失默认项及包内板型映射。打包成功不代表默认资源都存在，也不代表固件 tag 与字节吻合。
+- Windows：`$env:SLIMENRF_FIRMWARE_ROOT` 指向已核验的暂存目录，再运行 `./package.ps1 -FirmwareTag $trackerTag`，其中 `$trackerTag` 是实际应用固件 tag。不传 `-NoFirmware` 或 `-OfficialReleaseTag`。标题和「关于」显示 `<应用版本>+fw.<应用固件 tag>`；固件 tag 不改变 EXE 文件名。默认输出未压缩的 `slimenrf-helper-<应用版本>-windows-x64.exe`；若需要本地压缩包，显式加 `-Upx`，输出单独的 `slimenrf-helper-<应用版本>-windows-x64-upx.exe`。只在确定允许替换同名包时使用 `-Force`。其他平台按 [开发文档](../../../docs/DEVELOPMENT.md#linux) 的原生入口打包，本地含固件构建显式设置 `SLIMENRF_FIRMWARE_TAG` 和 `SLIMENRF_FIRMWARE_ROOT`。
+- 核对最终产物，不只核对下载目录。默认直接在最终 EXE 中查找内嵌的 ZIP；仅对显式生成的 `-Upx` 产物，先用项目固定版本的 UPX 解压 EXE 到独立临时文件。定位与当前 Release `OUT_DIR/firmware_bundle.zip` 字节一致的 ZIP，比较其完整成员集合（固件清单 + `slimenrf-helper.yaml`）、逐成员大小和 SHA-256，并检查生成索引的缺失默认项及包内板型映射。打包成功不代表默认资源都存在，也不代表固件 tag 与字节吻合。
 - 按 [原生 UI smoke](../../../docs/DEVELOPMENT.md#native-ui-smoke) 启动同一成品。可执行文件目录与工作目录均不得有覆盖用的 `slimenrf-helper.yaml`。查看标题和「关于」显示的 tag；验证 UI 可离线加载一个内置镜像、显示 `Bundled` 来源和清单中的摘要。Windows 使用自有 PID/HWND；加载镜像即可，不选择实体端口、不进入 DFU、不开始 OTA 或刷写。验证后正常退出并移除临时工具。
 
 交付时列出产物路径、EXE 的 SHA-256、两类固件 tag 和数量、影响选择的板型差异与未包含的资产。分别报告离线验证、Windows 原生、其他平台和实物验证的实际结果。

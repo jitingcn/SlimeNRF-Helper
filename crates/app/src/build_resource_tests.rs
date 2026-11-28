@@ -313,28 +313,71 @@ fn official_release_marker_requires_the_tagged_packaging_context() {
 #[test]
 fn windows_packager_accepts_only_explicit_compatible_tags() {
     for (args, expected) in [
-        (&["-NoFirmware"][..], Some("<unset>|<unset>|custom.yaml")),
+        (
+            &[][..],
+            Some((
+                "<unset>|<unset>|custom.yaml",
+                "slimenrf-helper-0.1.1-windows-x64.exe",
+            )),
+        ),
+        (
+            &["-NoFirmware"][..],
+            Some((
+                "<unset>|<unset>|custom.yaml",
+                "slimenrf-helper-0.1.1-windows-x64-no-firmware.exe",
+            )),
+        ),
+        (
+            &["-OfficialReleaseTag", "v0.1.1"][..],
+            Some((
+                "release:v0.1.1|<unset>|custom.yaml",
+                "slimenrf-helper-0.1.1-windows-x64.exe",
+            )),
+        ),
         (
             &["-NoFirmware", "-OfficialReleaseTag", "v0.1.1"][..],
-            Some("release:v0.1.1|<unset>|custom.yaml"),
+            Some((
+                "release:v0.1.1|<unset>|custom.yaml",
+                "slimenrf-helper-0.1.1-windows-x64-no-firmware.exe",
+            )),
         ),
         (
             &["-FirmwareTag", "261120"][..],
-            Some("<unset>|261120|custom.yaml"),
+            Some((
+                "<unset>|261120|custom.yaml",
+                "slimenrf-helper-0.1.1-windows-x64.exe",
+            )),
+        ),
+        (
+            &["-Upx"][..],
+            Some((
+                "<unset>|<unset>|custom.yaml",
+                "slimenrf-helper-0.1.1-windows-x64-upx.exe",
+            )),
+        ),
+        (
+            &["-NoFirmware", "-Upx"][..],
+            Some((
+                "<unset>|<unset>|custom.yaml",
+                "slimenrf-helper-0.1.1-windows-x64-no-firmware-upx.exe",
+            )),
         ),
         (&["-NoFirmware", "-FirmwareTag", "261120"][..], None),
         (
             &["-OfficialReleaseTag", "v0.1.1", "-FirmwareTag", "261120"][..],
             None,
         ),
+        (&["-OfficialReleaseTag", "v0.1.1", "-Upx"][..], None),
     ] {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path();
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let scripts = root.join("scripts");
         fs::create_dir(&scripts).unwrap();
+        fs::copy(repository.join("package.ps1"), root.join("package.ps1")).unwrap();
         fs::copy(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../package.ps1"),
-            root.join("package.ps1"),
+            repository.join("scripts/publish-file.ps1"),
+            scripts.join("publish-file.ps1"),
         )
         .unwrap();
         fs::write(
@@ -349,6 +392,9 @@ function Invoke-SlimeNRFCargo {
     $firmwareTag = $env:SLIMENRF_FIRMWARE_TAG
     if (!$firmwareTag) { $firmwareTag = '<unset>' }
     [IO.File]::WriteAllText($env:SLIMENRF_TEST_PACKAGE_CAPTURE, "$marker|$firmwareTag|$env:SLIMENRF_CONFIG_PATH")
+    $releaseDir = Join-Path $env:SLIMENRF_TEST_PACKAGE_TARGET "$script:WindowsTarget\release"
+    [IO.Directory]::CreateDirectory($releaseDir) | Out-Null
+    [IO.File]::WriteAllBytes((Join-Path $releaseDir 'slimenrf-helper.exe'), [byte[]](0x4D, 0x5A, 0, 0xFF))
     $script:CargoExitCode = 0
 }
 function Restore-SlimeNRFBuildEnvironment { param($Environment, $Directory) }
@@ -366,18 +412,21 @@ function cargo {
             scripts.join("package-upx.ps1"),
             r#"
 param([string]$InputPath, [string]$OutputPath, [switch]$Force)
+$packed = [byte[]](@(0x55, 0x50, 0x58) + [IO.File]::ReadAllBytes($InputPath))
+[IO.File]::WriteAllBytes($OutputPath, $packed)
 $global:LASTEXITCODE = 0
 "#,
         )
         .unwrap();
         let capture = root.join("capture.txt");
+        let target = root.join("target");
         let mut command = Command::new("powershell.exe");
         command
             .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
             .arg(root.join("package.ps1"))
             .args(args)
             .env("SLIMENRF_TEST_PACKAGE_CAPTURE", &capture)
-            .env("SLIMENRF_TEST_PACKAGE_TARGET", root.join("target"))
+            .env("SLIMENRF_TEST_PACKAGE_TARGET", &target)
             .env("SLIMENRF_OFFICIAL_RELEASE", "prerelease:v9.9.9")
             .env("SLIMENRF_FIRMWARE_TAG", "inherited")
             .env("SLIMENRF_CONFIG_PATH", "custom.yaml");
@@ -387,8 +436,29 @@ $global:LASTEXITCODE = 0
             expected.is_some(),
             "{args:?}: {output:?}"
         );
-        if let Some(expected) = expected {
-            assert_eq!(fs::read_to_string(capture).unwrap(), expected);
+        if let Some((expected_capture, filename)) = expected {
+            assert_eq!(
+                fs::read_to_string(capture).unwrap(),
+                expected_capture,
+                "{args:?}"
+            );
+            let executable = target.join("x86_64-pc-windows-msvc/release/slimenrf-helper.exe");
+            let built = fs::read(executable).unwrap();
+            assert_eq!(built.as_slice(), b"MZ\0\xff", "{args:?}: Cargo EXE");
+            let expected_bytes: &[u8] = if args.contains(&"-Upx") {
+                b"UPXMZ\0\xff"
+            } else {
+                &built
+            };
+            let dist = root.join("dist");
+            let published = fs::read(dist.join(filename))
+                .unwrap_or_else(|error| panic!("{args:?}: {filename}: {error}"));
+            assert_eq!(published.as_slice(), expected_bytes, "{args:?}: {filename}");
+            assert_eq!(
+                fs::read_dir(dist).unwrap().count(),
+                1,
+                "{args:?}: only {filename} should be published"
+            );
         } else {
             assert!(!capture.exists(), "{args:?}: build should not start");
         }

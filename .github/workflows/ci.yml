@@ -117,7 +117,7 @@ jobs:
       - name: Check formatting, strict workspace Clippy, tests and doctests
         run: powershell -NoProfile -ExecutionPolicy Bypass -File ./quality.ps1 -NoFirmware
 
-      - name: Package compressed Release executable
+      - name: Package uncompressed Release executable
         env:
           OFFICIAL_RELEASE_TAG: ${{ github.repository == 'jitingcn/SlimeNRF-Helper' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !github.event.deleted && github.ref_name || '' }}
         run: |

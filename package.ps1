@@ -1,6 +1,7 @@
 param(
     [switch]$Force,
     [switch]$NoFirmware,
+    [switch]$Upx,
     [string]$OfficialReleaseTag,
     [string]$FirmwareTag
 )
@@ -13,7 +14,6 @@ $originalEnvironment = [Environment]::GetEnvironmentVariables('Process')
 $originalDirectory = (Get-Location).Path
 try {
     . (Join-Path $PSScriptRoot 'scripts\environment.ps1')
-    $upxScript = Join-Path $PSScriptRoot 'scripts\package-upx.ps1'
     # A release marker is an explicit packaging input, never an inherited default.
     [Environment]::SetEnvironmentVariable('SLIMENRF_OFFICIAL_RELEASE', $null, 'Process')
     [Environment]::SetEnvironmentVariable('SLIMENRF_FIRMWARE_TAG', $null, 'Process')
@@ -27,6 +27,7 @@ try {
         $env:SLIMENRF_FIRMWARE_TAG = $FirmwareTag
     }
     if ($hasOfficialReleaseTag) {
+        if ($Upx) { throw 'Official releases use the uncompressed Windows executable.' }
         if ([string]::IsNullOrWhiteSpace($OfficialReleaseTag)) {
             throw 'OfficialReleaseTag must be a nonempty release tag.'
         }
@@ -52,9 +53,16 @@ try {
     $dist = Join-Path $PSScriptRoot 'dist'
     [IO.Directory]::CreateDirectory($dist) | Out-Null
     $variant = if ($NoFirmware) { '-no-firmware' } else { '' }
-    $destination = Join-Path $dist "slimenrf-helper-$version-windows-x64$variant.exe"
-    & $upxScript -InputPath $source -OutputPath $destination -Force:$Force
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $filename = "slimenrf-helper-$version-windows-x64$variant"
+    if ($Upx) {
+        $destination = Join-Path $dist "$filename-upx.exe"
+        & (Join-Path $PSScriptRoot 'scripts\package-upx.ps1') -InputPath $source -OutputPath $destination -Force:$Force
+        exit $LASTEXITCODE
+    }
+    . (Join-Path $PSScriptRoot 'scripts\publish-file.ps1')
+    $destination = Join-Path $dist "$filename.exe"
+    $result = [SlimeNRF.FilePublisher]::Publish($source, $destination, $Force.IsPresent)
+    Write-Host "$($result.State): $destination ($($result.Length) bytes; SHA256 $($result.Hash))"
     exit 0
 } catch {
     Write-Error -ErrorRecord $_ -ErrorAction Continue

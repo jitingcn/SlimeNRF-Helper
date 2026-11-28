@@ -13,7 +13,7 @@
 
 需要开发构建时，打开 [Native no-firmware CI](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/ci.yml)，选择目标提交对应的成功运行记录，在 **Summary** 页的 **Artifacts** 区域下载对应的包。产物保留 14 天，受仓库策略限制。
 
-Windows 下载文件名以 `windows-x64-no-firmware.exe` 结尾的包，下载完成后直接运行。该文件使用 UPX 压缩，可能引发安全软件误报或兼容性问题。不发布未压缩的备用版本；本地 Cargo 构建仍保留未压缩的原始可执行文件。
+在 Windows 上，下载文件名以 `windows-x64-no-firmware.exe` 结尾的包，下载后直接运行。新版发布包和当前 CI 产物沿用这个文件名，提供未压缩的 EXE；旧版发布包可能使用了 UPX 压缩。
 
 在 Linux 上运行 `uname -m`，按输出选择对应文件名后缀的 AppImage：
 

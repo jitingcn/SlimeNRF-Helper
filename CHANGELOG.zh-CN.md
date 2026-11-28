@@ -16,6 +16,7 @@
 ### 变更
 
 - Release 构建从 fat LTO 改用 ThinLTO。
+- Windows x64 默认打包、CI 和新版发布均提供未压缩的 EXE，文件名不变。本地打包可显式使用 `package.ps1 -Upx`，另存为带 `-upx.exe` 后缀的文件。
 - 在线固件默认只显示匹配板型。同一次 ESB OTA 会话中切换追踪器型号时，保留已打开的版本，直接按新分组筛选文件，不再重复查询 GitHub。
 
 ### 修复

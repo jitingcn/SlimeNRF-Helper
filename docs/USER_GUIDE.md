@@ -13,7 +13,7 @@
 
 For a development build, open [Native no-firmware CI](https://github.com/jitingcn/SlimeNRF-Helper/actions/workflows/ci.yml), select a successful run for the commit you want, and download the package from **Artifacts** on the run's **Summary** page. Artifacts are retained for 14 days, subject to repository policy.
 
-On Windows, download the package whose filename ends in `windows-x64-no-firmware.exe` and run it directly. It is UPX-compressed, which can trigger security software or compatibility problems. No uncompressed fallback is published; a local Cargo build retains the original uncompressed executable.
+On Windows, download the package whose filename ends in `windows-x64-no-firmware.exe` and run it directly. New releases and current CI builds use this same filename for the uncompressed executable; older releases may contain a UPX-compressed executable.
 
 On Linux, run `uname -m` and choose the AppImage with the matching filename suffix:
 

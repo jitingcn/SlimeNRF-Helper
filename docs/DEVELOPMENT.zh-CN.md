@@ -43,7 +43,7 @@ Cargo 默认根据可用 CPU 自动选择构建并发数，可用 `CARGO_BUILD_J
 ./build.ps1 -Action check -NoFirmware
 ./build.ps1 -Action test -NoFirmware
 ./build.ps1 -Action run -Release -NoFirmware  # 明确运行 Release
-./package.ps1 -NoFirmware                    # 单文件发布包
+./package.ps1 -NoFirmware                    # 未压缩的单文件 Release 包
 ./quality.ps1 -NoFirmware                    # 格式 -> 严格 Clippy -> 测试
 ./quality.ps1 -FormatOnly                    # 只检查，不改格式，无需 VS
 ./build.ps1 -Action fmt                      # 明确应用格式
@@ -266,7 +266,7 @@ Cargo 逐项跟踪生成器、冻结输入及仓库来源文件。生成文档�
 
 ## Windows 发布
 
-`package.ps1` 构建并发布 UPX 压缩的 `dist/slimenrf-helper-<版本>-windows-x64.exe`；`-NoFirmware` 发布 `-no-firmware.exe`，仍内置默认配置。Cargo 构建的未压缩原始文件保留在构建缓存中，不予发布；没有公开的未压缩备用版本。不发布整个 target、PDB 或测试程序。静态 CRT 不等于全新 Windows 或签名已验收。
+`package.ps1` 默认将 Cargo 构建的 Release EXE 原样发布为 `dist/slimenrf-helper-<版本>-windows-x64.exe`。传入 `-NoFirmware` 时，发布 `dist/slimenrf-helper-<版本>-windows-x64-no-firmware.exe`，仍内置默认配置。不发布整个 target 目录、PDB 或测试程序。使用静态 CRT 不代表已在全新 Windows 上验收，也不代表签名已通过验收。
 
 ```powershell
 ./package.ps1 -NoFirmware
@@ -274,15 +274,17 @@ Cargo 逐项跟踪生成器、冻结输入及仓库来源文件。生成文档�
 
 给本地含固件包标注版本时，先将 `SLIMENRF_FIRMWARE_ROOT` 设为已准备好的暂存目录，再运行 `./package.ps1 -FirmwareTag 261120`。应用版本为 `0.5.0` 时显示 `0.5.0+fw.261120`，不改变可执行文件名或应用更新版本。`-FirmwareTag` 不能与 `-NoFirmware` 或 `-OfficialReleaseTag` 同用。固件准备与验收见[含固件打包 Skill](../.agents/skills/slimenrf-helper-bundled-firmware/SKILL.md)。
 
-`package.ps1` 以明确的必填 `-InputPath` 和 `-OutputPath` 调用内部 [UPX 辅助脚本](../scripts/package-upx.ps1)。该脚本固定工具版本与哈希，使用 `--best --lzma --strip-relocs=0`，不使用 `--exact`。发布前先运行 UPX 完整性检查，再解压到独立临时文件。解压后的可执行文件可能与原文件字节不同；Cargo 构建的输入保持不变。
+本地需要压缩包时，显式传入 `-Upx`（例如 `./package.ps1 -NoFirmware -Upx`）。产物为 `dist/slimenrf-helper-<版本>-windows-x64-upx.exe` 或 `dist/slimenrf-helper-<版本>-windows-x64-no-firmware-upx.exe`，不会改动常规打包产物或 Cargo 的原始 EXE。`-Upx` 不能与 `-OfficialReleaseTag` 同用。
+
+只有传入 `-Upx` 才会调用内部 [UPX 辅助脚本](../scripts/package-upx.ps1)，并显式传入 `-InputPath` 和 `-OutputPath`。辅助脚本固定工具版本与哈希，使用 `--best --lzma --strip-relocs=0`，不使用 `--exact`。发布前先运行 UPX 完整性检查，再解压到独立临时文件。解压后的可执行文件可能与原文件字节不同。
 
 压缩可能增加启动开销或引发安全软件误报。压缩改变 EXE 字节，已有 Authenticode 签名失效；若签名应在最终压缩后进行并重新验收。CI 不签名。
 
-辅助脚本使用[共用原子发布器](../scripts/publish-file.ps1)。已有输出内容相同时保留，不同内容须在 `package.ps1` 明确传入 `-Force`。发布器在目标卷暂存，再移动或替换目标，不原地覆盖字节，因此保留输入及指向旧输出的其他硬链接。发布路径中的符号链接和 reparse point 会被拒绝。文件锁允许读取但拒绝写入，输入锁还拒绝删除。无法取得所需锁时，发布失败且不替换输出。这些检查不保证能抵御所有恶意文件系统竞态。
+两种打包方式都使用[共用原子发布器](../scripts/publish-file.ps1)。已有输出内容相同时保留，不同内容须在 `package.ps1` 明确传入 `-Force`。发布器在目标卷暂存，再移动或替换目标，不原地覆盖字节，因此保留输入及指向旧输出的其他硬链接。发布路径中的符号链接和 reparse point 会被拒绝。文件锁允许读取但拒绝写入，输入锁还拒绝删除。无法取得所需锁时，发布失败且不替换输出。这些检查不保证能抵御所有恶意文件系统竞态。
 
 仅官方 tag 的 Windows 打包任务通过 `package.ps1 -OfficialReleaseTag` 写入应用自更新资格。普通本地、分支、PR、debug 和自定义资源构建只允许检查版本。[构建标记校验](../crates/app/build_support/official_release.rs)核对包版本、目标、profile、仓库、tag 及 GitHub 事件；这是分发策略，不是密码学签名。普通开发命令不要设置此标记。
 
-更新器读取分页的 GitHub Releases API，而非 `/latest`，以比较符合条件的稳定版本和可选的预发布版本。Windows 产物必须保持上述精确的版本／架构／固件变体命名，并提供 GitHub 的 SHA-256 摘要；不会回退到历史 `-upx.exe` 名称或另一固件变体。仅检查版本的构建选择发布元数据，不要求存在 Windows 产物，并打开对应发布页。修改产物命名或发布频道时须同时审查更新器。用户流程和恢复限制见[应用更新](USER_GUIDE.zh-CN.md#app-updates)。
+更新器读取分页的 GitHub Releases API，而非 `/latest`，以比较符合条件的稳定版本和可选的预发布版本。Windows 发布产物必须遵循上述常规文件名中的版本、架构和固件变体规则，并提供 GitHub 的 SHA-256 摘要。更新器不接受 `-upx.exe` 文件，也不会改选另一种固件变体。仅检查版本的构建选择发布元数据，不要求存在 Windows 产物，并打开对应发布页。修改产物命名或发布频道时须同时审查更新器。用户流程和恢复限制见[应用更新](USER_GUIDE.zh-CN.md#app-updates)。
 
 <a id="linux"></a>
 ## Linux
@@ -389,13 +391,13 @@ App 的 bundle ID 为 `io.github.jitingcn.SlimeNRFHelper`。App 采用临时签�
 
 五个打包作业各直接上传一个带版本号的文件。新的正式标签发布必须包含以下五个文件，其中 `<版本>` 是应用的 Cargo 版本：
 
-- `slimenrf-helper-<版本>-windows-x64-no-firmware.exe`（UPX 压缩）
+- `slimenrf-helper-<版本>-windows-x64-no-firmware.exe`（Cargo 构建的未压缩 EXE）
 - `slimenrf-helper-<版本>-linux-x64-no-firmware.AppImage`
 - `slimenrf-helper-<版本>-linux-arm64-no-firmware.AppImage`
 - `slimenrf-helper-<版本>-macos-arm64-no-firmware.dmg`
 - `slimenrf-helper-<版本>-macos-x64-no-firmware.dmg`
 
-Actions 产物保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。Mac 打包脚本校验并以只读方式挂载 DMG，检查其中的 Mach-O 架构、链接的最低系统版本（macOS 15.0）、系统库链接、包元数据、临时签名、许可证文件和**应用程序**链接，再卸载映像。CI 不启动 macOS 界面，也不验证实体设备。
+Actions 产物保留 14 天，受仓库策略限制。CI 不下载或运行 UPX，不构建 Flatpak，也不把缓存作为发布附件上传。Mac 打包脚本校验并以只读方式挂载 DMG，检查其中的 Mach-O 架构、链接的最低系统版本（macOS 15.0）、系统库链接、包元数据、临时签名、许可证文件和**应用程序**链接，再卸载映像。CI 不启动 macOS 界面，也不验证实体设备。
 
 推送 `v<版本号>` 标签后，须等源码作业与所有原生检查通过，才会运行发布作业。标签必须匹配主应用的稳定 Cargo 版本以及英文 `CHANGELOG.md` 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
 

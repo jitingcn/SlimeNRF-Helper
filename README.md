@@ -25,7 +25,7 @@ Download the package for your platform from [Releases](https://github.com/jiting
 
 The Linux ARM64 AppImage is not part of v0.7.0 or earlier releases. The [v0.6.0 release](https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v0.6.0) keeps its original macOS DMGs marked `preview`.
 
-- The Windows EXE filename ends in `windows-x64-no-firmware.exe` and is UPX-compressed. Compression can trigger security software or compatibility problems; no uncompressed fallback is published. A local Cargo build retains the original uncompressed executable.
+- New Windows releases and current CI builds ship the uncompressed Cargo executable. Its filename still ends in `windows-x64-no-firmware.exe`.
 - On Linux, choose `linux-x64-no-firmware.AppImage` if `uname -m` reports `x86_64`, or `linux-arm64-no-firmware.AppImage` if it reports `aarch64`. Both use an Ubuntu 22.04 build baseline with glibc 2.35. They are not fully static and require a compatible host graphics stack, fonts, desktop and device services, and USB, HID, and serial permissions.
 - The macOS DMGs require macOS 15 or later. Choose `arm64` for Apple Silicon or `x64` for Intel. The app is ad hoc signed, without Developer ID signing or notarization. See [macOS installation](docs/USER_GUIDE.md#macos-installation) for Gatekeeper and manual updates.
 

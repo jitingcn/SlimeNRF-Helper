@@ -16,6 +16,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ### Changed
 
 - Release builds use ThinLTO instead of fat LTO.
+- Windows x64 packaging, CI, and new releases ship the uncompressed executable under the existing filename. For local packaging only, `package.ps1 -Upx` writes a separate `-upx.exe` file.
 - The online firmware picker shows matching boards by default. Switching between tracker models in an ESB OTA session keeps the open version and filters its files for the new group without querying GitHub again.
 
 ### Fixed
