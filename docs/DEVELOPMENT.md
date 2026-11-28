@@ -380,11 +380,13 @@ The bundle ID is `io.github.jitingcn.SlimeNRFHelper`. The app uses an ad hoc sig
 
 ## CI and release acceptance
 
-[Native no-firmware CI](../.github/workflows/ci.yml) runs on branch and tag pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including release preparation tests, and checks publication boundaries and frozen notice inputs. After it passes, the native jobs run on `windows-2022` (x64), `ubuntu-22.04` (x64), `macos-26` (Apple Silicon), and `macos-26-intel` (Intel). All four run the maintained no-firmware quality entry points before packaging. Windows also runs the tools tests for native hook coverage; both Mac jobs run the tools tests separately.
+[Native no-firmware CI](../.github/workflows/ci.yml) runs on branch and tag pushes, PRs, and manual triggers. The `ubuntu-24.04` source job runs Rust tools tests, including release preparation tests, and checks publication boundaries and frozen notice inputs. The native jobs then run the no-firmware quality checks on Windows x64, Linux x64 and ARM64 (Ubuntu 22.04), and macOS Apple Silicon and Intel. Linux ARM64 runs Clippy, tests and doctests natively on `ubuntu-22.04-arm`; only Linux x64 packages an AppImage. Windows also runs the tools tests for native hook coverage; both Mac jobs run the tools tests separately.
 
 The source and release jobs share a Rust cache key. Native application build caches stay separate by platform and architecture. Compiler, environment, and dependency hashes and GitHub's cache scope rules still apply.
 
-Each native job uploads one file directly under its versioned filename. A standard release requires this exact set, where `<version>` is the application's Cargo version:
+Both macOS jobs restore dependencies before the quality checks. Within each architecture, checks and DMG packaging share `target`; debug and Release build artifacts stay in separate profile directories.
+
+Each packaging job uploads one file directly under its versioned filename. A standard release requires this exact set, where `<version>` is the application's Cargo version:
 
 - `slimenrf-helper-<version>-windows-x64-no-firmware.exe` (UPX-compressed)
 - `slimenrf-helper-<version>-linux-x64-no-firmware.AppImage`
@@ -393,7 +395,7 @@ Each native job uploads one file directly under its versioned filename. A standa
 
 Actions artifacts are retained for 14 days, subject to repository policy. CI does not build Flatpak or upload caches as release assets. The Mac packager verifies the DMG, attaches it read-only, checks the mounted app's Mach-O architecture, linked deployment target (macOS 15.0), system library linkage, metadata, ad hoc signature, license files, and the **Applications** link, then detaches it. CI does not launch the macOS GUI or verify physical devices.
 
-A `v<version>` tag push runs the release job only after the source job and all four native jobs pass. The tag must match the application's stable Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md); SemVer prerelease versions are rejected. Release notes use that entry and link to the Chinese changelog at the same commit.
+A `v<version>` tag push runs the release job only after the source job and all native checks pass. The tag must match the application's stable Cargo version and the dated entry in [CHANGELOG.md](../CHANGELOG.md); SemVer prerelease versions are rejected. Release notes use that entry and link to the Chinese changelog at the same commit.
 
 The publisher downloads all four exact-name artifacts from that tag's workflow run without rebuilding them. It checks that the remote tag resolves to the event commit and refuses any existing release for the tag, including a draft. SHA-pinned `softprops/action-gh-release` creates a draft and uploads the files without overwriting assets. Before publishing, the workflow checks the draft tag and commit, the exact set of four uploaded asset names and sizes, and that the remote tag still points to the event commit. GitHub selects latest using its legacy creation-date and SemVer policy. A failed upload or verification can leave a draft; inspect it manually before retrying. The workflow does not overwrite or delete it.
 

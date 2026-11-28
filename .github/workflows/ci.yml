@@ -145,10 +145,22 @@ jobs:
 
 
   linux:
-    name: Linux x64 / no firmware
+    name: Linux ${{ matrix.arch }} / no firmware
     needs: source
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04
+            machine: x86_64
+            nextest_sha256: d039b43c3e0958441b6ad0a39c8884d018b3d2e8fb9928f209074b1100b5e17a
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+            machine: aarch64
+            nextest_sha256: ca1f81a5b86533eb45ab97e0064aa88e925e53aab9a698ca6331a7cad1f85f07
     defaults:
       run:
         shell: bash
@@ -175,14 +187,18 @@ jobs:
           cargo --version
 
       - name: Install checksum-pinned cargo-nextest
+        env:
+          NATIVE_MACHINE: ${{ matrix.machine }}
+          NEXTEST_SHA256: ${{ matrix.nextest_sha256 }}
         run: |
           set -euo pipefail
+          test "$(uname -m)" = "$NATIVE_MACHINE"
           archive="$RUNNER_TEMP/cargo-nextest-0.9.152.tar.gz"
           tools="$RUNNER_TEMP/cargo-nextest-0.9.152"
           curl --fail --location --proto '=https' --tlsv1.2 \
-            https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.152/cargo-nextest-0.9.152-x86_64-unknown-linux-gnu.tar.gz \
+            "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.152/cargo-nextest-0.9.152-${NATIVE_MACHINE}-unknown-linux-gnu.tar.gz" \
             --output "$archive"
-          printf '%s  %s\n' 'd039b43c3e0958441b6ad0a39c8884d018b3d2e8fb9928f209074b1100b5e17a' "$archive" | sha256sum --check -
+          printf '%s  %s\n' "$NEXTEST_SHA256" "$archive" | sha256sum --check -
           mkdir -p "$tools"
           tar -xzf "$archive" -C "$tools" cargo-nextest
           test -x "$tools/cargo-nextest"
@@ -192,13 +208,14 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: '. -> target'
-          key: ubuntu-22.04-x64-no-firmware
+          key: ubuntu-22.04-${{ matrix.arch }}-no-firmware
           cache-bin: false
 
       - name: Check formatting, strict workspace Clippy, tests and doctests
         run: bash ./quality.sh --no-firmware
 
       - name: Download checksum-pinned AppImage tools
+        if: matrix.arch == 'x64'
         run: |
           # Exact releases and cache layout from the AppImage packager.
           # The packager verifies SHA-256 before executing either tool and uses
@@ -213,9 +230,11 @@ jobs:
             --output "$tools/1.9.1/appimagetool-x86_64.AppImage"
 
       - name: Package Release AppImage
+        if: matrix.arch == 'x64'
         run: bash ./package.sh --format appimage --no-firmware
 
       - name: Select sole executable no-firmware AppImage
+        if: matrix.arch == 'x64'
         id: linux_package
         run: |
           shopt -s nullglob
@@ -229,6 +248,7 @@ jobs:
           printf 'path=%s\n' "$executable" >> "$GITHUB_OUTPUT"
 
       - name: Upload Linux AppImage only
+        if: matrix.arch == 'x64'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: ${{ steps.linux_package.outputs.path }}
@@ -287,23 +307,17 @@ jobs:
           test -x "$tools/cargo-nextest"
           printf '%s\n' "$tools" >> "$GITHUB_PATH"
 
-      - name: Check formatting, strict workspace Clippy, tests and doctests
-        env:
-          CARGO_INCREMENTAL: '0'
-        run: |
-          # Reclaim this job's quality build before restoring Release artifacts.
-          CARGO_TARGET_DIR="$(mktemp -d "$RUNNER_TEMP/slimenrf-quality.XXXXXXXX")"
-          export CARGO_TARGET_DIR
-          trap 'rm -rf -- "$CARGO_TARGET_DIR"' EXIT
-          bash ./quality.sh --no-firmware
-          cargo nextest run --locked -p slimenrf-tools
-
-      - name: Cache Release packaging dependencies
+      - name: Cache native check and DMG dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: '. -> target'
-          key: macos-26-${{ matrix.arch }}-no-firmware
+          key: macos-26-${{ matrix.arch }}-no-firmware-check-and-package
           cache-bin: false
+
+      - name: Check formatting, strict workspace Clippy, tests and doctests
+        run: |
+          bash ./quality.sh --no-firmware
+          cargo nextest run --locked -p slimenrf-tools
 
       - name: Build, sign and verify the no-firmware DMG
         id: package

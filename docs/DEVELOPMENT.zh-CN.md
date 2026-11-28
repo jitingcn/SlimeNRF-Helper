@@ -380,11 +380,13 @@ App 的 bundle ID 为 `io.github.jitingcn.SlimeNRFHelper`。App 采用临时签�
 
 ## CI 与发布门槛
 
-[Native no-firmware CI](../.github/workflows/ci.yml)在分支或标签推送、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括发布准备测试），并检查公开边界和冻结的版权输入。通过后，原生作业分别在 `windows-2022`（x64）、`ubuntu-22.04`（x64）、`macos-26`（Apple 芯片）和 `macos-26-intel`（Intel）上运行。四项作业均在打包前运行无固件质量检查。Windows 还运行工具测试以覆盖原生 hook；两种 Mac 构建也单独运行工具测试。
+[Native no-firmware CI](../.github/workflows/ci.yml) 在分支或标签推送、PR 和手动触发时运行。`ubuntu-24.04` 源码作业运行 Rust 工具测试（包括发布准备测试），并检查公开边界和冻结的版权输入。通过后，在 Windows x64、Linux x64 和 ARM64（Ubuntu 22.04）、Apple 芯片和 Intel Mac 上运行无固件质量检查。Linux ARM64 在 `ubuntu-22.04-arm` 上原生运行 Clippy、测试和 doctest；只有 Linux x64 打包 AppImage。Windows 还运行工具测试以覆盖原生 hook；两种 Mac 构建也单独运行工具测试。
 
 源码和发布作业共用一个 Rust 缓存 key。原生应用构建仍按平台和架构使用独立缓存。编译器、环境与依赖哈希以及 GitHub 缓存作用域规则继续生效。
 
-每个原生作业直接上传一个带版本号的文件。正式发布必须包含以下四个文件，其中 `<版本>` 是应用的 Cargo 版本：
+两种 Mac 作业都在质量检查前恢复依赖缓存。每种架构的检查与 DMG 打包共用 `target`，debug 和 Release 产物仍保存在各自的目录中。
+
+每个打包作业直接上传一个带版本号的文件。正式发布必须包含以下四个文件，其中 `<版本>` 是应用的 Cargo 版本：
 
 - `slimenrf-helper-<版本>-windows-x64-no-firmware.exe`（UPX 压缩）
 - `slimenrf-helper-<版本>-linux-x64-no-firmware.AppImage`
@@ -393,7 +395,7 @@ App 的 bundle ID 为 `io.github.jitingcn.SlimeNRFHelper`。App 采用临时签�
 
 Actions 产物保留 14 天，受仓库策略限制。CI 不构建 Flatpak，也不把缓存作为发布附件上传。Mac 打包脚本校验并以只读方式挂载 DMG，检查其中的 Mach-O 架构、链接的最低系统版本（macOS 15.0）、系统库链接、包元数据、临时签名、许可证文件和**应用程序**链接，再卸载映像。CI 不启动 macOS 界面，也不验证实体设备。
 
-推送 `v<版本号>` 标签后，须等源码作业与四个原生作业全部通过，才会运行发布作业。标签必须匹配主应用的稳定 Cargo 版本以及英文 `CHANGELOG.md` 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
+推送 `v<版本号>` 标签后，须等源码作业与所有原生检查通过，才会运行发布作业。标签必须匹配主应用的稳定 Cargo 版本以及英文 `CHANGELOG.md` 中带日期的版本条目；带 SemVer 预发布后缀的版本会被拒绝。发布说明使用该英文条目，并链接到同一提交的[中文更改日志](../CHANGELOG.zh-CN.md)。
 
 发布作业按精确文件名从该标签的同一次工作流运行中下载四个产物，不重新编译。它确认远程标签指向触发工作流的提交，并拒绝已有的同标签 Release，包括草稿。固定到提交 SHA 的 `softprops/action-gh-release` 创建草稿并上传文件，不覆盖附件。公开前，工作流核对草稿的标签和提交、四个已上传附件的完整名称和大小，并再次确认远程标签仍指向触发工作流的提交。GitHub 按 legacy 创建日期及 SemVer 策略选择 latest。上传或验证失败可能留下草稿，重试前请人工检查。工作流不会覆盖或删除草稿。
 
