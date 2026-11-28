@@ -13,7 +13,7 @@ use crate::{
 };
 use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, Entity, TestAppContext, WindowBounds, WindowOptions,
-    px, size,
+    point, px, size,
     test::{TestQueryExt as _, TestWindowExt as _},
 };
 use std::{
@@ -312,6 +312,8 @@ fn version_label_keeps_prerelease_marker_independent_of_the_version_suffix() {
 fn release_only_builds_check_preview_metadata_without_automatic_or_install_actions(
     cx: &mut TestAppContext,
 ) {
+    const CHANGELOG_URL: &str =
+        "https://github.com/jitingcn/SlimeNRF-Helper/blob/v0.7.0/CHANGELOG.zh-CN.md";
     let runtime = AppRuntime::new().expect("start app runtime");
     let directory = tempfile::tempdir().expect("private preferences directory");
     let _session = UiTestSession::new(cx);
@@ -343,7 +345,9 @@ fn release_only_builds_check_preview_metadata_without_automatic_or_install_actio
     preview.version = "9.0.0-rc.3".into();
     preview.tag = "v9.0.0-rc.3".into();
     preview.prerelease = true;
-    preview.notes = "Release-only preview notes".into();
+    preview.notes = format!(
+        "[Chinese changelog]({CHANGELOG_URL})\n\n### Added\n\n- New **native builds** for `arm64`."
+    );
     preview.html_url =
         "https://github.com/jitingcn/SlimeNRF-Helper/releases/tag/v9.0.0-rc.3".into();
     set_check(
@@ -409,8 +413,11 @@ fn release_only_builds_check_preview_metadata_without_automatic_or_install_actio
         );
         assert!(badge.visible());
         let notes = window.find("app-update-release-notes");
-        assert_eq!(notes.role(), Some(gpui_kit::Role::Label));
-        assert_eq!(notes.label(), Some(preview.notes.as_str()));
+        assert_eq!(notes.role(), Some(gpui_kit::Role::Group));
+        assert_eq!(
+            notes.label(),
+            Some(crate::i18n::tr("app.settings.update.release_notes").as_str())
+        );
         assert!(notes.visible());
         assert!(window.find("app-update-release-link").visible());
         assert!(window.try_find("app-update-download").is_none());
@@ -421,6 +428,25 @@ fn release_only_builds_check_preview_metadata_without_automatic_or_install_actio
     click(cx, &fixture, "app-update-release-link");
     cx.run_until_parked();
     assert_eq!(cx.opened_url().as_deref(), Some(preview.html_url.as_str()));
+    cx.update_window(fixture.window, |_, window, cx| {
+        // The first paragraph begins with the link, so this also focuses the document.
+        window.click_at("app-update-release-notes", point(px(8.), px(8.)), cx);
+        window.press("secondary-a", cx);
+        window.press("secondary-c", cx);
+        let copied = cx
+            .read_from_clipboard()
+            .and_then(|item| item.text())
+            .expect("copy the rendered release notes");
+        assert!(copied.starts_with("Chinese changelog"), "{copied:?}");
+        assert!(copied.lines().any(|line| line == "Added"), "{copied:?}");
+        assert!(
+            copied.contains("New native builds for arm64."),
+            "{copied:?}"
+        );
+        assert!(!copied.contains(CHANGELOG_URL), "{copied:?}");
+    })
+    .expect("read the formatted release notes");
+    assert_eq!(cx.opened_url().as_deref(), Some(CHANGELOG_URL));
 
     set_check(cx, &fixture, TestCheck::WaitForCancel);
     click(cx, &fixture, "app-update-check");
@@ -517,7 +543,8 @@ fn installable_build_with_metadata_only_offers_release_page(cx: &mut TestAppCont
     // A metadata-only result must never authorize installation, even for a marked build.
     let fixture = fixture(cx, &runtime, &directory, Eligibility::Installable);
     open_updater(cx, &fixture);
-    let info = app_update::test_release_info();
+    let mut info = app_update::test_release_info();
+    info.notes = "[Local release notes](file:///release-notes.txt)".into();
     set_download(cx, &fixture, TestDownload::Success);
     check_result(
         cx,
@@ -539,9 +566,7 @@ fn installable_build_with_metadata_only_offers_release_page(cx: &mut TestAppCont
         let status = window.find("app-update-status");
         assert!(status.visible());
         assert_eq!(status.label(), Some(expected.as_str()));
-        let notes = window.find("app-update-release-notes");
-        assert!(notes.visible());
-        assert_eq!(notes.label(), Some(info.notes.as_str()));
+        assert!(window.find("app-update-release-notes").visible());
         assert!(window.find("app-update-release-link").visible());
         assert!(window.try_find("app-update-download").is_none());
         assert!(window.try_find("app-update-restart").is_none());
@@ -560,9 +585,22 @@ fn installable_build_with_metadata_only_offers_release_page(cx: &mut TestAppCont
     })
     .expect("reject download of metadata-only release");
     assert_eq!(cx.opened_url(), None);
+    cx.update_window(fixture.window, |_, window, cx| {
+        window.click_at("app-update-release-notes", point(px(8.), px(8.)), cx);
+    })
+    .expect("try to activate a non-HTTPS destination inside the notes");
+    assert_eq!(cx.opened_url(), None, "notes must not open local resources");
     click(cx, &fixture, "app-update-release-link");
     cx.run_until_parked();
     assert_eq!(cx.opened_url().as_deref(), Some(info.html_url.as_str()));
+
+    info.notes.clear();
+    check_result(cx, &fixture, CheckResult::ReleasePage(Box::new(info)));
+    cx.update_window(fixture.window, |_, window, _| {
+        assert!(window.try_find("app-update-release-notes").is_none());
+        assert!(window.find("app-update-release-link").visible());
+    })
+    .expect("release page is available without a notes body");
     poll_until(cx, &fixture, |this| !this.preferences_io.busy());
     assert_no_workers(cx, &fixture);
 }
@@ -717,10 +755,7 @@ fn stable_and_preview_checks_follow_the_controlled_preference(cx: &mut TestAppCo
                 .label()
                 .is_some_and(|text| text.contains("9.0.0") && text.contains("v9.0.0"))
         );
-        assert_eq!(
-            window.find("app-update-release-notes").label(),
-            Some("Synthetic release notes")
-        );
+        assert!(window.find("app-update-release-notes").visible());
         assert!(window.find("app-update-download").visible());
     })
     .expect("inspect selected preview release");
@@ -930,8 +965,6 @@ fn failed_download_retries_progress_cancel_and_ready(cx: &mut TestAppContext) {
             && text.contains("v9.0.0")
             && text.contains("ready")));
         let notes = window.find("app-update-release-notes");
-        assert_eq!(notes.role(), Some(gpui_kit::Role::Label));
-        assert_eq!(notes.label(), Some("Synthetic release notes"));
         assert!(notes.visible());
         assert!(window.find("app-update-restart").visible());
         assert!(window.find("app-update-cancel").visible());

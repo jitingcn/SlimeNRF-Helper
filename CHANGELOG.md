@@ -25,6 +25,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Receiver updates now count as complete when the receiver accepts activation and then answers a fresh firmware-info query, even if it does not send a final `COMPLETE`.
 - **Latest available** opens the newest usable release or CI build with its file list, without a second request for the same files.
 - Wireless firmware-info refreshes skip trackers that replied successfully in the last 30 seconds and keep their information visible while newly online trackers are queried.
+- When an application update is available, Settings renders its release notes as Markdown instead of showing the formatting characters.
 
 ## [0.7.0] - 2026-11-27
 

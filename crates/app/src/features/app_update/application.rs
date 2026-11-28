@@ -7,7 +7,7 @@ use crate::{
     update::Job,
 };
 use futures_util::{FutureExt as _, future::Shared};
-use gpui_kit::base::{Link, TestSupportExt as _};
+use gpui_kit::base::{Link, MarkdownExtensions, TestSupportExt as _, TextView};
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
@@ -15,11 +15,16 @@ use gpui_kit::component::{
     notification::{Notification, NotificationDelivery},
 };
 use gpui_kit::{
-    AnyElement, Context, FontWeight, ScrollHandle, SharedString, Task, Window, div, prelude::*,
+    AnyElement, Context, FontWeight, ImageCacheError, ImageSource, ScrollHandle, SharedString,
+    Task, Window, div, prelude::*,
 };
+use reqwest::Url;
 #[cfg(test)]
 use std::sync::atomic::Ordering;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 const CHECK_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
 
@@ -206,6 +211,35 @@ fn version_label(version: &'static str, prerelease: bool) -> SharedString {
     } else {
         SharedString::new_static(version)
     }
+}
+
+fn release_notes_view(notes: SharedString) -> TextView {
+    TextView::markdown("app-update-release-markdown", notes)
+        .w_full()
+        .min_w_0()
+        .text_sm()
+        .whitespace_normal()
+        .markdown_extensions(MarkdownExtensions::default().raw_html(false))
+        .link(|link, _| {
+            let url = Url::parse(link.url.as_str()).ok()?;
+            if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+                return None;
+            }
+            let link = link.clone();
+            Some(if url.as_str() == link.url.as_str() {
+                link
+            } else {
+                link.url(String::from(url))
+            })
+        })
+        // Rendering notes must not contact a URL or load any other document asset.
+        .image_source(|_| {
+            ImageSource::Custom(Arc::new(|_, _| {
+                Some(Err(ImageCacheError::Asset(SharedString::new_static(
+                    "Release notes do not load images",
+                ))))
+            }))
+        })
 }
 
 fn unix_seconds() -> Option<u64> {
@@ -969,6 +1003,7 @@ impl Workbench {
                     scroll,
                 ));
             if let Some(notes) = &self.app_update.notes {
+                let title = tr("app.settings.update.release_notes");
                 content = content.child(
                     div()
                         .w_full()
@@ -980,17 +1015,17 @@ impl Workbench {
                             div()
                                 .text_sm()
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .child(tr("app.settings.update.release_notes")),
+                                .child(title.clone()),
                         )
                         .child(
                             div()
                                 .id("app-update-release-notes")
-                                .role(gpui_kit::Role::Label)
+                                .role(gpui_kit::Role::Group)
                                 .test_support()
-                                .aria_label(notes.clone())
-                                .text_sm()
-                                .whitespace_normal()
-                                .child(notes.clone()),
+                                .aria_label(title)
+                                .w_full()
+                                .min_w_0()
+                                .child(release_notes_view(notes.clone())),
                         ),
                 );
             }
