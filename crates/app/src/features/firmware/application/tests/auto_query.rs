@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 
 #[test]
 fn scoped_manual_query_targets_only_current_receiver_and_requested_slot() {
-    use crate::application::flash::auto_query::scoped_query_group;
+    let cache = EsbAutoQuery::default();
+    let now = Instant::now();
     let receiver = target("a", 0, "board").receiver;
     let requested = query_link("a", 1);
     let live = [
@@ -24,14 +25,18 @@ fn scoped_manual_query_targets_only_current_receiver_and_requested_slot() {
             ..query_link("a", 3)
         },
     ];
-    let group = scoped_query_group(&receiver, &receiver, Some(&requested), &live).unwrap();
+    let group = cache
+        .scoped_query_group(&receiver, &receiver, Some(&requested), &live, now)
+        .unwrap();
     assert_eq!(group.0.key, "a");
     assert!(!group.2);
     assert_eq!(group.1.len(), 1);
     assert_eq!(group.1[0].slot, 1);
     assert_eq!(group.1[0].receiver_key, "a");
 
-    let group = scoped_query_group(&receiver, &receiver, None, &live).unwrap();
+    let group = cache
+        .scoped_query_group(&receiver, &receiver, None, &live, now)
+        .unwrap();
     assert!(group.2);
     assert_eq!(
         group
@@ -45,7 +50,8 @@ fn scoped_manual_query_targets_only_current_receiver_and_requested_slot() {
 
 #[test]
 fn scoped_manual_query_rejects_replaced_endpoint_slot_and_offline_identity() {
-    use crate::application::flash::auto_query::scoped_query_group;
+    let cache = EsbAutoQuery::default();
+    let now = Instant::now();
     let receiver = target("a", 0, "board").receiver;
     let requested = query_link("a", 1);
     for changed in ["path", "serial", "key"] {
@@ -55,7 +61,11 @@ fn scoped_manual_query_rejects_replaced_endpoint_slot_and_offline_identity() {
             "serial" => current.serial_number = Some("new receiver".into()),
             _ => current.key = "b".into(),
         }
-        assert!(scoped_query_group(&receiver, &current, None, &[]).is_none());
+        assert!(
+            cache
+                .scoped_query_group(&receiver, &current, None, &[], now)
+                .is_none()
+        );
     }
     for changed in ["address", "offline", "unknown", "receiver", "slot"] {
         let mut current = requested.clone();
@@ -66,7 +76,11 @@ fn scoped_manual_query_rejects_replaced_endpoint_slot_and_offline_identity() {
             "receiver" => current.receiver_key = "b".into(),
             _ => current.slot = 2,
         }
-        assert!(scoped_query_group(&receiver, &receiver, Some(&requested), &[current]).is_none());
+        assert!(
+            cache
+                .scoped_query_group(&receiver, &receiver, Some(&requested), &[current], now)
+                .is_none()
+        );
     }
 }
 
@@ -646,7 +660,7 @@ Remaining runtime: Not available\nFully charged runtime: Not available\n"
 fn joined_unknown_calibration_allows_other_slot_commands_and_scoped_firmware_queries() {
     use crate::application::calibration::check_scoped_tracker_io;
     use crate::application::flash::auto_query::{
-        calibration_query_tracker_admitted, retain_calibration_query_groups, scoped_query_group,
+        calibration_query_tracker_admitted, retain_calibration_query_groups,
     };
     use crate::discovery::ReceiverMonitor;
     use crate::domain::{Inventory, SerialEndpoint, SerialPortKind};
@@ -766,16 +780,24 @@ fn joined_unknown_calibration_allows_other_slot_commands_and_scoped_firmware_que
     let command = CommandSnapshot::capture(preset, "0,0,0", route).unwrap();
     command.authorize(route, true).unwrap();
     assert_eq!(command.command(), "send 7 sens 0,0,0");
-    let mut scoped =
-        vec![scoped_query_group(&receiver, &receiver, Some(&unrelated), &roster).unwrap()];
+    let cache = EsbAutoQuery::default();
+    let now = Instant::now();
+    let mut scoped = vec![
+        cache
+            .scoped_query_group(&receiver, &receiver, Some(&unrelated), &roster, now)
+            .unwrap(),
+    ];
     retain_calibration_query_groups(&calibration, &mut scoped);
     assert_eq!(scoped.len(), 1);
     assert_eq!(scoped[0].1.len(), 1);
     assert_eq!(scoped[0].1[0].slot, 7);
     assert_eq!(scoped[0].1[0].address.as_deref(), Some("112233445566"));
     assert!(!scoped[0].2);
-    let mut same_query =
-        vec![scoped_query_group(&receiver, &receiver, Some(&same), &roster).unwrap()];
+    let mut same_query = vec![
+        cache
+            .scoped_query_group(&receiver, &receiver, Some(&same), &roster, now)
+            .unwrap(),
+    ];
     retain_calibration_query_groups(&calibration, &mut same_query);
     assert!(same_query.is_empty());
     let mut full = available_query_groups([&receiver], roster.iter());
@@ -790,7 +812,6 @@ fn joined_unknown_calibration_allows_other_slot_commands_and_scoped_firmware_que
         [7]
     );
     assert!(full[0].2);
-    let now = Instant::now();
     let mut automatic = EsbAutoQuery::default();
     automatic.enter(true);
     automatic.observe(&receiver, &roster, now);

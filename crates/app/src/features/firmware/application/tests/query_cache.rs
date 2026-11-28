@@ -19,7 +19,6 @@ fn manual_retry_resolves_failed_target() {
     state.prepare_action_results(&Action::QueryGroups(OtaQueryPlan {
         groups: vec![(refreshed.receiver.clone(), vec![query_link("a", 1)], false)],
         automatic: false,
-        incremental: true,
     }));
     assert!(state.query_failures.contains_key("a:1"));
     state.apply_queries(OtaQueries {
@@ -31,7 +30,6 @@ fn manual_retry_resolves_failed_target() {
 
 #[test]
 fn manual_scoped_retry_keeps_failed_card_and_unrelated_state_until_result() {
-    use crate::application::flash::auto_query::scoped_query_group;
     use crate::application::flash::{TrackerSection, tracker_section};
     let mut retried = target("a", 1, "board");
     let other = target("b", 0, "board");
@@ -53,25 +51,28 @@ fn manual_scoped_retry_keeps_failed_card_and_unrelated_state_until_result() {
         .into(),
         ..FlashState::default()
     };
-    let group = scoped_query_group(
-        &retried.receiver,
-        &retried.receiver,
-        Some(&requested),
-        std::slice::from_ref(&requested),
-    )
-    .unwrap();
+    let group = state
+        .esb_auto_query
+        .scoped_query_group(
+            &retried.receiver,
+            &retried.receiver,
+            Some(&requested),
+            std::slice::from_ref(&requested),
+            Instant::now(),
+        )
+        .unwrap();
     let action = Action::QueryGroups(OtaQueryPlan {
         groups: vec![group],
         automatic: false,
-        incremental: true,
     });
     state.prepare_action_results(&action);
     state.pending = Some(action.clone());
     state.activity_kind = crate::application::flash::ActivityKind::Query;
     assert!(state.querying_receiver("a"));
     assert!(!state.querying_receiver("b"));
-    assert!(state.preserves_query_layout("a"));
-    assert!(!state.preserves_query_layout("b"));
+    assert!(state.querying_tracker(&requested));
+    assert!(!state.querying_tracker(&query_link("a", 2)));
+    assert!(!state.querying_tracker(&query_link("b", 1)));
     assert_eq!(state.query_failures["a:1"], "retry A");
     assert_eq!(state.query_failures["b:0"], "keep B");
     assert_eq!(
@@ -234,7 +235,6 @@ fn incremental_query_preserves_unrelated_failures_and_completed_flash_outcome() 
     let action = Action::QueryGroups(OtaQueryPlan {
         groups: vec![(b.clone(), vec![query_link("b", 0)], false)],
         automatic: true,
-        incremental: true,
     });
     state.prepare_action_results(&action);
     assert_eq!(state.query_failures["a:0"], "A timed out");
@@ -268,14 +268,6 @@ fn incremental_query_preserves_unrelated_failures_and_completed_flash_outcome() 
     assert_eq!(state.query_failures["b:0"], "new B failure");
     assert_eq!(state.results[0].0.key, "completed device");
     assert_eq!(state.results[0].1, crate::update::UpdateOutcome::Completed);
-    let full = Action::QueryGroups(OtaQueryPlan {
-        groups: available_query_groups(&[a, b], std::iter::empty()),
-        automatic: false,
-        incremental: false,
-    });
-    state.prepare_action_results(&full);
-    assert_eq!(state.results.len(), 1);
-    assert!(state.query_failures.is_empty());
     assert!(state.last_progress.is_some());
     assert_eq!(state.result_notes.len(), 1);
 }
@@ -372,7 +364,7 @@ fn in_flight_query_survives_rapid_page_switch_and_finishes_into_cache() {
 }
 
 #[test]
-fn successful_cache_ttl_is_entry_only_and_failed_attempts_do_not_retry() {
+fn successful_cache_ttl_does_not_poll_at_idle_and_failed_attempts_do_not_retry() {
     let now = Instant::now();
     let device = target("a", 1, "board");
     let receiver = device.receiver.clone();
@@ -543,7 +535,6 @@ fn fresh_cache_does_not_block_a_new_target_and_pending_leave_can_reschedule() {
     state.pending = Some(Action::QueryGroups(OtaQueryPlan {
         groups,
         automatic: true,
-        incremental: true,
     }));
     assert!(state.enter_esb_page(false));
     assert!(state.pending.is_none());
@@ -645,4 +636,201 @@ fn failed_refresh_keeps_successful_information_selection_and_assignment() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn receiver_refresh_uses_per_route_expiry_and_directed_retry_bypasses_it() {
+    let start = Instant::now();
+    let expired = target("a", 0, "board");
+    let fresh = target("a", 1, "board");
+    let receiver = &fresh.receiver;
+    let mut links = [
+        TrackerLink {
+            address: expired.address.clone(),
+            ..query_link("a", 0)
+        },
+        TrackerLink {
+            address: fresh.address.clone(),
+            ..query_link("a", 1)
+        },
+        query_link("a", 2),
+        TrackerLink {
+            online: false,
+            ..query_link("a", 3)
+        },
+        query_link("a", 4),
+    ];
+    let mut cache = seeded_query(std::slice::from_ref(receiver), &links[..4], start);
+    cache.mark_queried(&expired, start);
+    cache.mark_queried(&fresh, start + Duration::from_secs(2));
+    cache.mark_queried(
+        &target("a", RECEIVER_ID, "receiver"),
+        start + Duration::from_secs(2),
+    );
+    // Equivalent address formatting must not invalidate an unexpired reply.
+    links[1].address = Some("11:22:33:44:55:01".into());
+    let now = start + Duration::from_secs(30);
+    let (_, requested, include_receiver) = cache
+        .scoped_query_group(receiver, receiver, None, &links, now)
+        .unwrap();
+    assert!(!include_receiver);
+    assert_eq!(
+        requested.iter().map(|link| link.slot).collect::<Vec<_>>(),
+        [0, 2, 4],
+        "TTL boundary, failed answer and new target are eligible; fresh and offline are not"
+    );
+    assert!(
+        cache
+            .scoped_query_group(receiver, receiver, None, &links[1..2], now)
+            .is_none()
+    );
+    let (_, retried, include_receiver) = cache
+        .scoped_query_group(receiver, receiver, Some(&links[1]), &links, now)
+        .unwrap();
+    assert!(!include_receiver);
+    assert_eq!(retried[0].slot, fresh.id);
+    links[1].address = Some("11:22:33:44:55:06".into());
+    assert_eq!(
+        cache
+            .scoped_query_group(receiver, receiver, None, &links[1..2], now)
+            .unwrap()
+            .1[0]
+            .slot,
+        fresh.id,
+        "a reused slot is not the same tracker"
+    );
+}
+
+#[test]
+fn new_arrival_queries_expired_reports_without_retrying_a_failure() {
+    let now = Instant::now();
+    let stale = target("a", 0, "board");
+    let recent = target("a", 1, "board");
+    let receiver = &recent.receiver;
+    let links = [
+        TrackerLink {
+            address: stale.address.clone(),
+            ..query_link("a", 0)
+        },
+        TrackerLink {
+            address: recent.address.clone(),
+            ..query_link("a", 1)
+        },
+        query_link("a", 2),
+        query_link("a", 3),
+    ];
+    let mut cache = seeded_query(std::slice::from_ref(receiver), &links[..3], now);
+    cache.mark_queried(&stale, now);
+    cache.mark_queried(&recent, now + Duration::from_secs(4));
+    cache.observe(receiver, &links, now + Duration::from_secs(29));
+    let groups = cache.take_incremental(
+        std::iter::once(receiver),
+        links.iter(),
+        false,
+        now + Duration::from_secs(30),
+    );
+    assert_eq!(groups.len(), 1);
+    assert!(!groups[0].2, "a previous receiver failure is not retried");
+    assert_eq!(
+        groups[0].1.iter().map(|link| link.slot).collect::<Vec<_>>(),
+        [stale.id, 3]
+    );
+}
+
+#[gpui_kit::test]
+fn staggered_query_handoff_and_reentry_keep_fresh_reports(cx: &mut gpui_kit::TestAppContext) {
+    use crate::app_runtime::AppRuntime;
+    use crate::application::FeaturePage;
+    use crate::application::flash::{TrackerSection, tracker_section};
+    use crate::application::test_support::offline_workbench;
+    use crate::discovery::ReceiverMonitor;
+    use gpui_kit::VisualContext as _;
+
+    let _ui_session = crate::test_support::UiTestSession::new(cx);
+    let runtime = AppRuntime::new().unwrap();
+    let executor = runtime.executor();
+    let cx = cx.add_empty_window();
+    let workbench = cx.new_window_entity(move |window, cx| {
+        offline_workbench(window, cx, crate::sessions::SessionManager::new(), executor)
+    });
+    workbench.update(cx, |this, _| {
+        let first = target("a", 0, "board");
+        let receiver = first.receiver.clone();
+        let first_link = TrackerLink {
+            address: first.address.clone(),
+            ..query_link("a", 0)
+        };
+        let failed = query_link("a", 1);
+        let late = query_link("a", 2);
+        this.active_page = FeaturePage::Ota;
+        this.inventory.receivers.push(receiver.clone());
+        this.monitor =
+            ReceiverMonitor::fixture(receiver.clone(), 0, first.address.as_deref().unwrap(), true);
+        this.monitor
+            .fixture_observation_mut(&receiver)
+            .trackers
+            .push(failed.clone());
+        this.sync_esb_page();
+        this.sync_flash_tracker_selection();
+        let now = Instant::now();
+        assert!(!this.poll_esb_queries(now));
+        assert!(this.poll_esb_queries(now + Duration::from_secs(1)));
+        assert!(this.flash.querying_tracker(&first_link));
+        assert!(this.flash.querying_tracker(&failed));
+        assert!(!this.flash.querying_tracker(&late));
+        let Some(Action::QueryGroups(plan)) = this.flash.pending.take() else {
+            panic!("initial automatic plan must reserve the receiver");
+        };
+        assert!(plan.groups[0].2);
+        assert_eq!(plan.groups[0].1.len(), 2);
+        this.release_flash_lease();
+        this.flash.finish_job_progress(None);
+        this.flash.apply_current_queries(
+            OtaQueries {
+                targets: vec![target("a", RECEIVER_ID, "receiver"), first.clone()],
+                failures: vec![query_failure(&receiver, failed.slot, "timeout".into())],
+            },
+            &this.inventory.receivers,
+        );
+
+        this.monitor.fixture_observation_mut(&receiver).trackers = vec![first_link.clone()];
+        this.query_flash_group(&receiver, None);
+        assert!(
+            this.flash.pending.is_none(),
+            "a fresh receiver-wide refresh takes no lease"
+        );
+
+        this.flash.enter_esb_page(false);
+        this.flash.enter_esb_page(true);
+        this.monitor.fixture_observation_mut(&receiver).trackers =
+            vec![first_link.clone(), failed, late.clone()];
+        this.sync_flash_tracker_selection();
+        let reentry = Instant::now();
+        assert!(!this.poll_esb_queries(reentry));
+        assert!(this.poll_esb_queries(reentry + Duration::from_secs(1)));
+        let Some(Action::QueryGroups(plan)) = &this.flash.pending else {
+            panic!("reentry must query the newly discovered tracker");
+        };
+        assert!(!plan.groups[0].2);
+        assert_eq!(plan.groups[0].1.len(), 1);
+        assert_eq!(plan.groups[0].1[0].slot, late.slot);
+        assert_eq!(plan.groups[0].1[0].address, late.address);
+        this.sync_flash_tracker_selection();
+        let retained = &this.flash.tracker_snapshot[&receiver.key][0];
+        assert_eq!(
+            tracker_section(
+                retained,
+                this.flash.tracker_info(retained, &receiver),
+                this.flash.querying_tracker(retained),
+                false,
+            ),
+            TrackerSection::Reported("1", "today"),
+            "lease handoff must not turn the previously read tracker into a reading card"
+        );
+        assert!(this.flash.querying_tracker(&late));
+        assert_eq!(this.flash.query_failures["a:1"], "timeout");
+        assert_eq!(this.flash.targets.len(), 2);
+        assert!(this.flash.enter_esb_page(false));
+        this.release_flash_lease();
+    });
 }

@@ -213,7 +213,6 @@ fn ota_dismissal_and_finished_navigation_survive_queries_and_other_modes() {
         let query = Action::QueryGroups(OtaQueryPlan {
             groups: vec![],
             automatic,
-            incremental: true,
         });
         state.prepare_action_results(&query);
         state.activity_kind = crate::application::flash::ActivityKind::Query;
@@ -836,7 +835,7 @@ fn query_diagnostics_remain_on_cards_while_flash_failures_remain_in_results(
         let Some(Action::QueryGroups(plan)) = this.flash.pending.as_ref() else {
             panic!("the card retry must reserve a scoped query");
         };
-        assert!(!plan.automatic && plan.incremental);
+        assert!(!plan.automatic);
         assert_eq!(plan.groups.len(), 1);
         assert_eq!(plan.groups[0].0.key, receiver.key);
         assert_eq!(plan.groups[0].1.len(), 1);

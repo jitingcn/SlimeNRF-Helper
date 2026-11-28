@@ -83,7 +83,6 @@ impl Workbench {
         let key = receiver.key.clone();
         let observation = self.monitor.observation(&key);
         let querying = self.flash.querying_receiver(&key);
-        let refreshing = self.flash.preserves_query_layout(&key);
         let trackers = self
             .flash
             .tracker_snapshot
@@ -209,7 +208,7 @@ impl Workbench {
                     .entry(tracker_section(
                         tracker,
                         target,
-                        querying && !refreshing,
+                        self.flash.querying_tracker(tracker),
                         failed,
                     ))
                     .or_insert_with(Vec::new)
@@ -364,8 +363,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let key = tracker_selection_key(tracker);
-        let querying = self.flash.querying_receiver(&tracker.receiver_key);
-        let refreshing = self.flash.preserves_query_layout(&tracker.receiver_key);
+        let reading = matches!(section, TrackerSection::Reading);
         let selected = self.selected.contains(&key);
         let enabled =
             !self.flash.busy() && (selected || (tracker.online && tracker.address.is_some()));
@@ -477,7 +475,7 @@ impl Workbench {
             .flex_col()
             .gap_1()
             .whitespace_normal();
-        if selected && offline && (!querying || refreshing) {
+        if selected && offline && !reading {
             content = content.child(
                 div()
                     .text_xs()
@@ -504,10 +502,7 @@ impl Workbench {
                 matches!(section, TrackerSection::Reported(..)),
                 cx,
             ));
-        } else if !failed
-            && (!querying || refreshing)
-            && !matches!(section, TrackerSection::Offline)
-        {
+        } else if !failed && !reading && !matches!(section, TrackerSection::Offline) {
             content = content.child(
                 div()
                     .text_xs()

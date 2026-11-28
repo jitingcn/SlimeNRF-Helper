@@ -624,54 +624,7 @@ impl Workbench {
                 changed = true;
             }
         }
-        let mut query_receivers = self
-            .inventory
-            .receivers
-            .iter()
-            .filter(|receiver| self.flash_check_receiver_io(&receiver.key).is_ok())
-            .peekable();
-        let available = query_receivers.peek().is_some()
-            && query_receivers.all(|receiver| self.monitor.observation(&receiver.key).is_some());
-        let blocked = self.flash.busy() || self.flash.review.is_some();
-        if self
-            .flash
-            .esb_auto_query
-            .take_ready(available, blocked, Instant::now())
-        {
-            self.query_flash_targets(true);
-            changed = true;
-        } else {
-            let mut auto_query = std::mem::take(&mut self.flash.esb_auto_query);
-            let groups = auto_query.take_incremental(
-                self.inventory
-                    .receivers
-                    .iter()
-                    .filter(|receiver| self.flash_check_receiver_io(&receiver.key).is_ok())
-                    .filter(|receiver| self.monitor.observation(&receiver.key).is_some()),
-                self.inventory
-                    .receivers
-                    .iter()
-                    .filter_map(|receiver| self.monitor.observation(&receiver.key))
-                    .flat_map(|observation| observation.trackers.iter())
-                    .filter(|tracker| {
-                        auto_query::calibration_query_tracker_admitted(
-                            &self.calibration.session,
-                            tracker,
-                        )
-                    }),
-                blocked,
-                Instant::now(),
-            );
-            self.flash.esb_auto_query = auto_query;
-            if !groups.is_empty() {
-                self.reserve_flash_action(Action::QueryGroups(OtaQueryPlan {
-                    groups,
-                    automatic: true,
-                    incremental: true,
-                }));
-                changed = true;
-            }
-        }
+        changed |= self.poll_esb_queries(Instant::now());
         if self.flash.esb_auto_query.active && self.flash.review.is_none() {
             changed |= self.flash.start_internal_default();
         }

@@ -1,5 +1,11 @@
 use super::*;
 
+const QUERY_DISCOVERY_SETTLE: Duration = Duration::from_secs(1);
+
+fn query_cache_fresh(queried_at: Instant, now: Instant) -> bool {
+    now.saturating_duration_since(queried_at) < QUERY_CACHE_TTL
+}
+
 pub(super) fn query_failure(receiver: &ReceiverEndpoint, id: u8, error: String) -> QueryFailure {
     query_failure_identity(&receiver.key, id, error)
 }
@@ -28,10 +34,11 @@ pub(super) fn query_tracker_eligible(tracker: &TrackerLink) -> bool {
         && tracker
             .address
             .as_deref()
-            .and_then(crate::domain::normalize_address)
+            .and_then(crate::domain::address_digits)
             .is_some()
 }
 
+#[cfg(test)]
 pub(super) fn available_query_groups<'a>(
     receivers: impl IntoIterator<Item = &'a ReceiverEndpoint>,
     trackers: impl Iterator<Item = &'a TrackerLink> + Clone,
@@ -64,38 +71,11 @@ fn query_tracker_matches(expected: &TrackerLink, current: &TrackerLink) -> bool 
         && expected
             .address
             .as_deref()
-            .and_then(crate::domain::normalize_address)
+            .and_then(crate::domain::address_digits)
             == current
                 .address
                 .as_deref()
-                .and_then(crate::domain::normalize_address)
-}
-
-pub(super) fn scoped_query_group(
-    expected: &ReceiverEndpoint,
-    current: &ReceiverEndpoint,
-    tracker: Option<&TrackerLink>,
-    live: &[TrackerLink],
-) -> Option<(ReceiverEndpoint, Vec<TrackerLink>, bool)> {
-    if !query_endpoint_matches(expected, current) {
-        return None;
-    }
-    let trackers = if let Some(expected_tracker) = tracker {
-        if expected_tracker.receiver_key != current.key {
-            return None;
-        }
-        vec![
-            live.iter()
-                .find(|live| query_tracker_matches(expected_tracker, live))?
-                .clone(),
-        ]
-    } else {
-        live.iter()
-            .filter(|live| live.receiver_key == current.key && query_tracker_eligible(live))
-            .cloned()
-            .collect()
-    };
-    Some((current.clone(), trackers, tracker.is_none()))
+                .and_then(crate::domain::address_digits)
 }
 
 pub(super) fn calibration_query_tracker_admitted(
@@ -120,7 +100,69 @@ pub(super) fn retain_calibration_query_groups(
     });
 }
 
+impl AutoQueryTracker {
+    fn matches(&self, tracker: &TrackerLink) -> bool {
+        self.slot == tracker.slot && self.matches_address(tracker.address.as_deref())
+    }
+
+    fn matches_address(&self, address: Option<&str>) -> bool {
+        address.is_some_and(|address| {
+            address == self.address.as_str()
+                || crate::domain::address_digits(address)
+                    .is_some_and(|digits| digits.as_slice() == self.address.as_bytes())
+        })
+    }
+}
+
 impl EsbAutoQuery {
+    pub(super) fn scoped_query_group(
+        &self,
+        expected: &ReceiverEndpoint,
+        current: &ReceiverEndpoint,
+        tracker: Option<&TrackerLink>,
+        live: &[TrackerLink],
+        now: Instant,
+    ) -> Option<(ReceiverEndpoint, Vec<TrackerLink>, bool)> {
+        if !query_endpoint_matches(expected, current) {
+            return None;
+        }
+        if let Some(expected_tracker) = tracker {
+            // A directed retry bypasses the cache but not identity or liveness.
+            if expected_tracker.receiver_key != current.key {
+                return None;
+            }
+            let link = live
+                .iter()
+                .find(|live| query_tracker_matches(expected_tracker, live))?;
+            return Some((current.clone(), vec![link.clone()], false));
+        }
+        let cached = self
+            .receivers
+            .iter()
+            .find(|known| query_endpoint_matches(&known.endpoint, current));
+        let include_receiver = !cached
+            .and_then(|known| known.queried_at)
+            .is_some_and(|at| query_cache_fresh(at, now));
+        let trackers: Vec<_> = live
+            .iter()
+            .filter(|link| {
+                link.receiver_key == current.key
+                    && query_tracker_eligible(link)
+                    && !cached.is_some_and(|known| {
+                        known.trackers.iter().any(|tracker| {
+                            tracker
+                                .queried_at
+                                .is_some_and(|at| query_cache_fresh(at, now))
+                                && tracker.matches(link)
+                        })
+                    })
+            })
+            .cloned()
+            .collect();
+        (include_receiver || !trackers.is_empty())
+            .then(|| (current.clone(), trackers, include_receiver))
+    }
+
     pub(super) fn enter(&mut self, active: bool) {
         if self.active != active {
             self.active = active;
@@ -137,21 +179,21 @@ impl EsbAutoQuery {
         // Let the existing passive reader publish its initial address/traffic
         // records. This is a one-shot settling window, not another scan.
         let since = self.discovery_since.get_or_insert(now);
-        if blocked || now.saturating_duration_since(*since) < Duration::from_secs(1) {
+        if blocked || now.saturating_duration_since(*since) < QUERY_DISCOVERY_SETTLE {
             return false;
         }
         self.queued = false;
         for receiver in &mut self.receivers {
             if receiver
                 .queried_at
-                .is_some_and(|at| now.saturating_duration_since(at) >= QUERY_CACHE_TTL)
+                .is_some_and(|at| !query_cache_fresh(at, now))
             {
                 receiver.attempted = false;
             }
             for tracker in &mut receiver.trackers {
                 if tracker
                     .queried_at
-                    .is_some_and(|at| now.saturating_duration_since(at) >= QUERY_CACHE_TTL)
+                    .is_some_and(|at| !query_cache_fresh(at, now))
                 {
                     tracker.attempted = false;
                 }
@@ -172,9 +214,7 @@ impl EsbAutoQuery {
             .position(|known| known.endpoint.key == endpoint.key);
         let receiver = if let Some(index) = index {
             let known = &mut self.receivers[index];
-            if known.endpoint.path != endpoint.path
-                || known.endpoint.serial_number != endpoint.serial_number
-            {
+            if !query_endpoint_matches(&known.endpoint, endpoint) {
                 *known = AutoQueryReceiver {
                     endpoint: endpoint.clone(),
                     attempted: false,
@@ -194,7 +234,10 @@ impl EsbAutoQuery {
             });
             self.receivers.last_mut().unwrap()
         };
-        for tracker in trackers {
+        for tracker in trackers
+            .iter()
+            .filter(|link| link.receiver_key == endpoint.key)
+        {
             let Some(raw_address) = tracker.address.as_deref() else {
                 continue;
             };
@@ -240,27 +283,28 @@ impl EsbAutoQuery {
             }
         }
         for known in &mut receiver.trackers {
-            if !trackers
-                .iter()
-                .any(|tracker| tracker.slot == known.slot && tracker.address.is_some())
-            {
+            if !trackers.iter().any(|tracker| {
+                tracker.receiver_key == endpoint.key
+                    && tracker.slot == known.slot
+                    && tracker.address.is_some()
+            }) {
                 known.online = false;
             }
         }
         // Missing/address-unknown observations and online=false are not proof
         // of a new episode: reservation clears the roster and traffic expires
-        // after three seconds. Only positive identity changes reset attempts.
+        // after three seconds. Positive identity changes reset attempts.
     }
 
     pub(super) fn full_requested(&mut self, groups: &[(ReceiverEndpoint, Vec<TrackerLink>, bool)]) {
         self.queued = false;
         self.discovery_since = None;
         for (endpoint, trackers, include_receiver) in groups {
-            let Some(receiver) = self.receivers.iter_mut().find(|known| {
-                known.endpoint.key == endpoint.key
-                    && known.endpoint.path == endpoint.path
-                    && known.endpoint.serial_number == endpoint.serial_number
-            }) else {
+            let Some(receiver) = self
+                .receivers
+                .iter_mut()
+                .find(|known| query_endpoint_matches(&known.endpoint, endpoint))
+            else {
                 continue;
             };
             if *include_receiver {
@@ -268,15 +312,7 @@ impl EsbAutoQuery {
                 receiver.queried_at = None;
             }
             for tracker in &mut receiver.trackers {
-                if trackers.iter().any(|live| {
-                    live.slot == tracker.slot
-                        && live
-                            .address
-                            .as_deref()
-                            .and_then(crate::domain::normalize_address)
-                            .as_deref()
-                            == Some(tracker.address.as_str())
-                }) {
+                if trackers.iter().any(|live| tracker.matches(live)) {
                     tracker.attempted = true;
                     tracker.queried_at = None;
                 }
@@ -294,77 +330,78 @@ impl EsbAutoQuery {
         if !self.active || self.queued || blocked {
             return Vec::new();
         }
+        let settled = |since| now.saturating_duration_since(since) >= QUERY_DISCOVERY_SETTLE;
+        let expired =
+            |queried_at: Option<Instant>| queried_at.is_some_and(|at| !query_cache_fresh(at, now));
         let mut groups = Vec::new();
         for endpoint in receivers {
-            let Some(known) = self.receivers.iter_mut().find(|known| {
-                known.endpoint.key == endpoint.key
-                    && known.endpoint.path == endpoint.path
-                    && known.endpoint.serial_number == endpoint.serial_number
-            }) else {
+            let Some(known) = self
+                .receivers
+                .iter_mut()
+                .find(|known| query_endpoint_matches(&known.endpoint, endpoint))
+            else {
                 continue;
             };
-            let include_receiver = !known.attempted
-                && now.saturating_duration_since(known.since) >= Duration::from_secs(1);
-            let mut requested = Vec::new();
-            for tracker in trackers
+            let live = trackers
                 .clone()
-                .filter(|tracker| tracker.receiver_key == endpoint.key && tracker.online)
+                .filter(|tracker| tracker.receiver_key == endpoint.key && tracker.online);
+            let receiver_settled = settled(known.since);
+            // Reentry rearms expired entries. While staying on the page, refresh
+            // expired information only when new work already needs this handoff.
+            if (known.attempted || !receiver_settled)
+                && !live.clone().any(|tracker| {
+                    known.trackers.iter().any(|candidate| {
+                        !candidate.attempted
+                            && settled(candidate.since)
+                            && candidate.matches(tracker)
+                    })
+                })
             {
+                continue;
+            }
+            let include_receiver =
+                receiver_settled && (!known.attempted || expired(known.queried_at));
+            let mut requested = Vec::new();
+            for tracker in live {
                 let Some(candidate) = known.trackers.iter_mut().find(|candidate| {
-                    !candidate.attempted
-                        && candidate.slot == tracker.slot
-                        && (tracker.address.as_deref() == Some(candidate.address.as_str())
-                            || tracker
-                                .address
-                                .as_deref()
-                                .and_then(crate::domain::normalize_address)
-                                .as_deref()
-                                == Some(candidate.address.as_str()))
+                    (!candidate.attempted || expired(candidate.queried_at))
+                        && settled(candidate.since)
+                        && candidate.matches(tracker)
                 }) else {
                     continue;
                 };
-                if now.saturating_duration_since(candidate.since) >= Duration::from_secs(1) {
-                    requested.push(TrackerLink {
-                        receiver_key: tracker.receiver_key.clone(),
-                        slot: tracker.slot,
-                        address: Some(candidate.address.clone()),
-                        online: true,
-                    });
-                    // Covers queued, in-flight, failed and successful attempts.
-                    candidate.attempted = true;
-                    candidate.queried_at = None;
-                }
+                requested.push(TrackerLink {
+                    receiver_key: tracker.receiver_key.clone(),
+                    slot: tracker.slot,
+                    address: Some(candidate.address.clone()),
+                    online: true,
+                });
+                // Covers queued, in-flight and failed attempts.
+                candidate.attempted = true;
+                candidate.queried_at = None;
             }
-            if include_receiver || !requested.is_empty() {
-                known.attempted |= include_receiver;
-                if include_receiver {
-                    known.queried_at = None;
-                }
-                groups.push((known.endpoint.clone(), requested, include_receiver));
+            if include_receiver {
+                known.attempted = true;
+                known.queried_at = None;
             }
+            groups.push((known.endpoint.clone(), requested, include_receiver));
         }
         groups
     }
 
     pub(super) fn mark_queried(&mut self, target: &esb_ota::Target, now: Instant) {
-        let Some(receiver) = self.receivers.iter_mut().find(|known| {
-            known.endpoint.key == target.receiver.key
-                && known.endpoint.path == target.receiver.path
-                && known.endpoint.serial_number == target.receiver.serial_number
-        }) else {
+        let Some(receiver) = self
+            .receivers
+            .iter_mut()
+            .find(|known| query_endpoint_matches(&known.endpoint, &target.receiver))
+        else {
             return;
         };
         if target.id == esb_ota::RECEIVER_ID {
             receiver.queried_at = Some(now);
             receiver.attempted = true;
         } else if let Some(tracker) = receiver.trackers.iter_mut().find(|known| {
-            known.slot == target.id
-                && target
-                    .address
-                    .as_deref()
-                    .and_then(crate::domain::normalize_address)
-                    .as_deref()
-                    == Some(known.address.as_str())
+            known.slot == target.id && known.matches_address(target.address.as_deref())
         }) {
             tracker.queried_at = Some(now);
             tracker.attempted = true;
@@ -422,13 +459,7 @@ impl EsbAutoQuery {
         }
         target.id == esb_ota::RECEIVER_ID
             || !known.trackers.iter().any(|tracker| {
-                tracker.slot == target.id
-                    && target
-                        .address
-                        .as_deref()
-                        .and_then(crate::domain::normalize_address)
-                        .as_deref()
-                        != Some(tracker.address.as_str())
+                tracker.slot == target.id && !tracker.matches_address(target.address.as_deref())
             })
     }
 }
@@ -443,7 +474,7 @@ impl FlashState {
                 self.esb_auto_query.abandon_pending(&plan);
             }
             self.invalidated_query_receivers.clear();
-            self.activity_kind = ActivityKind::Preparation;
+            self.finish_job_progress(None);
             return true;
         }
         false
@@ -471,7 +502,6 @@ impl FlashState {
     }
 
     pub(super) fn apply_queries(&mut self, query: OtaQueries) {
-        self.preserve_query_card_layout = false;
         self.review = None;
         self.acknowledged = false;
         let preferred = query
@@ -485,10 +515,11 @@ impl FlashState {
                     && !self.selected_targets.contains(&ota_target_key(target))
             })
             .map(ota_assignment_key);
+        let now = Instant::now();
         for target in query.targets {
             self.query_failures
                 .remove(&format!("{}:{}", target.receiver.key, target.id));
-            self.esb_auto_query.mark_queried(&target, Instant::now());
+            self.esb_auto_query.mark_queried(&target, now);
             let key = ota_target_key(&target);
             let previous = self
                 .targets
@@ -570,7 +601,7 @@ impl Workbench {
                 query_endpoint_matches(expected, current)
                     && self
                         .monitor
-                        .observation(&current.key)
+                        .observation_for(current)
                         .is_some_and(|observation| {
                             tracker.is_none_or(|expected_tracker| {
                                 expected_tracker.receiver_key == current.key
@@ -599,16 +630,27 @@ impl Workbench {
         else {
             return;
         };
-        let Some(observation) = self.monitor.observation(&current.key) else {
+        let Some(observation) = self.monitor.observation_for(current) else {
             return;
         };
-        let Some(group) = scoped_query_group(expected, current, tracker, &observation.trackers)
-        else {
+        let now = Instant::now();
+        let Some(group) = self.flash.esb_auto_query.scoped_query_group(
+            expected,
+            current,
+            tracker,
+            &observation.trackers,
+            now,
+        ) else {
             return;
         };
+        let mut groups = vec![group];
+        retain_calibration_query_groups(&self.calibration.session, &mut groups);
+        if groups.is_empty() {
+            return;
+        }
         self.flash
             .esb_auto_query
-            .observe(current, &observation.trackers, Instant::now());
+            .observe(current, &observation.trackers, now);
         merge_tracker_snapshot(
             self.flash
                 .tracker_snapshot
@@ -616,90 +658,56 @@ impl Workbench {
                 .or_default(),
             &observation.trackers,
         );
-        let mut plan = OtaQueryPlan {
-            groups: vec![group],
+        let plan = OtaQueryPlan {
+            groups,
             automatic: false,
-            incremental: true,
         };
-        retain_calibration_query_groups(&self.calibration.session, &mut plan.groups);
         self.flash.esb_auto_query.full_requested(&plan.groups);
         self.flash.review = None;
         self.flash.acknowledged = false;
         self.reserve_flash_action(Action::QueryGroups(plan));
     }
 
-    pub(super) fn query_flash_targets(&mut self, automatic: bool) {
-        if self.shutting_down || self.flash.busy() {
-            return;
+    pub(super) fn poll_esb_queries(&mut self, now: Instant) -> bool {
+        if !self.flash.esb_auto_query.active {
+            return false;
         }
-        self.sync_flash_tracker_selection();
-        self.flash.review = None;
-        self.flash.acknowledged = false;
+        let blocked = self.flash.busy() || self.flash.review.is_some();
         let mut auto_query = std::mem::take(&mut self.flash.esb_auto_query);
-        let plan = OtaQueryPlan {
-            groups: if automatic {
-                auto_query.take_incremental(
-                    self.inventory
-                        .receivers
-                        .iter()
-                        .filter(|receiver| self.flash_check_receiver_io(&receiver.key).is_ok()),
-                    self.inventory
-                        .receivers
-                        .iter()
-                        .filter_map(|receiver| self.monitor.observation(&receiver.key))
-                        .flat_map(|observation| observation.trackers.iter())
-                        .filter(|tracker| {
-                            calibration_query_tracker_admitted(&self.calibration.session, tracker)
-                        }),
-                    false,
-                    Instant::now(),
-                )
-            } else {
-                available_query_groups(
-                    self.inventory
-                        .receivers
-                        .iter()
-                        .filter(|receiver| self.flash_check_receiver_io(&receiver.key).is_ok()),
-                    self.inventory
-                        .receivers
-                        .iter()
-                        .filter_map(|receiver| self.monitor.observation(&receiver.key))
-                        .flat_map(|observation| observation.trackers.iter())
-                        .filter(|tracker| {
-                            calibration_query_tracker_admitted(&self.calibration.session, tracker)
-                        }),
-                )
-            },
-            automatic,
-            incremental: automatic,
+        let admitted_receivers = || {
+            self.inventory
+                .receivers
+                .iter()
+                .filter(|receiver| self.flash_check_receiver_io(&receiver.key).is_ok())
         };
+        if auto_query.queued {
+            let mut receivers = admitted_receivers().peekable();
+            let available = receivers.peek().is_some()
+                && receivers.all(|receiver| self.monitor.observation_for(receiver).is_some());
+            auto_query.take_ready(available, blocked, now);
+        }
+        let groups = auto_query.take_incremental(
+            admitted_receivers()
+                .filter(|receiver| self.monitor.observation_for(receiver).is_some()),
+            self.inventory
+                .receivers
+                .iter()
+                .filter_map(|receiver| self.monitor.observation_for(receiver))
+                .flat_map(|observation| observation.trackers.iter())
+                .filter(|tracker| {
+                    calibration_query_tracker_admitted(&self.calibration.session, tracker)
+                }),
+            blocked,
+            now,
+        );
         self.flash.esb_auto_query = auto_query;
-        self.flash.esb_auto_query.full_requested(&plan.groups);
-        for receiver in &self.inventory.receivers {
-            let observation = self.monitor.observation(&receiver.key);
-            if let Some(observation) = observation {
-                let snapshot = self
-                    .flash
-                    .tracker_snapshot
-                    .entry(receiver.key.clone())
-                    .or_default();
-                merge_tracker_snapshot(snapshot, &observation.trackers);
-                merge_tracker_snapshot(snapshot, &[]);
-            }
+        if groups.is_empty() {
+            return false;
         }
-        if plan.groups.is_empty() {
-            if automatic {
-                return;
-            }
-            self.flash.query_error = Some(
-                self.inventory
-                    .receivers
-                    .iter()
-                    .find_map(|receiver| self.flash_check_receiver_io(&receiver.key).err())
-                    .unwrap_or_else(|| tr("firmware.query.connect_receiver")),
-            );
-            return;
-        }
-        self.reserve_flash_action(Action::QueryGroups(plan));
+        self.reserve_flash_action(Action::QueryGroups(OtaQueryPlan {
+            groups,
+            automatic: true,
+        }));
+        true
     }
 }

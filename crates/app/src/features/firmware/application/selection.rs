@@ -364,18 +364,16 @@ impl Workbench {
         let identity_changed = self
             .flash
             .sync_receiver_identities(&self.inventory.receivers);
+        let now = Instant::now();
         for receiver in &self.inventory.receivers {
             let live = self
                 .monitor
-                .observation(&receiver.key)
+                .observation_for(receiver)
                 .map_or(&[][..], |observation| observation.trackers.as_slice());
-            self.flash
-                .esb_auto_query
-                .observe(receiver, live, Instant::now());
-            // The exclusive query lease makes live data unknown, not offline.
-            // Preserve manual-refresh display geometry; authorization and selection
-            // reconciliation below still consume only current monitor evidence.
-            if !live.is_empty() || !self.flash.preserves_query_layout(&receiver.key) {
+            self.flash.esb_auto_query.observe(receiver, live, now);
+            // An exclusive query handoff hides live observations, not prior
+            // reports. Authorization still consumes only current monitor data.
+            if !live.is_empty() || !self.flash.querying_receiver(&receiver.key) {
                 merge_tracker_snapshot(
                     self.flash
                         .tracker_snapshot
@@ -389,7 +387,7 @@ impl Workbench {
             .inventory
             .receivers
             .iter()
-            .filter_map(|receiver| self.monitor.observation(&receiver.key))
+            .filter_map(|receiver| self.monitor.observation_for(receiver))
             .flat_map(|observation| observation.trackers.iter());
         self.flash.sync_tracker_selection(&self.selected, trackers) || identity_changed
     }

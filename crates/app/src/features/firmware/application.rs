@@ -162,8 +162,8 @@ enum Compatibility {
     Mismatch,
 }
 
-// Successful FW_INFO is reused for 30 seconds on ESB page reentry only.
-// Failures remain attempted until manual refresh or a positive identity change.
+// Reuse successful FW_INFO for 30 seconds for the same receiver and RF slot binding.
+// Failed attempts can be retried manually or after a positive identity change.
 const QUERY_CACHE_TTL: Duration = Duration::from_secs(30);
 
 #[derive(Default)]
@@ -279,7 +279,6 @@ pub(super) struct OtaAssignmentView {
 struct OtaQueryPlan {
     groups: Vec<(ReceiverEndpoint, Vec<TrackerLink>, bool)>,
     automatic: bool,
-    incremental: bool,
 }
 
 type QueryFailure = (String, String);
@@ -451,7 +450,7 @@ pub(super) struct FlashState {
     results: Vec<(ResultTarget, UpdateOutcome)>,
     receiver_result_joined_at: Option<Instant>,
     operation_results_dismissed: bool,
-    preserve_query_card_layout: bool,
+    query_tracker_slots: HashMap<String, u16>,
     operation_targets: Vec<ResultTarget>,
     query_failures: std::collections::BTreeMap<String, String>,
     activity_kind: ActivityKind,
@@ -536,7 +535,7 @@ impl Default for FlashState {
             results: vec![],
             receiver_result_joined_at: None,
             operation_results_dismissed: false,
-            preserve_query_card_layout: false,
+            query_tracker_slots: HashMap::new(),
             operation_targets: vec![],
             query_failures: Default::default(),
             activity_kind: ActivityKind::Preparation,
@@ -872,8 +871,19 @@ impl FlashState {
                 .any(|lease| matches!(lease, Lease::Hid(token) if token.endpoint().key == key))
     }
 
-    fn preserves_query_layout(&self, key: &str) -> bool {
-        self.querying_receiver(key) && self.preserve_query_card_layout
+    fn querying_tracker(&self, tracker: &TrackerLink) -> bool {
+        self.querying_receiver(&tracker.receiver_key)
+            && !self
+                .invalidated_query_receivers
+                .contains(&tracker.receiver_key)
+            && self
+                .query_tracker_slots
+                .get(&tracker.receiver_key)
+                .is_some_and(|slots| {
+                    1_u16
+                        .checked_shl(tracker.slot.into())
+                        .is_some_and(|slot| *slots & slot != 0)
+                })
     }
 }
 

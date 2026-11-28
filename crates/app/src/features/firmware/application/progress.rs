@@ -488,16 +488,20 @@ impl FlashState {
 
     pub(super) fn prepare_action_results(&mut self, action: &Action) {
         if let Action::QueryGroups(plan) = action {
-            self.preserve_query_card_layout = !plan.automatic;
             self.query_error = None;
             self.query_cancelled = false;
-            // Keep a manual scoped retry's error card stable during lease handoff.
-            // A successful result removes its own failure in apply_queries.
-            if plan.incremental && !plan.automatic {
-                return;
-            }
-            if plan.incremental {
-                for (receiver, trackers, include_receiver) in &plan.groups {
+            self.query_tracker_slots.clear();
+            for (receiver, trackers, include_receiver) in &plan.groups {
+                // ESB has 16 tracker slots per receiver.
+                let slots = trackers
+                    .iter()
+                    .filter_map(|tracker| 1_u16.checked_shl(tracker.slot.into()))
+                    .fold(0, |slots, slot| slots | slot);
+                if slots != 0 {
+                    self.query_tracker_slots.insert(receiver.key.clone(), slots);
+                }
+                // Keep explicit retry diagnostics stable until the outcome arrives.
+                if plan.automatic {
                     if *include_receiver {
                         self.query_failures.remove(&format!(
                             "{}:{}",
@@ -510,8 +514,6 @@ impl FlashState {
                             .remove(&format!("{}:{}", receiver.key, tracker.slot));
                     }
                 }
-            } else {
-                self.query_failures.clear();
             }
             return;
         }
@@ -549,7 +551,7 @@ impl FlashState {
             self.finish_ota_operation();
         }
         if self.activity_kind == ActivityKind::Query {
-            self.preserve_query_card_layout = false;
+            self.query_tracker_slots.clear();
         }
         // Read-only work owns only its live progress, never a previous update's
         // retained outcome (including when a download fails or is cancelled).

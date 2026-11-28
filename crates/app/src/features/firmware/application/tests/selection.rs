@@ -528,7 +528,6 @@ fn a_query_admitted_before_binding_invalidation_cannot_restore_old_tracker_fw_in
         pending: Some(Action::QueryGroups(OtaQueryPlan {
             groups: vec![(stale.receiver.clone(), vec![], true)],
             automatic: false,
-            incremental: true,
         })),
         ..FlashState::default()
     };

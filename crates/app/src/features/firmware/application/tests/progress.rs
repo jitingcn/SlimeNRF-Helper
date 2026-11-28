@@ -259,7 +259,6 @@ fn query_completion_preserves_mixed_operation_terminal_snapshots() {
     state.prepare_action_results(&Action::QueryGroups(OtaQueryPlan {
         groups: vec![],
         automatic: true,
-        incremental: false,
     }));
     state.activity_kind = crate::application::flash::ActivityKind::Query;
     state.finish_job_progress(Some(crate::update::Progress::bytes("query", 1, 1)));

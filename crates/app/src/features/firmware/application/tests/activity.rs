@@ -82,7 +82,6 @@ fn pending_handoff_floats_until_a_physical_operation_actually_starts() {
         Action::QueryGroups(OtaQueryPlan {
             groups: vec![],
             automatic: false,
-            incremental: false,
         }),
         Action::EsbGroups(vec![]),
     ] {
@@ -230,7 +229,6 @@ fn explicit_query_cancel_is_neutral_esb_only_and_preserves_uf2_outcome() {
     state.pending = Some(Action::QueryGroups(OtaQueryPlan {
         groups: vec![],
         automatic: true,
-        incremental: true,
     }));
     state.activity_origin = Mode::Esb;
     state.cancel_activity();

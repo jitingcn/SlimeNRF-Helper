@@ -579,7 +579,6 @@ fn stale_fw_info_jobs_neither_upgrade_nor_rearm_receiver_result_observation(
                 .prepare_action_results(&Action::QueryGroups(OtaQueryPlan {
                     groups: vec![(endpoint.clone(), vec![], true)],
                     automatic: false,
-                    incremental: false,
                 }));
             this.flash.activity_origin = Mode::Esb;
             this.flash.activity_kind = ActivityKind::Query;
